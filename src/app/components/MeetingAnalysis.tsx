@@ -1,284 +1,1401 @@
+import { motion } from 'motion/react';
+import { useNavigate, useParams } from 'react-router';
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
 import {
   ArrowLeft,
-  ArrowRight,
-  Building2,
-  Calendar,
-  CheckCircle2,
-  CircleDot,
-  Mail,
   RefreshCw,
   Share2,
-  Shield,
-  Sparkles,
+  Star,
+  Users,
+  Building2,
   Target,
-  Users
+  Linkedin,
+  Mail,
+  Database,
+  Slack,
+  AlertCircle,
+  CheckCircle2,
+  Shield,
+  AlertTriangle,
+  CircleDot,
+  ArrowRight,
+  Sparkles
 } from 'lucide-react';
-import { Badge, Button, Card, DataSourcePill, ProgressBar, ScoreDisplay } from './design-system';
-
-type InferenceLevel = 'observable' | 'inferred' | 'hypothetical';
+import KnowyCard from './knowy/KnowyCard';
+import KnowyBadge from './knowy/KnowyBadge';
+import KnowyButton from './knowy/KnowyButton';
+import RadarChart from './RadarChart';
 
 interface Participant {
   id: string;
   name: string;
   role: string;
-  stance: string;
-  influence: number;
-  confidence: number;
-  mode: string;
-  modeDetail: string;
-  sources: string[];
-  axes: { left: string; right: string; value: number; level: InferenceLevel }[];
-  signals: { text: string; source: string; level: InferenceLevel }[];
-  strategy: string;
+  company: string;
+  badge: 'champion' | 'decider' | 'gatekeeper' | 'blocker' | null;
+  influenceDots: number;
+  behavioralSignals: string[];
+  resultVsRelation: number;
+  speedVsCaution: number;
+  structureVsIntuition: number;
+  controlVsConsensus: number;
+  interactionModes: {
+    primary: string[];
+    secondary: string[];
+  };
+  personalAgenda: {
+    motivations: string[];
+    confidence: number;
+  } | null;
+  validatesBy?: string[];
+  influences?: string[];
+  relationContext?: {
+    engagementScore: number;
+    phase: 'growth' | 'stagnant' | 'decline';
+    relationSince: string;
+    lastContactDays: number;
+    avgFrequencyDays: number;
+    totalInteractions: number;
+  };
 }
-
-const participants: Participant[] = [
-  {
-    id: 'sarah',
-    name: 'Sarah Chen',
-    role: 'VP Partnerships · Contentsquare',
-    stance: 'Champion probable',
-    influence: 92,
-    confidence: 72,
-    mode: 'Challenger + Explorer',
-    modeDetail: 'Décide vite si le pilote est concret et mesurable.',
-    sources: ['Gmail', 'Calendar', 'LinkedIn'],
-    axes: [
-      { left: 'Relation', right: 'Résultat', value: 76, level: 'inferred' },
-      { left: 'Intuition', right: 'Structure', value: 44, level: 'inferred' },
-      { left: 'Prudence', right: 'Rapidité', value: 72, level: 'observable' },
-      { left: 'Consensus', right: 'Contrôle', value: 58, level: 'hypothetical' }
-    ],
-    signals: [
-      { text: 'Réponses courtes et rapides dans les derniers échanges.', source: 'Gmail', level: 'observable' },
-      { text: 'Nouveau rôle depuis 6 mois, recherche probable de quick wins.', source: 'LinkedIn', level: 'inferred' },
-      { text: 'Peut sponsoriser un pilote si Marc valide les critères produit.', source: 'Mémoire Knowy', level: 'hypothetical' }
-    ],
-    strategy: 'Ouvrir avec un pilote 30 jours, métriques simples et prochaine étape datée.'
-  },
-  {
-    id: 'marc',
-    name: 'Marc Dubois',
-    role: 'Head of Product Strategy · Contentsquare',
-    stance: 'Validateur technique',
-    influence: 78,
-    confidence: 68,
-    mode: 'Validator + Operator',
-    modeDetail: 'Attend des preuves, critères et contraintes d’intégration.',
-    sources: ['Gmail', 'Calendar'],
-    axes: [
-      { left: 'Relation', right: 'Résultat', value: 84, level: 'observable' },
-      { left: 'Intuition', right: 'Structure', value: 81, level: 'inferred' },
-      { left: 'Prudence', right: 'Rapidité', value: 39, level: 'inferred' },
-      { left: 'Consensus', right: 'Contrôle', value: 64, level: 'hypothetical' }
-    ],
-    signals: [
-      { text: 'Demande régulièrement des benchmarks et détails d’intégration.', source: 'Gmail', level: 'observable' },
-      { text: 'Son adhésion dépendra du risque produit perçu.', source: 'Mémoire Knowy', level: 'inferred' },
-      { text: 'Peut ralentir le deal si le ROI reste qualitatif.', source: 'Hypothèse', level: 'hypothetical' }
-    ],
-    strategy: 'Lui donner une grille de décision : ROI, intégration, délai, support.'
-  }
-];
-
-const levelVariant = {
-  observable: 'sage',
-  inferred: 'blue',
-  hypothetical: 'amber'
-} as const;
-
-const levelLabel = {
-  observable: 'Observable',
-  inferred: 'Inféré',
-  hypothetical: 'Hypothétique'
-};
 
 export default function MeetingAnalysis() {
   const navigate = useNavigate();
-  const [selectedId, setSelectedId] = useState(participants[0].id);
-  const selected = participants.find((participant) => participant.id === selectedId) || participants[0];
+  const { id } = useParams();
+  const [selectedParticipant, setSelectedParticipant] = useState<string>('1');
+
+  // Simulate meeting status - in real app this would come from API/props
+  const isPast = id === '8' || id === '9' || id === '10' || id === '11'; // IDs from past meetings
+  const [activeTab, setActiveTab] = useState<'summary' | 'prep' | 'participants'>(
+    isPast ? 'summary' : 'prep'
+  );
+
+  const meeting = {
+    title: 'Q1 Strategic Review',
+    company: 'Contentsquare',
+    logo: '🎯',
+    type: 'Brief Commercial',
+    date: '2026-05-28',
+    time: '14:00 → 15:00',
+    platform: 'Google Meet'
+  };
+
+  const confidenceScore = 42;
+
+  const sources = [
+    { name: 'Gmail', icon: Mail, connected: true },
+    { name: 'Slack', icon: Slack, connected: false, gain: 20 },
+    { name: 'LinkedIn', icon: Linkedin, connected: true },
+    { name: 'HubSpot', icon: Database, connected: false, gain: 12 }
+  ];
+
+  const executiveSummary = {
+    text: "Sarah Chen (VP Partnerships) cherche un pilote rapide pour prouver sa valeur dans son nouveau rôle. Marc Dubois (Product) est analytique et demandera des KPIs précis. Contentsquare lève 380M€ et recrute massivement (+50 Sales) — momentum favorable. Risque : dernier contact il y a 23 jours, le deal peut refroidir.",
+    tags: [
+      { label: 'Momentum favorable', variant: 'sage' as const },
+      { label: 'Champion confirmé', variant: 'sage' as const },
+      { label: 'MEDDPICC partiel (3/8)', variant: 'amber' as const }
+    ],
+    sources: ['LinkedIn', 'Gmail', 'Mémoire Knowy']
+  };
+
+  const companyContext = {
+    stats: [
+      { label: 'Employés', value: '450+' },
+      { label: 'Levée', value: '380M€' },
+      { label: 'Secteur', value: 'Analytics' },
+      { label: 'Croissance', value: '+50 Sales' }
+    ],
+    timeline: [
+      { date: '14j', title: 'Série D de 380M€', detail: 'Expansion EMEA annoncée', impact: 'positive', source: 'Crunchbase' },
+      { date: '7j', title: '+50 Sales recrutés', detail: 'Signal d\'accélération forte', impact: 'positive', source: 'LinkedIn' },
+      { date: '23j', title: 'Dernier contact', detail: 'Momentum en baisse', impact: 'negative', source: 'Gmail' }
+    ]
+  };
+
+  const participants: Participant[] = [
+    {
+      id: '1',
+      name: 'Sarah Chen',
+      role: 'VP of Partnerships',
+      company: 'Contentsquare',
+      badge: 'champion',
+      influenceDots: 5,
+      behavioralSignals: [
+        'A vécu 3 ans à San Francisco → tolérance à l\'incertitude',
+        'Passée de Finance à Tech → curiosité transversale',
+        'Nouveau dans le rôle (6 mois) → cherche quick wins'
+      ],
+      resultVsRelation: 75,
+      speedVsCaution: 70,
+      structureVsIntuition: 45,
+      controlVsConsensus: 55,
+      interactionModes: {
+        primary: ['Challenger', 'Explorer'],
+        secondary: ['Strategist']
+      },
+      personalAgenda: {
+        motivations: [
+          'Prouver sa valeur dans son nouveau rôle VP',
+          'Livrer un quick win avant Q2',
+          'Élargir son réseau partenaires US'
+        ],
+        confidence: 72
+      },
+      validatesBy: ['Marc Dubois'],
+      influences: ['Équipe Sales'],
+      relationContext: {
+        engagementScore: 87,
+        phase: 'growth',
+        relationSince: '18 mois',
+        lastContactDays: 23,
+        avgFrequencyDays: 11,
+        totalInteractions: 47
+      }
+    },
+    {
+      id: '2',
+      name: 'Marc Dubois',
+      role: 'Head of Product Strategy',
+      company: 'Contentsquare',
+      badge: 'decider',
+      influenceDots: 4,
+      behavioralSignals: [
+        'Promu récemment (3 mois) → besoin de prouver sa capacité stratégique',
+        'Background Finance + Product → analytique, data-driven'
+      ],
+      resultVsRelation: 85,
+      speedVsCaution: 40,
+      structureVsIntuition: 80,
+      controlVsConsensus: 65,
+      interactionModes: {
+        primary: ['Validator', 'Operator'],
+        secondary: []
+      },
+      personalAgenda: {
+        motivations: [
+          'Valider l\'alignement stratégique produit',
+          'Obtenir des benchmarks et données chiffrées',
+          'Sécuriser l\'intégration technique'
+        ],
+        confidence: 68
+      },
+      influences: ['Équipe Produit'],
+      relationContext: {
+        engagementScore: 62,
+        phase: 'stagnant',
+        relationSince: '8 mois',
+        lastContactDays: 31,
+        avgFrequencyDays: 21,
+        totalInteractions: 18
+      }
+    }
+  ];
+
+  const meddpicc = [
+    { letter: 'M', label: 'Metrics', status: 'unknown', detail: 'Non qualifié' },
+    { letter: 'E', label: 'Economic Buyer', status: 'complete', detail: 'Sarah Chen · VP Partnerships' },
+    { letter: 'D', label: 'Decision Criteria', status: 'partial', detail: 'ROI + Time-to-value confirmés' },
+    { letter: 'D', label: 'Decision Process', status: 'partial', detail: 'Timeline Q2 · Process non documenté' },
+    { letter: 'P', label: 'Paper Process', status: 'unknown', detail: 'Non qualifié' },
+    { letter: 'I', label: 'Identify Pain', status: 'complete', detail: 'Gap sales enablement' },
+    { letter: 'C', label: 'Champion', status: 'complete', detail: 'Sarah Chen confirmée' },
+    { letter: 'C', label: 'Competition', status: 'risk', detail: '2 compétiteurs actifs' }
+  ];
+
+  const competition = {
+    qualified: false,
+    competitors: [
+      { name: 'Gong', status: 'probable', source: 'LinkedIn post Sarah' },
+      { name: 'Chorus.ai', status: 'confirmé', source: 'Email Marc' }
+    ],
+    questionsToAsk: [
+      'Quelles solutions évaluez-vous actuellement ?',
+      'Qui utilise quoi dans votre stack actuel ?',
+      'Qu\'est-ce qui vous bloque avec votre solution actuelle ?'
+    ]
+  };
+
+  const selectionCriteria = [
+    { rank: 1, criterion: 'ROI démontrable', probability: 95, source: 'Email Marc' },
+    { rank: 2, criterion: 'Time-to-value < 30j', probability: 85, source: 'Call Sarah' },
+    { rank: 3, criterion: 'Intégration Salesforce', probability: 70, source: 'Mémoire Knowy' },
+    { rank: 4, criterion: 'Support en français', probability: 45, source: 'Hypothèse' }
+  ];
+
+  const inactionCost = {
+    currentProvider: 'Process manuel + Gong partiel',
+    inactionLevel: 'élevé',
+    window: 'se ferme',
+    insight: 'Leur VP Sales part en Q3. S\'ils n\'ont pas de solution avant, le projet sera gelé 6 mois.',
+    sources: ['LinkedIn', 'Gmail']
+  };
+
+  const objections = [
+    {
+      objection: '"On utilise déjà Gong, pourquoi changer ?"',
+      type: 'statu quo',
+      probability: 85,
+      response: 'Gong fait du coaching call. Knowy fait de l\'intelligence relationnelle — on se complète. Vous gardez Gong pour les calls, on ajoute le layer relationnel.',
+      source: 'LinkedIn · Sarah a mentionné Gong'
+    },
+    {
+      objection: '"C\'est quoi le ROI chiffré ?"',
+      type: 'ROI',
+      probability: 95,
+      response: '3 clients comparables : +22% win rate en 90j. Je peux vous montrer les chiffres exacts si vous signez un NDA.',
+      source: 'Profil Marc · analytique'
+    },
+    {
+      objection: '"On n\'a pas le temps de déployer ça maintenant"',
+      type: 'timing',
+      probability: 70,
+      response: 'Justement — pilote 30j, 3 AE seulement. Vous voyez les résultats avant de scaler. Pas de projet lourd.',
+      source: 'Agenda Sarah · cherche quick win'
+    }
+  ];
+
+  const recommendations = [
+    { num: 1, phase: 'Ouverture · min 0–5', action: 'Qualifier les metrics de succès', rationale: 'Marc attend des KPIs — sans ça, il bloquera. Poser la question avant de pitcher.' },
+    { num: 2, phase: 'Découverte · min 5–15', action: 'Ancrer sur le départ du VP Sales Q3', rationale: 'Fenêtre d\'opportunité courte — créer l\'urgence sans forcer.' },
+    { num: 3, phase: 'Démo · min 15–35', action: 'Montrer un pilote 30j au lieu d\'un déploiement 6 mois', rationale: 'Sarah cherche un quick win — lui proposer exactement ça.' },
+    { num: 4, phase: 'Clôture · min 35–45', action: 'Proposer 3 prochaines étapes avec deadlines', rationale: 'Marc est méthodique — lui donner une roadmap claire rassure.' }
+  ];
+
+  const risks = [
+    {
+      risk: 'Momentum en baisse',
+      level: 'high' as const,
+      description: 'Dernier contact il y a 23 jours',
+      consequence: 'Le deal peut refroidir si on ne réactive pas rapidement',
+      mitigation: 'Proposer un follow-up dans les 48h avec une deadline'
+    },
+    {
+      risk: 'Concurrence non qualifiée',
+      level: 'medium' as const,
+      description: '2 compétiteurs actifs mais process de sélection inconnu',
+      consequence: 'On peut perdre sans savoir pourquoi',
+      mitigation: 'Qualifier les critères et le process dès cette réunion'
+    }
+  ];
+
+  const nextSteps = [
+    { task: 'Qualifier metrics de succès avec Marc', timing: 'En meeting', priority: 1, assignee: 'Vous' },
+    { task: 'Envoyer benchmark ROI sous NDA', timing: 'J+1', priority: 1, assignee: 'Vous' },
+    { task: 'Proposer pilot 30j avec 3 AE', timing: 'J+1', priority: 1, assignee: 'Vous' },
+    { task: 'Qualifier concurrence et process', timing: 'En meeting', priority: 2, assignee: 'Vous' },
+    { task: 'Update HubSpot deal stage', timing: 'J+1', priority: 2, assignee: 'Vous' },
+    { task: 'Scheduler démo technique', timing: 'J+2 à J+7', priority: 2, assignee: 'Marc' }
+  ];
+
+  const currentParticipant = participants.find(p => p.id === selectedParticipant) || participants[0];
 
   return (
     <div className="size-full overflow-auto bg-background">
-      <header className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 md:px-8 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3">
-            <Button variant="ghost" size="icon" aria-label="Retour au dashboard" icon={<ArrowLeft className="size-4" />} onClick={() => navigate('/dashboard')} />
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-2xl" aria-hidden="true">🎯</span>
-                <h1 className="text-2xl font-black">Q1 Strategic Review</h1>
-                <Badge>Brief commercial</Badge>
+      {/* Header Sticky */}
+      <div className="sticky top-0 z-50 bg-card border-b border-border">
+        <div className="max-w-7xl mx-auto px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <KnowyButton
+                variant="ghost"
+                size="sm"
+                icon={<ArrowLeft className="size-4" />}
+                onClick={() => navigate('/dashboard')}
+              />
+              <div>
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="text-3xl">{meeting.logo}</span>
+                  <h1 className="text-2xl font-black">{meeting.title}</h1>
+                  <KnowyBadge variant="violet">{meeting.type}</KnowyBadge>
+                </div>
+                <p className="text-xs font-mono text-muted-foreground">
+                  {meeting.date} · {meeting.time} · {meeting.platform}
+                  {isPast && <span className="ml-2 text-success">• Terminée</span>}
+                </p>
               </div>
-              <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                <Calendar className="size-4" aria-hidden="true" />
-                28 mai 2026 · 14:00-15:00 · Google Meet
-              </p>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <ScoreDisplay value={42} label="Confiance brief" size="sm" tone="confidence" />
-            <Button variant="secondary" size="sm" icon={<RefreshCw className="size-4" />} aria-label="Régénérer le brief">Régénérer</Button>
-            <Button variant="secondary" size="sm" icon={<Share2 className="size-4" />} aria-label="Partager le brief">Partager</Button>
+
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground mb-1">Confiance</p>
+                <p className={`text-2xl font-black ${confidenceScore >= 60 ? 'text-sage' : 'text-amber'}`}>
+                  {confidenceScore}%
+                </p>
+              </div>
+              <KnowyButton variant="secondary" size="sm" icon={<RefreshCw className="size-4" />} />
+              <KnowyButton variant="secondary" size="sm" icon={<Share2 className="size-4" />} />
+            </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 md:px-8">
-        <section className="mb-6 grid gap-4 lg:grid-cols-[1fr_320px]">
-          <Card className="p-5">
-            <div className="mb-4 flex items-center gap-2">
-              <Sparkles className="size-5 text-primary" aria-hidden="true" />
-              <h2 className="text-xl font-black">Brief actionnable</h2>
-            </div>
-            <p className="max-w-4xl text-base leading-7">
-              Sarah peut porter un pilote si la valeur est prouvée vite. Marc risque de bloquer sans métriques et critères d’intégration.
-              Le bon angle : pilote limité, preuve ROI, décision cadrée avant la fin de Q2.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <DataSourcePill source="Gmail" level="observable" />
-              <DataSourcePill source="Calendar" level="observable" />
-              <DataSourcePill source="LinkedIn" level="inferred" />
-              <DataSourcePill source="CRM" status="missing" level="unavailable" />
-            </div>
-          </Card>
-
-          <Card className="p-5">
-            <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-muted-foreground">Sources et prudence</h2>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between"><span>Signaux observables</span><Badge variant="sage">7</Badge></div>
-              <div className="flex items-center justify-between"><span>Signaux inférés</span><Badge variant="blue">6</Badge></div>
-              <div className="flex items-center justify-between"><span>Hypothèses à valider</span><Badge variant="amber">3</Badge></div>
-              <div className="flex items-center justify-between"><span>Données non disponibles</span><Badge variant="muted">CRM</Badge></div>
-            </div>
-          </Card>
-        </section>
-
-        <section className="mb-8">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-wide text-primary">Moment central</p>
-              <h2 className="text-3xl font-black">Qui est dans la room</h2>
-            </div>
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              Les profils restent probabilistes : chaque carte sépare ce qui est observé, inféré et à valider en réunion.
-            </p>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            {participants.map((participant) => (
+      {/* Pills Navigation - Outside sticky header */}
+      <div className="bg-background border-b border-border">
+        <div className="max-w-7xl mx-auto px-8 py-4">
+          <div className="flex gap-2">
+            {isPast && (
               <button
-                key={participant.id}
-                type="button"
-                onClick={() => setSelectedId(participant.id)}
-                className="text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                onClick={() => setActiveTab('summary')}
+                className={`px-4 py-2 rounded-full font-semibold transition-all ${
+                  activeTab === 'summary'
+                    ? 'bg-primary text-white'
+                    : 'bg-muted/30 hover:bg-muted/50'
+                }`}
               >
-                <Card className={`h-full p-5 ${selectedId === participant.id ? 'border-primary bg-primary/5' : ''}`} hover>
-                  <div className="mb-4 flex items-start justify-between gap-3">
-                    <div className="flex gap-3">
-                      <div className="flex size-12 items-center justify-center rounded-lg bg-primary text-lg font-black text-white">
-                        {participant.name.split(' ').map((part) => part[0]).join('')}
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-black">{participant.name}</h3>
-                        <p className="text-sm text-muted-foreground">{participant.role}</p>
-                      </div>
-                    </div>
-                    <Badge variant={participant.stance.includes('Champion') ? 'sage' : 'violet'}>{participant.stance}</Badge>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <ScoreDisplay value={participant.influence} label="Influence" size="sm" />
-                    <ScoreDisplay value={participant.confidence} label="Confiance" size="sm" tone="confidence" />
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Mode</p>
-                      <p className="mt-1 text-sm font-bold">{participant.mode}</p>
-                    </div>
-                  </div>
-                  <p className="mt-4 text-sm text-muted-foreground">{participant.modeDetail}</p>
-                </Card>
+                Résumé
               </button>
-            ))}
+            )}
+            <button
+              onClick={() => setActiveTab('prep')}
+              className={`px-4 py-2 rounded-full font-semibold transition-all ${
+                activeTab === 'prep'
+                  ? 'bg-primary text-white'
+                  : 'bg-muted/30 hover:bg-muted/50'
+              }`}
+            >
+              Préparation
+            </button>
+            <button
+              onClick={() => setActiveTab('participants')}
+              className={`px-4 py-2 rounded-full font-semibold transition-all ${
+                activeTab === 'participants'
+                  ? 'bg-primary text-white'
+                  : 'bg-muted/30 hover:bg-muted/50'
+              }`}
+            >
+              Participants
+            </button>
           </div>
-        </section>
+        </div>
+      </div>
 
-        <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <Card className="p-5">
-            <div className="mb-5 flex items-center justify-between gap-3">
+      <div className="max-w-7xl mx-auto px-8 py-8">
+        {/* Tab: Préparation */}
+        {activeTab === 'prep' && (
+        <div className="grid grid-cols-[280px_1fr] gap-6">
+          {/* Sidebar */}
+          <div className="sticky top-28 self-start space-y-4">
+            <KnowyCard className="p-6">
+              <div className="text-center mb-4">
+                <div className={`text-5xl font-black mb-2 ${confidenceScore >= 60 ? 'text-sage' : 'text-amber'}`}>
+                  {confidenceScore}%
+                </div>
+                <p className="text-xs text-muted-foreground">Score de confiance</p>
+              </div>
+
+              <div className="h-2 bg-muted rounded-full overflow-hidden mb-4">
+                <div
+                  className={`h-full ${confidenceScore >= 60 ? 'bg-sage' : 'bg-amber'}`}
+                  style={{ width: `${confidenceScore}%` }}
+                />
+              </div>
+
+              <div className="space-y-2 mb-4">
+                <p className="text-xs font-bold mb-2 text-muted-foreground">SOURCES CONNECTÉES</p>
+                {sources.map((source, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <source.icon className={`size-3 ${source.connected ? 'text-sage' : 'text-muted-foreground'}`} />
+                      <span className={source.connected ? '' : 'text-muted-foreground'}>{source.name}</span>
+                    </div>
+                    {source.connected ? (
+                      <CheckCircle2 className="size-3 text-sage" />
+                    ) : (
+                      <span className="text-amber font-mono">+{source.gain}%</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {sources.find(s => s.gain && !s.connected) && (
+                <div className="p-3 bg-amber/10 rounded-xl border border-amber/20">
+                  <p className="text-xs font-bold mb-1 text-amber">Recommandé</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Connecter Slack → +20%
+                  </p>
+                  <button className="text-xs text-primary hover:underline">
+                    Gérer les connecteurs →
+                  </button>
+                </div>
+              )}
+            </KnowyCard>
+          </div>
+
+          {/* Main Content */}
+          <div className="space-y-6">
+            {/* GROUPE 1 — CONTEXTE */}
+            <div >
+              <div className="flex items-center gap-2 mb-4">
+                <h2 className="text-2xl font-black">Contexte</h2>
+              </div>
+
+              {/* Section A — Résumé Exécutif */}
+              <KnowyCard className="p-6 mb-4 border-l-4 border-l-primary">
+                <h3 className="text-sm font-bold mb-3 text-muted-foreground">RÉSUMÉ EXÉCUTIF</h3>
+
+                {/* Alerte si au moins une relation refroidit */}
+                {participants.some(p =>
+                  p.relationContext && p.relationContext.lastContactDays > (p.relationContext.avgFrequencyDays * 1.8)
+                ) && (
+                  <div className="mb-3 p-3 bg-amber-600/10 border border-amber-600/20 rounded-lg flex items-start gap-2">
+                    <AlertTriangle className="size-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-amber-600 mb-1">⚠️ Attention : Relation(s) en refroidissement</p>
+                      <p className="text-xs text-muted-foreground">
+                        {participants
+                          .filter(p => p.relationContext && p.relationContext.lastContactDays > (p.relationContext.avgFrequencyDays * 1.8))
+                          .map(p => p.name)
+                          .join(', ')
+                        } — Dernier contact au-delà de la fréquence habituelle. Réactiver rapidement.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-4 bg-primary/5 rounded-xl mb-3">
+                  <p className="text-base leading-relaxed italic">{executiveSummary.text}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {executiveSummary.tags.map((tag, i) => (
+                    <KnowyBadge key={i} variant={tag.variant}>{tag.label}</KnowyBadge>
+                  ))}
+                </div>
+              </KnowyCard>
+
+              {/* Section B — Contexte Entreprise */}
+              <KnowyCard className="p-6">
+                <h3 className="text-sm font-bold mb-4 text-muted-foreground">CONTEXTE ENTREPRISE</h3>
+
+                <div className="grid grid-cols-4 gap-3 mb-6">
+                  {companyContext.stats.map((stat, i) => (
+                    <div key={i} className="text-center p-4 bg-muted/50 rounded-xl">
+                      <p className="text-3xl font-black mb-1">{stat.value}</p>
+                      <p className="text-xs text-muted-foreground">{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-3">
+                  {companyContext.timeline.map((event, i) => (
+                    <div key={i} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className={`size-3 rounded-full ${
+                          event.impact === 'positive' ? 'bg-sage' : 'bg-coral'
+                        }`} />
+                        {i < companyContext.timeline.length - 1 && (
+                          <div className="w-px h-full bg-border mt-1" />
+                        )}
+                      </div>
+                      <div className="flex-1 pb-3">
+                        <div className="flex items-start justify-between mb-1">
+                          <p className="font-bold">{event.title}</p>
+                          <span className="text-xs text-muted-foreground">{event.date}</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{event.detail}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </KnowyCard>
+            </div>
+
+            {/* GROUPE 2 — PERSONNES */}
+            <div >
+              <div className="flex items-center gap-2 mb-4">
+                <h2 className="text-2xl font-black">Personnes</h2>
+              </div>
+
+              {/* Section C — Participants */}
+              <KnowyCard className="p-6 mb-4">
+                <h3 className="text-sm font-bold mb-4 text-muted-foreground">PARTICIPANTS & INFLUENCE</h3>
+
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  {participants.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setSelectedParticipant(p.id)}
+                      className={`text-left p-4 rounded-xl border-2 transition-all ${
+                        selectedParticipant === p.id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-primary/30'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="size-12 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center text-white font-black flex-shrink-0">
+                          {p.name.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm mb-1">{p.name}</p>
+                          <p className="text-xs text-muted-foreground mb-2">{p.role}</p>
+                          <div className="flex gap-1">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <div
+                                key={i}
+                                className={`size-2 rounded-full ${
+                                  i < p.influenceDots ? 'bg-primary' : 'bg-muted'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      {p.badge && (
+                        <KnowyBadge variant={
+                          p.badge === 'champion' ? 'sage' :
+                          p.badge === 'decider' ? 'violet' :
+                          p.badge === 'gatekeeper' ? 'amber' : 'coral'
+                        } size="sm">
+                          {p.badge === 'champion' ? 'Champion' :
+                           p.badge === 'decider' ? 'Décideur' :
+                           p.badge === 'gatekeeper' ? 'Gatekeeper' : 'Bloqueur'}
+                        </KnowyBadge>
+                      )}
+
+                      {/* Contexte relationnel */}
+                      {p.relationContext && (
+                        <div className="mt-3 p-3 bg-muted/30 rounded-lg border border-border">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-muted-foreground">CONTEXTE RELATIONNEL</span>
+                            <KnowyBadge
+                              variant={
+                                p.relationContext.engagementScore > 65 ? 'sage' :
+                                p.relationContext.engagementScore >= 35 ? 'amber' : 'coral'
+                              }
+                              size="sm"
+                            >
+                              {p.relationContext.engagementScore}
+                            </KnowyBadge>
+                          </div>
+
+                          {/* Alerte si relation refroidit */}
+                          {p.relationContext.lastContactDays > (p.relationContext.avgFrequencyDays * 1.8) && (
+                            <div className="flex items-center gap-1.5 mb-2 text-amber-600">
+                              <AlertTriangle className="size-3 flex-shrink-0" />
+                              <span className="text-xs font-medium">Relation en refroidissement</span>
+                            </div>
+                          )}
+
+                          <div className="text-xs text-muted-foreground space-y-1 mb-2">
+                            <p>Relation depuis {p.relationContext.relationSince}</p>
+                            <p>Dernier contact: Il y a {p.relationContext.lastContactDays}j {p.relationContext.lastContactDays > p.relationContext.avgFrequencyDays && `(vs ${p.relationContext.avgFrequencyDays}j hab.)`}</p>
+                            <p>{p.relationContext.totalInteractions} échanges au total</p>
+                          </div>
+
+                          <KnowyButton
+                            variant="ghost"
+                            size="sm"
+                            className="w-full mt-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/relation/${p.id}`);
+                            }}
+                          >
+                            Voir profil complet →
+                          </KnowyButton>
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="p-4 bg-muted/50 rounded-xl">
+                  <p className="text-xs font-bold mb-3 text-muted-foreground">DYNAMIQUES POLITIQUES</p>
+                  <div className="space-y-2 text-sm">
+                    {participants.map((p) => (
+                      <div key={p.id}>
+                        {p.validatesBy && p.validatesBy.length > 0 && (
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <span className="font-bold text-foreground">{p.name}</span>
+                            <ArrowRight className="size-3" />
+                            <span>valide auprès de {p.validatesBy.join(', ')}</span>
+                          </div>
+                        )}
+                        {p.influences && p.influences.length > 0 && (
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <span className="font-bold text-foreground">{p.name}</span>
+                            <ArrowRight className="size-3" />
+                            <span>influence {p.influences.join(', ')}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </KnowyCard>
+
+              {/* Section D — Profil Interactionnel */}
+              <KnowyCard className="p-6 mb-4">
+                <h3 className="text-sm font-bold mb-4 text-muted-foreground">
+                  PROFIL INTERACTIONNEL · {currentParticipant.name}
+                </h3>
+
+                <div className="grid grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <p className="text-xs font-bold mb-3 text-muted-foreground">Radar comportemental</p>
+                    <div className="flex items-center justify-center bg-muted/50 rounded-xl p-4">
+                      <RadarChart
+                        size={220}
+                        data={[
+                          { label: 'Résultat', value: currentParticipant.resultVsRelation },
+                          { label: 'Rapidité', value: currentParticipant.speedVsCaution },
+                          { label: 'Structure', value: currentParticipant.structureVsIntuition },
+                          { label: 'Relation', value: 100 - currentParticipant.resultVsRelation },
+                          { label: 'Intuition', value: 100 - currentParticipant.structureVsIntuition },
+                          { label: 'Contrôle', value: currentParticipant.controlVsConsensus }
+                        ]}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {[
+                      { left: 'Résultat', right: 'Relation', value: currentParticipant.resultVsRelation },
+                      { left: 'Rapidité', right: 'Prudence', value: currentParticipant.speedVsCaution },
+                      { left: 'Structure', right: 'Intuition', value: currentParticipant.structureVsIntuition },
+                      { left: 'Contrôle', right: 'Consensus', value: currentParticipant.controlVsConsensus }
+                    ].map((axis, i) => (
+                      <div key={i}>
+                        <div className="flex justify-between text-xs mb-2 text-muted-foreground">
+                          <span>{axis.left}</span>
+                          <span className="font-mono font-bold text-primary">{axis.value}%</span>
+                          <span>{axis.right}</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-primary" style={{ width: `${axis.value}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Interaction Modes */}
+                <div className="mb-4">
+                  <p className="text-xs font-bold mb-3 text-muted-foreground">MODES D'INTERACTION</p>
+                  <div className="flex flex-wrap gap-2">
+                    {currentParticipant.interactionModes.primary.map((mode, i) => (
+                      <KnowyBadge key={i} variant="blue">{mode}</KnowyBadge>
+                    ))}
+                    {currentParticipant.interactionModes.secondary.map((mode, i) => (
+                      <span
+                        key={i}
+                        className="px-3 py-1 rounded-full text-xs font-medium border-2 border-primary text-primary bg-card"
+                      >
+                        {mode}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-primary/5 rounded-xl">
+                  <p className="text-xs font-bold mb-3 text-muted-foreground">ANALYSE COMPORTEMENTALE</p>
+                  <div className="space-y-2">
+                    {currentParticipant.behavioralSignals.map((signal, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <CircleDot className="size-3 mt-1 flex-shrink-0 text-primary" />
+                        <span className="text-sm">{signal}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </KnowyCard>
+
+              {/* Section E — Agenda Personnel */}
+              <KnowyCard className="p-6">
+                <h3 className="text-sm font-bold mb-4 text-muted-foreground">
+                  AGENDA PERSONNEL · {currentParticipant.name}
+                </h3>
+
+                {currentParticipant.personalAgenda ? (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xs text-muted-foreground">Confiance:</span>
+                      <span className="text-xs font-mono font-bold text-primary">
+                        {currentParticipant.personalAgenda.confidence}%
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {currentParticipant.personalAgenda.motivations.map((motivation, i) => (
+                        <div key={i} className="flex items-start gap-3 p-3 bg-primary/5 rounded-xl">
+                          <Target className="size-4 mt-0.5 flex-shrink-0 text-primary" />
+                          <span className="text-sm">{motivation}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-muted/50 rounded-xl">
+                    <AlertCircle className="size-8 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-sm mb-2 text-muted-foreground">
+                      Agenda inconnu — à qualifier en ouverture
+                    </p>
+                  </div>
+                )}
+              </KnowyCard>
+            </div>
+
+            {/* GROUPE 3 — DEAL */}
+            <div >
+              <div className="flex items-center gap-2 mb-4">
+                <h2 className="text-2xl font-black">Deal</h2>
+              </div>
+
+              {/* Section F — MEDDPICC */}
+              <KnowyCard className="p-6 mb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold text-muted-foreground">MEDDPICC</h3>
+                  <KnowyBadge variant="amber">3/8 qualifiés</KnowyBadge>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-muted-foreground">Progression</span>
+                    <span className="text-xs font-mono font-bold text-amber-600">37%</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-amber-600" style={{ width: '37%' }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    → Priorités cette réunion : <span className="font-semibold">M</span> (Metrics), <span className="font-semibold">D</span> (Decision Process), <span className="font-semibold">P</span> (Paper Process)
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  {meddpicc.map((item, i) => (
+                    <div
+                      key={i}
+                      className={`p-4 rounded-xl border-2 ${
+                        item.status === 'complete' ? 'bg-sage/10 border-sage' :
+                        item.status === 'partial' ? 'bg-amber/10 border-amber' :
+                        item.status === 'risk' ? 'bg-coral/10 border-coral' :
+                        'bg-muted/50 border-muted'
+                      }`}
+                    >
+                      <p className="text-3xl font-black mb-1 text-primary">{item.letter}</p>
+                      <p className="text-[10px] font-bold mb-2 text-muted-foreground">{item.label}</p>
+                      <p className="text-xs">{item.detail}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-3 bg-amber/10 rounded-lg border border-amber/20">
+                  <p className="text-xs text-muted-foreground">
+                    ⚠️ 5 cases non qualifiées — priorité de cette réunion
+                  </p>
+                </div>
+              </KnowyCard>
+
+              {/* Section G — Concurrence */}
+              <KnowyCard className="p-6 mb-4">
+                <h3 className="text-sm font-bold mb-4 text-muted-foreground">CONCURRENCE & STATU QUO</h3>
+
+                {!competition.qualified && (
+                  <div className="p-3 bg-amber/10 rounded-lg border border-amber/20 mb-4">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="size-4 text-amber" />
+                      <span className="text-xs font-bold text-amber">Concurrence non qualifiée</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2 mb-4">
+                  {competition.competitors.map((comp, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <span className="text-sm font-bold">{comp.name}</span>
+                      <div className="flex items-center gap-2">
+                        <KnowyBadge variant={comp.status === 'confirmé' ? 'coral' : 'amber'} size="sm">
+                          {comp.status}
+                        </KnowyBadge>
+                        <span className="text-[10px] text-muted-foreground">{comp.source}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-4 bg-primary/5 rounded-xl">
+                  <p className="text-xs font-bold mb-2 text-primary">Questions à poser</p>
+                  <ul className="space-y-1">
+                    {competition.questionsToAsk.map((q, i) => (
+                      <li key={i} className="text-sm text-muted-foreground">• {q}</li>
+                    ))}
+                  </ul>
+                </div>
+              </KnowyCard>
+
+              {/* Section H — Critères de Sélection */}
+              <KnowyCard className="p-6 mb-4">
+                <h3 className="text-sm font-bold mb-4 text-muted-foreground">CRITÈRES DE SÉLECTION</h3>
+
+                <div className="space-y-3">
+                  {selectionCriteria.map((item) => (
+                    <div key={item.rank}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono text-muted-foreground">#{item.rank}</span>
+                          <span className="text-sm font-bold">{item.criterion}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-primary">{item.probability}%</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-primary" style={{ width: `${item.probability}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </KnowyCard>
+
+              {/* Section I — Coût de l'Inaction */}
+              <KnowyCard className="p-6">
+                <h3 className="text-sm font-bold mb-4 text-muted-foreground">COÛT DE L'INACTION</h3>
+
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">Fournisseur actuel</p>
+                    <p className="text-sm font-bold">{inactionCost.currentProvider}</p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">Coût inaction</p>
+                    <p className={`text-sm font-bold ${
+                      inactionCost.inactionLevel === 'élevé' ? 'text-coral' :
+                      inactionCost.inactionLevel === 'moyen' ? 'text-amber' : 'text-sage'
+                    }`}>
+                      {inactionCost.inactionLevel}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">Fenêtre</p>
+                    <p className={`text-sm font-bold ${
+                      inactionCost.window === 'se ferme' ? 'text-coral' :
+                      inactionCost.window === 'ouverte' ? 'text-sage' : 'text-amber'
+                    }`}>
+                      {inactionCost.window}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-primary/5 rounded-lg mb-3">
+                  <p className="text-sm italic leading-relaxed">{inactionCost.insight}</p>
+                </div>
+              </KnowyCard>
+            </div>
+
+            {/* GROUPE 4 — ACTION */}
+            <div >
+              <div className="flex items-center gap-2 mb-4">
+                <h2 className="text-2xl font-black">Action</h2>
+              </div>
+
+              {/* Section J — Recommandations */}
+              <KnowyCard className="p-6 mb-4">
+                <h3 className="text-sm font-bold mb-4 text-muted-foreground">RECOMMANDATIONS MEETING</h3>
+
+                <div className="space-y-4">
+                  {recommendations.map((rec) => (
+                    <div key={rec.num} className="flex gap-4">
+                      <div className="flex-shrink-0">
+                        <div className="size-8 bg-sage/20 rounded-full flex items-center justify-center">
+                          <span className="font-black text-sage">{rec.num}</span>
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs text-muted-foreground mb-1">{rec.phase}</p>
+                        <p className="font-bold mb-1">{rec.action}</p>
+                        <p className="text-sm text-muted-foreground">→ {rec.rationale}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </KnowyCard>
+
+              {/* Section K — Objections */}
+              <KnowyCard className="p-6 mb-4 border-l-4 border-l-sage">
+                <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
+                  <Shield className="size-5 text-sage" />
+                  <span className="text-sage">OBJECTIONS PROBABLES</span>
+                </h3>
+
+                <div className="space-y-4">
+                  {objections.map((obj, i) => (
+                    <div key={i} className="p-4 bg-sage/10 rounded-xl border border-sage/20">
+                      <div className="flex items-start justify-between mb-3">
+                        <p className="text-sm font-bold italic flex-1">"{obj.objection}"</p>
+                        <div className="flex items-center gap-2">
+                          <KnowyBadge variant="sage" size="sm">{obj.type}</KnowyBadge>
+                          <span className="text-xs font-mono font-bold text-sage">{obj.probability}%</span>
+                        </div>
+                      </div>
+                      <div className="p-3 bg-card rounded-lg mb-2">
+                        <p className="text-xs font-bold mb-1 text-sage">Réponse préparée:</p>
+                        <p className="text-sm italic">{obj.response}</p>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">Source: {obj.source}</p>
+                    </div>
+                  ))}
+                </div>
+              </KnowyCard>
+
+              {/* Section L — Risques */}
+              <KnowyCard className="p-6 mb-4">
+                <h3 className="text-sm font-bold mb-4 text-muted-foreground">RISQUES IDENTIFIÉS</h3>
+
+                <div className="space-y-3">
+                  {risks.map((risk, i) => (
+                    <div
+                      key={i}
+                      className="p-4 rounded-xl border-l-4"
+                      style={{
+                        backgroundColor: risk.level === 'high' ? '#FEF2F2' :
+                                         risk.level === 'medium' ? '#FFFBEB' : '#ECFDF5',
+                        borderLeftColor: risk.level === 'high' ? '#DC2626' :
+                                          risk.level === 'medium' ? '#D97706' : '#059669'
+                      }}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <p className="font-bold">{risk.risk}</p>
+                        <KnowyBadge variant={
+                          risk.level === 'high' ? 'coral' :
+                          risk.level === 'medium' ? 'amber' : 'sage'
+                        } size="sm">
+                          {risk.level === 'high' ? 'Élevé' : risk.level === 'medium' ? 'Moyen' : 'Faible'}
+                        </KnowyBadge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">{risk.description}</p>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        <strong>Conséquence:</strong> {risk.consequence}
+                      </p>
+                      <p className="text-xs text-sage">
+                        <strong>Mitigation:</strong> {risk.mitigation}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </KnowyCard>
+
+              {/* Section M — Next Steps CRM */}
+              <KnowyCard className="p-6">
+                <h3 className="text-sm font-bold mb-4 text-muted-foreground">NEXT STEPS CRM</h3>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {nextSteps.map((step, i) => (
+                    <div key={i} className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                      <input type="checkbox" className="mt-1" />
+                      <div className="flex-1">
+                        <p className="text-sm font-bold mb-1">
+                          {step.task}
+                          {step.priority === 1 && (
+                            <KnowyBadge variant="coral" size="sm" className="ml-2">P1</KnowyBadge>
+                          )}
+                        </p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <KnowyBadge variant="blue" size="sm">{step.timing}</KnowyBadge>
+                          <span>· {step.assignee}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </KnowyCard>
+            </div>
+          </div>
+        </div>
+        )}
+
+        {/* Tab: Résumé (Past meetings only) */}
+        {activeTab === 'summary' && isPast && (
+          <div className="space-y-6">
+            {/* BLOC 1 — POINTS CLÉS */}
+            <KnowyCard className="p-6 border-l-4 border-l-primary">
+              <h2 className="text-2xl font-black mb-6">POINTS CLÉS</h2>
+
+              {/* En un coup d'œil */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="p-4 bg-muted/20 rounded-xl">
+                  <p className="text-sm text-muted-foreground mb-1">Durée réelle</p>
+                  <p className="text-2xl font-bold">1h12</p>
+                  <p className="text-xs text-muted-foreground">vs 1h30 prévue</p>
+                </div>
+                <div className="p-4 bg-muted/20 rounded-xl">
+                  <p className="text-sm text-muted-foreground mb-1">Décisions prises</p>
+                  <p className="text-2xl font-bold text-success">3</p>
+                </div>
+                <div className="p-4 bg-muted/20 rounded-xl">
+                  <p className="text-sm text-muted-foreground mb-1">Actions assignées</p>
+                  <p className="text-2xl font-bold text-primary">5</p>
+                </div>
+              </div>
+
+              {/* Décisions */}
+              <div className="mb-6">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <CheckCircle2 className="size-5 text-success" />
+                  Décisions
+                </h3>
+                <div className="grid grid-cols-1 gap-2">
+                  <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
+                    <p className="font-medium">Pilote 30j validé - démarrage 15 juin</p>
+                  </div>
+                  <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
+                    <p className="font-medium">Budget 150K€ confirmé</p>
+                  </div>
+                  <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
+                    <p className="font-medium">Timeline Q2 maintenue</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="mb-6">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Target className="size-5 text-primary" />
+                  Actions (5)
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { owner: 'Sarah Chen', task: 'Envoyer contrat pilote', due: '30 mai', status: 'pending' },
+                    { owner: 'Marc Dubois', task: 'Valider specs techniques', due: '5 juin', status: 'pending' },
+                    { owner: 'Maxime Durant', task: 'Préparer ROI deck', due: '28 mai', status: 'done' },
+                    { owner: 'Sarah Chen', task: 'Organiser kickoff interne', due: '10 juin', status: 'pending' },
+                    { owner: 'Marc Dubois', task: 'Identifier beta testers', due: '15 juin', status: 'pending' }
+                  ].map((action, i) => (
+                    <div key={i} className="flex items-center gap-3 p-3 bg-muted/20 rounded-lg">
+                      <div className={`size-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                        action.status === 'done' ? 'bg-success border-success' : 'border-muted'
+                      }`}>
+                        {action.status === 'done' && <CheckCircle2 className="size-3 text-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm">{action.task}</p>
+                        <p className="text-xs text-muted-foreground">{action.owner} · {action.due}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Objections */}
+              <div className="mb-6">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <AlertCircle className="size-5 text-amber-600" />
+                  Objections soulevées
+                </h3>
+                <div className="space-y-2">
+                  <div className="p-3 border-l-4 border-success bg-success/5 rounded-r-lg">
+                    <div className="flex items-start gap-2 mb-1">
+                      <CheckCircle2 className="size-4 text-success mt-0.5 flex-shrink-0" />
+                      <p className="text-sm font-semibold flex-1">"On utilise déjà Gong, pourquoi changer ?"</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground ml-6">
+                      ✓ Traitée — Argumenté complémentarité
+                    </p>
+                  </div>
+                  <div className="p-3 border-l-4 border-amber-600 bg-amber-600/5 rounded-r-lg">
+                    <div className="flex items-start gap-2 mb-1">
+                      <CircleDot className="size-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <p className="text-sm font-semibold flex-1">"Quel ROI chiffré exactement ?"</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground ml-6">
+                      → À suivre — Envoyer case studies sous NDA
+                    </p>
+                  </div>
+                  <div className="p-3 border-l-4 border-success bg-success/5 rounded-r-lg">
+                    <div className="flex items-start gap-2 mb-1">
+                      <CheckCircle2 className="size-4 text-success mt-0.5 flex-shrink-0" />
+                      <p className="text-sm font-semibold flex-1">"Vous pouvez vraiment déployer en 30j ?"</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground ml-6">
+                      ✓ Traitée — Timeline détaillée partagée
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Temps de parole */}
               <div>
-                <h2 className="text-xl font-black">Profil interactionnel · {selected.name}</h2>
-                <p className="text-sm text-muted-foreground">{selected.strategy}</p>
-              </div>
-              <Button variant="ghost" size="sm" icon={<ArrowRight className="size-4" />} onClick={() => navigate(`/relation/${selected.id === 'sarah' ? '1' : '2'}`)}>
-                Fiche complète
-              </Button>
-            </div>
-
-            <div className="space-y-5">
-              {selected.axes.map((axis) => (
-                <div key={`${axis.left}-${axis.right}`}>
-                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                    <span className="font-semibold">{axis.left}</span>
-                    <Badge variant={levelVariant[axis.level]} size="sm">{levelLabel[axis.level]}</Badge>
-                    <span className="font-semibold">{axis.right}</span>
-                  </div>
-                  <ProgressBar value={axis.value} label={`${axis.left} vers ${axis.right}`} />
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Users className="size-5 text-muted-foreground" />
+                  Répartition temps de parole
+                </h3>
+                <div className="space-y-3">
+                  {[
+                    { name: 'Sarah Chen', percentage: 42, minutes: 18, color: 'bg-primary' },
+                    { name: 'Marc Dubois', percentage: 31, minutes: 13, color: 'bg-accent' },
+                    { name: 'Maxime Durant', percentage: 27, minutes: 11, color: 'bg-success' }
+                  ].map((speaker, i) => (
+                    <div key={i}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-sm">{speaker.name}</span>
+                        <span className="text-xs text-muted-foreground">{speaker.percentage}% ({speaker.minutes}min)</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div className={`h-full ${speaker.color}`} style={{ width: `${speaker.percentage}%` }} />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </Card>
+              </div>
+            </KnowyCard>
 
-          <Card className="p-5">
-            <h2 className="mb-4 text-xl font-black">Signaux comportementaux</h2>
-            <div className="space-y-3">
-              {selected.signals.map((signal) => (
-                <div key={signal.text} className="rounded-lg border border-border bg-muted/20 p-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <Badge variant={levelVariant[signal.level]} size="sm">{levelLabel[signal.level]}</Badge>
-                    <DataSourcePill source={signal.source} level={signal.level} />
+            {/* BLOC 2 — PROFILS ENRICHIS (THE MAGIC MOMENT) */}
+            <KnowyCard className="p-6 bg-gradient-to-br from-primary/5 to-accent/5 border-l-4 border-l-primary">
+              <div className="flex items-center gap-3 mb-6">
+                <Sparkles className="size-6 text-primary" />
+                <h2 className="text-2xl font-black">PROFILS ENRICHIS PAR CETTE RÉUNION</h2>
+              </div>
+
+              <p className="text-sm text-muted-foreground mb-6">
+                Knowy a capturé et enrichi automatiquement les profils relationnels pendant la réunion.
+              </p>
+
+              <div className="space-y-4">
+                {/* Sarah Chen */}
+                <div className="p-4 bg-card rounded-xl border border-border">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="size-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0">
+                      SC
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold">Sarah Chen</h3>
+                        <KnowyBadge variant="sage">+7 insights</KnowyBadge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">VP of Partnerships · Contentsquare</p>
+                    </div>
                   </div>
-                  <p className="text-sm">{signal.text}</p>
+
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
+                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium mb-1">Budget confirmé: 150K€</p>
+                        <KnowyBadge variant="blue" size="sm">Deal</KnowyBadge>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
+                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium mb-1">Cherche quick win avant Q2 pour prouver sa valeur</p>
+                        <KnowyBadge variant="violet" size="sm">Motivation</KnowyBadge>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
+                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium mb-1">Utilise déjà Gong pour coaching calls</p>
+                        <KnowyBadge variant="amber" size="sm">Contexte</KnowyBadge>
+                      </div>
+                    </div>
+                  </div>
+
+                  <KnowyButton
+                    variant="ghost"
+                    size="sm"
+                    className="w-full mt-3"
+                    onClick={() => navigate('/relation/1')}
+                  >
+                    Voir profil complet →
+                  </KnowyButton>
                 </div>
-              ))}
-            </div>
-          </Card>
-        </section>
 
-        <section className="mt-6 grid gap-4 md:grid-cols-3">
-          {[
-            { icon: Target, title: 'Ouverture', text: 'Valider les métriques de succès avant la démo.' },
-            { icon: Shield, title: 'Objection probable', text: '“On utilise déjà Gong” : positionner Knowy sur l’intelligence relationnelle.' },
-            { icon: Building2, title: 'Contexte entreprise', text: 'Levée et recrutements créent une fenêtre favorable, mais courte.' }
-          ].map((item) => (
-            <Card key={item.title} className="p-5">
-              <item.icon className="mb-3 size-5 text-primary" aria-hidden="true" />
-              <h3 className="mb-2 font-black">{item.title}</h3>
-              <p className="text-sm text-muted-foreground">{item.text}</p>
-            </Card>
-          ))}
-        </section>
+                {/* Marc Dubois */}
+                <div className="p-4 bg-card rounded-xl border border-border">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="size-12 bg-gradient-to-br from-accent to-primary rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0">
+                      MD
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold">Marc Dubois</h3>
+                        <KnowyBadge variant="sage">+5 insights</KnowyBadge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">Head of Product Strategy · Contentsquare</p>
+                    </div>
+                  </div>
 
-        <section className="mt-6">
-          <Card className="p-5">
-            <h2 className="mb-4 flex items-center gap-2 text-xl font-black"><Users className="size-5 text-primary" /> Dynamique de décision</h2>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="flex items-center gap-3 rounded-lg bg-muted/25 p-3 text-sm">
-                <CircleDot className="size-4 text-sage" />
-                <span><strong>Sarah</strong> peut sponsoriser le pilote si le prochain pas est simple.</span>
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
+                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium mb-1">Besoin de ROI chiffré et KPIs précis</p>
+                        <KnowyBadge variant="violet" size="sm">Critère décision</KnowyBadge>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
+                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium mb-1">Profil analytique, data-driven (background Finance)</p>
+                        <KnowyBadge variant="blue" size="sm">Comportement</KnowyBadge>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
+                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium mb-1">Responsable validation specs techniques</p>
+                        <KnowyBadge variant="amber" size="sm">Rôle</KnowyBadge>
+                      </div>
+                    </div>
+                  </div>
+
+                  <KnowyButton
+                    variant="ghost"
+                    size="sm"
+                    className="w-full mt-3"
+                    onClick={() => navigate('/relation/2')}
+                  >
+                    Voir profil complet →
+                  </KnowyButton>
+                </div>
               </div>
-              <div className="flex items-center gap-3 rounded-lg bg-muted/25 p-3 text-sm">
-                <CheckCircle2 className="size-4 text-primary" />
-                <span><strong>Marc</strong> doit valider les critères produit et ROI.</span>
+            </KnowyCard>
+
+            {/* BLOC 3 — SYNCHRONISATION CRM */}
+            <KnowyCard className="p-6 border-l-4 border-l-muted">
+              <div className="flex items-center gap-3 mb-6">
+                <Database className="size-6 text-muted-foreground" />
+                <h2 className="text-2xl font-black">SYNCHRONISATION CRM</h2>
               </div>
-              <div className="flex items-center gap-3 rounded-lg bg-muted/25 p-3 text-sm">
-                <Mail className="size-4 text-amber" />
-                <span>Le dernier contact significatif date de 23 jours : relancer sous 48h.</span>
+
+              <p className="text-sm text-muted-foreground mb-6">
+                Les informations suivantes seront synchronisées automatiquement dans HubSpot.
+              </p>
+
+              {/* Deal Update */}
+              <div className="mb-4 p-4 bg-muted/20 rounded-xl border border-border">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Target className="size-5 text-primary" />
+                    <h3 className="font-semibold">Deal: Contentsquare - Q1 Strategic Review</h3>
+                  </div>
+                  <KnowyBadge variant="blue">HubSpot</KnowyBadge>
+                </div>
+
+                <div className="space-y-2 text-sm mb-4">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Stage:</span>
+                    <span className="font-medium">Négociation → Verbal commitment</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Montant:</span>
+                    <span className="font-medium">150 000 €</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Date de clôture:</span>
+                    <span className="font-medium">15 juin 2026</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Next step:</span>
+                    <span className="font-medium">Envoyer contrat pilote</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <KnowyButton variant="primary" size="sm" className="flex-1">
+                    <CheckCircle2 className="size-4" />
+                    Valider et synchroniser
+                  </KnowyButton>
+                  <KnowyButton variant="ghost" size="sm">
+                    Ignorer
+                  </KnowyButton>
+                </div>
               </div>
-            </div>
-          </Card>
-        </section>
-      </main>
+
+              {/* Tasks Created */}
+              <div className="p-4 bg-muted/20 rounded-xl border border-border">
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckCircle2 className="size-5 text-success" />
+                  <h3 className="font-semibold">5 tâches créées</h3>
+                </div>
+
+                <div className="space-y-2 mb-4">
+                  {[
+                    { task: 'Envoyer contrat pilote', owner: 'Sarah Chen', due: '30 mai' },
+                    { task: 'Valider specs techniques', owner: 'Marc Dubois', due: '5 juin' },
+                    { task: 'Préparer ROI deck', owner: 'Maxime Durant', due: '28 mai' }
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm p-2 bg-card rounded-lg">
+                      <span>{item.task}</span>
+                      <span className="text-xs text-muted-foreground">{item.owner} · {item.due}</span>
+                    </div>
+                  ))}
+                  <p className="text-xs text-muted-foreground text-center pt-2">+ 2 autres tâches</p>
+                </div>
+
+                <div className="flex gap-2">
+                  <KnowyButton variant="primary" size="sm" className="flex-1">
+                    <CheckCircle2 className="size-4" />
+                    Valider et synchroniser
+                  </KnowyButton>
+                  <KnowyButton variant="ghost" size="sm">
+                    Modifier
+                  </KnowyButton>
+                </div>
+              </div>
+            </KnowyCard>
+          </div>
+        )}
+
+        {/* Tab: Participants */}
+        {activeTab === 'participants' && (
+          <div className="space-y-6">
+            <KnowyCard className="p-6">
+              <h2 className="text-xl font-bold mb-4">👥 Participants ({participants.length})</h2>
+              <div className="space-y-4">
+                {participants.map((p) => (
+                  <div key={p.id} className="p-4 bg-muted/20 rounded-xl hover:bg-muted/30 transition-colors">
+                    <div className="flex items-start gap-4 mb-3">
+                      <div className="size-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center text-white font-bold">
+                        {p.name.split(' ').map(n => n[0]).join('')}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-bold">{p.name}</h3>
+                          {p.badge && (
+                            <KnowyBadge variant={
+                              p.badge === 'champion' ? 'sage' :
+                              p.badge === 'decider' ? 'violet' :
+                              p.badge === 'gatekeeper' ? 'amber' : 'coral'
+                            }>
+                              {p.badge}
+                            </KnowyBadge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">{p.role} · {p.company}</p>
+                      </div>
+                      <KnowyButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate(`/relation/${p.id}`)}
+                      >
+                        Voir profil →
+                      </KnowyButton>
+                    </div>
+
+                    {p.relationContext && (
+                      <div className="mt-3 p-3 bg-card rounded-lg border border-border">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold text-muted-foreground">CONTEXTE RELATIONNEL</span>
+                          <KnowyBadge variant={
+                            p.relationContext.engagementScore > 65 ? 'sage' :
+                            p.relationContext.engagementScore >= 35 ? 'amber' : 'coral'
+                          }>
+                            {p.relationContext.engagementScore}
+                          </KnowyBadge>
+                        </div>
+                        <div className="text-sm space-y-1">
+                          <p>Relation depuis {p.relationContext.relationSince}</p>
+                          <p>Dernier contact: Il y a {p.relationContext.lastContactDays}j</p>
+                          <p>{p.relationContext.totalInteractions} échanges au total</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </KnowyCard>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

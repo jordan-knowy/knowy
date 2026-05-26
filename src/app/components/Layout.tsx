@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Menu, Search, Sparkles, Users, TrendingUp, AlertTriangle, Mail, Building2, ArrowRight, Zap } from 'lucide-react';
+import { Search, Sparkles, Users, TrendingUp, AlertTriangle, Mail, Building2, ArrowRight, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import Sidebar from './Sidebar';
 import Notifications from './Notifications';
-import { Button } from './design-system';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -21,7 +20,6 @@ export default function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const searchSuggestions: SearchSuggestion[] = [
     {
@@ -84,20 +82,12 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className="size-full flex">
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-      <div className="flex size-full flex-1 flex-col lg:ml-[220px]">
+      <Sidebar />
+      <div className="flex-1 ml-[220px] size-full flex flex-col">
         {/* Sticky Search Bar */}
         <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-border">
-          <div className="max-w-7xl mx-auto px-4 py-4 md:px-8">
+          <div className="max-w-7xl mx-auto px-8 py-4">
             <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="lg:hidden"
-                aria-label="Ouvrir la navigation"
-                icon={<Menu className="size-5" />}
-                onClick={() => setIsSidebarOpen(true)}
-              />
               <div className="relative flex-1">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
                 <Sparkles className="absolute right-4 top-1/2 -translate-y-1/2 size-5 text-primary" />
@@ -108,7 +98,6 @@ export default function Layout({ children }: LayoutProps) {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setIsSearchFocused(true)}
                   onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                  aria-label="Recherche intelligente Knowy"
                   className="w-full pl-12 pr-12 py-3 bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/30 transition-all text-sm"
                 />
               </div>
@@ -117,7 +106,7 @@ export default function Layout({ children }: LayoutProps) {
 
             {/* Search Suggestions Dropdown */}
             {isSearchFocused && (
-              <div className="absolute left-4 right-4 top-full mt-2 overflow-hidden rounded-lg border-2 border-primary/20 bg-card shadow-2xl md:left-8 md:right-8">
+              <div className="absolute top-full left-8 right-8 mt-2 bg-card border-2 border-primary/20 rounded-2xl shadow-2xl overflow-hidden">
                 <div className="bg-gradient-to-r from-primary/10 to-accent/10 px-4 py-3 border-b border-border flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Sparkles className="size-4 text-primary" />
@@ -132,7 +121,7 @@ export default function Layout({ children }: LayoutProps) {
                     getFilteredSuggestions().map((suggestion, i) => (
                       <button
                         key={i}
-                        className="w-full rounded-lg px-4 py-3 text-left transition-all hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary group"
+                        className="w-full text-left px-4 py-3 hover:bg-primary/5 rounded-xl transition-all group"
                         onMouseDown={() => handleSuggestionClick(suggestion)}
                       >
                         <div className="flex items-start gap-4">

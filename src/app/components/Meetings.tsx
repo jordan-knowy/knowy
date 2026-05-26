@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useMeetings } from '../../hooks/useMeetings';
 import {
   Calendar,
   Search,
@@ -35,7 +36,7 @@ interface Meeting {
   format: 'video' | 'physical';
   location?: string;
   category: string;
-  importance: number;
+  relationScore: number; // Moyenne des scores relationnels
   briefStatus: 'ready' | 'generating' | 'to_generate' | 'insufficient' | 'consulted';
   hasDecisionMaker: boolean;
   isExternal: boolean;
@@ -46,204 +47,38 @@ interface Meeting {
 
 export default function Meetings() {
   const navigate = useNavigate();
+  const { meetings: domainMeetings, loading } = useMeetings();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTime, setFilterTime] = useState<'all' | 'future' | 'past'>('all');
   const [filterType, setFilterType] = useState<'all' | 'external' | 'internal'>('all');
   const [filterBrief, setFilterBrief] = useState<'all' | 'ready' | 'to_generate' | 'consulted'>('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [meetingSyncs, setMeetingSyncs] = useState<Record<string, boolean>>({});
 
-  const allMeetings: Meeting[] = [
-    // FUTURES
-    {
-      id: '1',
-      title: 'Q1 Strategic Review',
-      company: 'Contentsquare',
-      logo: '🎯',
-      participants: [{ name: 'Sarah Chen', role: 'VP Partnerships' }, { name: 'Marc Dubois', role: 'Head of Product' }, { name: '+2' }],
-      date: '2026-05-28',
-      time: '14:00',
-      format: 'video',
-      location: 'Google Meet',
-      category: 'Partnership',
-      importance: 95,
-      briefStatus: 'ready',
-      hasDecisionMaker: true,
-      isExternal: true,
-      crmSynced: true,
-      crmUrl: 'https://hubspot.com/deal/123',
-      isPast: false
-    },
-    {
-      id: '2',
-      title: 'Product Demo - Enterprise',
-      company: 'Swile',
-      logo: '🍔',
-      participants: [{ name: 'Julie Martin', role: 'Head of Procurement' }],
-      date: '2026-05-28',
-      time: '16:30',
-      format: 'video',
-      location: 'Zoom',
-      category: 'Prospection',
-      importance: 88,
-      briefStatus: 'ready',
-      hasDecisionMaker: true,
-      isExternal: true,
-      crmSynced: true,
-      crmUrl: 'https://hubspot.com/deal/124',
-      isPast: false
-    },
-    {
-      id: '3',
-      title: 'Customer Success Check-in',
-      company: 'Alan',
-      logo: '💙',
-      participants: [{ name: 'Thomas Lebrun', role: 'Sales Ops Manager' }, { name: '+2' }],
-      date: '2026-05-29',
-      time: '10:00',
-      format: 'video',
-      location: 'Teams',
-      category: 'Customer Success',
-      importance: 72,
-      briefStatus: 'to_generate',
-      hasDecisionMaker: false,
-      isExternal: true,
-      crmSynced: true,
-      isPast: false
-    },
-    {
-      id: '4',
-      title: 'Closing Discussion',
-      company: 'Qonto',
-      logo: '💳',
-      participants: [
-        { name: 'Alexandre Garcia', role: 'CFO' },
-        { name: 'Sophie Durand', role: 'VP RevOps' },
-        { name: '+3' }
-      ],
-      date: '2026-05-29',
-      time: '15:00',
-      format: 'physical',
-      location: '8 Rue de Londres, Paris',
-      category: 'Closing',
-      importance: 92,
-      briefStatus: 'generating',
-      hasDecisionMaker: true,
-      isExternal: true,
-      crmSynced: true,
-      crmUrl: 'https://hubspot.com/deal/125',
-      isPast: false
-    },
-    {
-      id: '5',
-      title: 'Weekly Team Sync',
-      company: 'Knowy',
-      logo: '🎯',
-      participants: [{ name: 'Équipe Sales' }, { name: '+7' }],
-      date: '2026-05-30',
-      time: '09:00',
-      format: 'video',
-      location: 'Google Meet',
-      category: 'Interne',
-      importance: 45,
-      briefStatus: 'to_generate',
-      hasDecisionMaker: false,
-      isExternal: false,
-      crmSynced: false,
-      isPast: false
-    },
-    {
-      id: '6',
-      title: 'Partnership Strategy',
-      company: 'Stripe',
-      logo: '💳',
-      participants: [{ name: 'Emma Wilson', role: 'Director of Partnerships' }, { name: '+2' }],
-      date: '2026-06-02',
-      time: '11:00',
-      format: 'video',
-      location: 'Zoom',
-      category: 'Partnership',
-      importance: 90,
-      briefStatus: 'to_generate',
-      hasDecisionMaker: true,
-      isExternal: true,
-      crmSynced: true,
-      isPast: false
-    },
+  const today = new Date().toISOString().slice(0, 10);
 
-    // PASSÉES
-    {
-      id: '7',
-      title: 'Discovery Call - Expansion',
-      company: 'Doctolib',
-      logo: '🏥',
-      participants: [{ name: 'Pierre Dubois', role: 'Sales Director' }],
-      date: '2026-05-24',
-      time: '14:00',
-      format: 'video',
-      location: 'Teams',
-      category: 'Prospection',
-      importance: 85,
-      briefStatus: 'consulted',
-      hasDecisionMaker: true,
-      isExternal: true,
-      crmSynced: true,
-      isPast: true
-    },
-    {
-      id: '8',
-      title: 'QBR Q1 2026',
-      company: 'Payfit',
-      logo: '💰',
-      participants: [{ name: 'Marie Laurent', role: 'VP Sales' }, { name: '+4' }],
-      date: '2026-05-23',
-      time: '10:00',
-      format: 'physical',
-      location: '10 Rue de la Paix, Paris',
-      category: 'Customer Success',
-      importance: 78,
-      briefStatus: 'consulted',
-      hasDecisionMaker: true,
-      isExternal: true,
-      crmSynced: true,
-      isPast: true
-    },
-    {
-      id: '9',
-      title: 'Product Roadmap Sync',
-      company: 'Spendesk',
-      logo: '💵',
-      participants: [{ name: 'Lucas Martin', role: 'CPO' }],
-      date: '2026-05-22',
-      time: '16:00',
-      format: 'video',
-      location: 'Google Meet',
-      category: 'Partnership',
-      importance: 70,
-      briefStatus: 'consulted',
-      hasDecisionMaker: false,
-      isExternal: true,
-      crmSynced: true,
-      isPast: true
-    },
-    {
-      id: '10',
-      title: 'Demo Follow-up',
-      company: 'Ledger',
-      logo: '🔐',
-      participants: [{ name: 'Anna Schmidt', role: 'Enterprise Sales' }],
-      date: '2026-05-21',
-      time: '11:30',
-      format: 'video',
-      location: 'Zoom',
-      category: 'Prospection',
-      importance: 82,
-      briefStatus: 'consulted',
-      hasDecisionMaker: false,
-      isExternal: true,
-      crmSynced: true,
-      isPast: true
-    }
-  ];
+  // Map domain meetings → display Meeting
+  const allMeetings: Meeting[] = useMemo(() =>
+    domainMeetings.map(m => ({
+      id: m.id,
+      title: m.title,
+      company: m.company,
+      logo: m.company ? m.company[0].toUpperCase() : '📅',
+      participants: [],
+      date: m.startsAt.slice(0, 10),
+      time: new Date(m.startsAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      format: 'video' as const,
+      location: undefined,
+      category: (m as any).category ?? 'Réunion',
+      relationScore: 0,
+      briefStatus: ((m.briefStatus as Meeting['briefStatus']) ?? 'to_generate'),
+      hasDecisionMaker: (m as any).has_decision_maker ?? false,
+      isExternal: (m as any).is_external ?? true,
+      crmSynced: (m as any).crm_synced ?? false,
+      crmUrl: (m as any).crm_external_url ?? undefined,
+      isPast: m.startsAt.slice(0, 10) < today,
+    })),
+  [domainMeetings, today]);
 
   // Filtrage
   const filteredMeetings = allMeetings.filter(meeting => {
@@ -295,23 +130,41 @@ export default function Meetings() {
     return configs[status];
   };
 
+  const getRelationScoreColor = (score: number) => {
+    if (score > 65) return 'text-success';
+    if (score >= 35) return 'text-amber-600';
+    return 'text-destructive';
+  };
+
+  const getRelationScoreBg = (score: number) => {
+    if (score > 65) return 'bg-success/10';
+    if (score >= 35) return 'bg-amber-600/10';
+    return 'bg-destructive/10';
+  };
+
   const activeFiltersCount =
     (filterTime !== 'all' ? 1 : 0) +
     (filterType !== 'all' ? 1 : 0) +
     (filterBrief !== 'all' ? 1 : 0);
 
+  const toggleMeetingSync = (meetingId: string, currentSync: boolean, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMeetingSyncs(prev => ({ ...prev, [meetingId]: !currentSync }));
+  };
+
   const MeetingCardComponent = ({ meeting, delay }: { meeting: Meeting; delay: number }) => {
     const statusConfig = getBriefStatusConfig(meeting.briefStatus);
     const StatusIcon = statusConfig.icon;
+    const isSynced = meetingSyncs[meeting.id] !== undefined ? meetingSyncs[meeting.id] : meeting.crmSynced;
 
     return (
       <KnowyCard
         hover
         delay={delay}
         onClick={() => navigate(`/meeting/${meeting.id}`)}
-        className="cursor-pointer p-4 md:p-6"
+        className="p-6 cursor-pointer"
       >
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:gap-6">
+        <div className="flex items-start gap-6">
           {/* Date/Time */}
           <div className="flex flex-col items-center min-w-[80px]">
             <div className="text-xs text-muted-foreground uppercase mb-1">
@@ -327,12 +180,12 @@ export default function Meetings() {
           </div>
 
           {/* Divider */}
-          <div className="hidden h-auto w-px bg-border md:block" />
+          <div className="h-auto w-px bg-border" />
 
           {/* Content */}
           <div className="flex-1 min-w-0">
             {/* Header */}
-            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start justify-between mb-4">
               <div className="flex items-start gap-3 flex-1">
                 <div className="text-4xl">{meeting.logo}</div>
                 <div className="flex-1 min-w-0">
@@ -342,9 +195,10 @@ export default function Meetings() {
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  <Star className="size-4 text-primary fill-primary" />
-                  <span className="font-mono font-bold text-lg">{meeting.importance}</span>
+                <div className={`flex items-center justify-center size-12 rounded-full ${getRelationScoreBg(meeting.relationScore)}`}>
+                  <span className={`font-mono font-bold text-lg ${getRelationScoreColor(meeting.relationScore)}`}>
+                    {meeting.relationScore}
+                  </span>
                 </div>
               </div>
             </div>
@@ -389,17 +243,10 @@ export default function Meetings() {
               <KnowyBadge variant="blue" size="sm">
                 {meeting.category}
               </KnowyBadge>
-
-              {meeting.crmSynced && (
-                <div className="flex items-center gap-1 text-success">
-                  <Database className="size-4" />
-                  <span className="text-xs font-medium">CRM synced</span>
-                </div>
-              )}
             </div>
 
             {/* Footer */}
-            <div className="flex flex-col gap-3 border-t border-border pt-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center justify-between pt-4 border-t border-border">
               <div className="flex items-center gap-2">
                 <StatusIcon className={`size-4 ${statusConfig.badge === 'En génération' ? 'animate-spin' : ''}`} />
                 <KnowyBadge variant={statusConfig.variant} size="md">
@@ -421,15 +268,31 @@ export default function Meetings() {
                     Voir dans CRM
                   </KnowyButton>
                 )}
-                {meeting.briefStatus === 'ready' && (
-                  <KnowyButton variant="primary" size="sm" icon={<Sparkles className="size-4" />}>
-                    Voir le brief
-                  </KnowyButton>
-                )}
-                {meeting.briefStatus === 'to_generate' && (
-                  <KnowyButton variant="secondary" size="sm" icon={<Sparkles className="size-4" />}>
-                    Générer le brief
-                  </KnowyButton>
+                {meeting.isPast ? (
+                  <button
+                    onClick={(e) => toggleMeetingSync(meeting.id, isSynced, e)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all ${
+                      isSynced
+                        ? 'bg-success/10 text-success border-2 border-success hover:bg-success/20'
+                        : 'bg-muted/50 text-muted-foreground border-2 border-border hover:bg-muted'
+                    }`}
+                  >
+                    <Database className="size-4" />
+                    {isSynced ? 'Synchronisé' : 'Synchroniser'}
+                  </button>
+                ) : (
+                  <>
+                    {meeting.briefStatus === 'ready' && (
+                      <KnowyButton variant="primary" size="sm" icon={<Sparkles className="size-4" />}>
+                        Voir le brief
+                      </KnowyButton>
+                    )}
+                    {meeting.briefStatus === 'to_generate' && (
+                      <KnowyButton variant="secondary" size="sm" icon={<Sparkles className="size-4" />}>
+                        Générer le brief
+                      </KnowyButton>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -441,7 +304,7 @@ export default function Meetings() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-7xl mx-auto px-4 py-6 md:px-8 md:py-8">
+      <div className="max-w-7xl mx-auto px-8 py-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -449,7 +312,7 @@ export default function Meetings() {
           transition={{ duration: 0.6 }}
           className="mb-8"
         >
-          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="mb-2">Réunions</h1>
               <p className="text-muted-foreground">
@@ -485,7 +348,7 @@ export default function Meetings() {
           </div>
 
           {/* Filters */}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="flex items-center gap-3">
             <KnowyButton
               variant={showFilters ? 'primary' : 'secondary'}
               size="sm"

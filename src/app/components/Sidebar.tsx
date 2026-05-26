@@ -1,4 +1,5 @@
 import { motion } from 'motion/react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import {
   LayoutDashboard,
@@ -7,23 +8,40 @@ import {
   CreditCard,
   ChevronDown,
   Network,
-  Zap,
-  X,
-  LogOut
+  Zap
 } from 'lucide-react';
-import { Button } from './design-system';
-import { supabase } from '../../lib/supabase';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { supabase } from '../../lib/supabase';
 
 interface SidebarProps {
   isOpen?: boolean;
-  onClose?: () => void;
 }
 
-export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+export default function Sidebar({ isOpen = true }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { profile } = useCurrentProfile();
+  const [connectors, setConnectors] = useState({ google: false, linkedin: false, hubspot: false });
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadConnectors() {
+      if (!supabase) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('connectors')
+        .select('provider, status')
+        .eq('user_id', user.id);
+      if (mounted && data) {
+        const map: Record<string, boolean> = {};
+        (data as any[]).forEach(c => { map[c.provider] = c.status === 'connected'; });
+        setConnectors({ google: map['google'] ?? false, linkedin: map['linkedin'] ?? false, hubspot: map['hubspot'] ?? false });
+      }
+    }
+    loadConnectors();
+    return () => { mounted = false; };
+  }, []);
 
   const dashboardItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' }
@@ -50,31 +68,17 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     return location.pathname === path;
   };
 
-  const handleSignOut = async () => {
-    await supabase?.auth.signOut();
-    onClose?.();
-    navigate('/signin', { replace: true });
-  };
+  if (!isOpen) return null;
 
   return (
-    <>
-      {isOpen && (
-        <button
-          type="button"
-          aria-label="Fermer la navigation"
-          className="fixed inset-0 z-20 bg-violet-night/30 lg:hidden"
-          onClick={onClose}
-        />
-      )}
-      <motion.div
-        initial={{ x: -280 }}
-        animate={{ x: 0 }}
-        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        className={`fixed left-0 top-0 z-30 h-screen w-[220px] flex-col border-r border-sidebar-border bg-sidebar ${isOpen === false ? 'hidden lg:flex' : 'flex'}`}
-      >
+    <motion.div
+      initial={{ x: -280 }}
+      animate={{ x: 0 }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      className="fixed left-0 top-0 h-screen w-[220px] bg-sidebar border-r border-sidebar-border flex flex-col z-20"
+    >
       {/* Logo */}
       <div className="p-6 border-b border-sidebar-border">
-        <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-black italic text-foreground">
             Know<span className="text-primary">y</span>
@@ -82,8 +86,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
             Relational Intelligence
           </p>
-        </div>
-        <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Fermer la navigation" icon={<X className="size-4" />} onClick={onClose} />
         </div>
       </div>
 
@@ -94,10 +96,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           {dashboardItems.map((item) => (
             <motion.button
               key={item.id}
-              onClick={() => {
-                navigate(item.path);
-                onClose?.();
-              }}
+              onClick={() => navigate(item.path)}
               whileHover={{ x: 2 }}
               whileTap={{ scale: 0.98 }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
@@ -118,10 +117,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             {journeyItems.map((item) => (
               <motion.button
                 key={item.id}
-                onClick={() => {
-                  navigate(item.path);
-                  onClose?.();
-                }}
+                onClick={() => navigate(item.path)}
                 whileHover={{ x: 2 }}
                 whileTap={{ scale: 0.98 }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
@@ -142,10 +138,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             {bottomItems.map((item) => (
               <motion.button
                 key={item.id}
-                onClick={() => {
-                  navigate(item.path);
-                  onClose?.();
-                }}
+                onClick={() => navigate(item.path)}
                 whileHover={{ x: 2 }}
                 whileTap={{ scale: 0.98 }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
@@ -165,40 +158,38 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* User account section */}
       <div className="p-4 border-t border-sidebar-border">
         <motion.button
-          onClick={() => {
-            navigate('/account');
-            onClose?.();
-          }}
+          onClick={() => navigate('/account')}
           whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.98 }}
-          className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-lavender-100 transition-all"
+          className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-all"
         >
           {profile?.avatarUrl ? (
-            <img src={profile.avatarUrl} alt="" className="size-10 rounded-full border-2 border-white object-cover shadow-sm" />
+            <img src={profile.avatarUrl} alt={profile.fullName} className="size-10 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />
           ) : (
             <div className="size-10 bg-gradient-to-br from-primary to-[#8B6FD4] rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 border-2 border-white shadow-sm">
-              {profile?.initials ?? 'K'}
+              {profile?.initials ?? '?'}
             </div>
           )}
           <div className="flex-1 text-left min-w-0">
-            <p className="text-sm font-semibold truncate">{profile?.fullName ?? 'Compte Knowy'}</p>
-            <p className="text-xs text-muted-foreground truncate">{profile?.companyName ?? profile?.email ?? 'Workspace'}</p>
+            <p className="text-sm font-semibold truncate">{profile?.fullName ?? 'Mon compte'}</p>
+            <p className="text-xs text-muted-foreground truncate">{profile?.companyName ?? ''}</p>
           </div>
           <ChevronDown className="size-4 text-muted-foreground flex-shrink-0" />
         </motion.button>
 
-        {/* Connectors status */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mt-3 w-full justify-start"
-          icon={<LogOut className="size-4" />}
-          onClick={handleSignOut}
-        >
-          Déconnexion
-        </Button>
+        {/* Connector dots — live from Supabase */}
+        <div className="mt-3 px-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Sources :</span>
+          <div className="flex items-center gap-1.5">
+            <div title={`Gmail ${connectors.google ? '✓' : '— non connecté'}`}
+              className={`size-2 rounded-full ${connectors.google ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+            <div title={`LinkedIn ${connectors.linkedin ? '✓' : '— non connecté'}`}
+              className={`size-2 rounded-full ${connectors.linkedin ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+            <div title={`HubSpot ${connectors.hubspot ? '✓' : '— non connecté'}`}
+              className={`size-2 rounded-full ${connectors.hubspot ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+          </div>
+        </div>
       </div>
-      </motion.div>
-    </>
+    </motion.div>
   );
 }
