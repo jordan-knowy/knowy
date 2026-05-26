@@ -1,0 +1,18 @@
+/* KNOWY FONTS - Epilogue + JetBrains Mono */
+
+/* Epilogue - Display & UI */
+@import url('https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;600;700;900&display=swap');
+
+/* JetBrains Mono - Data & Scores */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* BRIEF FONTS - Fraunces + DM Sans + DM Mono */
+
+/* Fraunces - Serif for brief titles and key numbers */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&display=swap');
+
+/* DM Sans - Sans-serif for brief body */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&display=swap');
+
+/* DM Mono - Monospace for brief scores and codes */
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap');

@@ -1,0 +1,233 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  /* ================================
+     KNOWY DESIGN SYSTEM - VIOLET TRUST
+     ================================ */
+
+  /* COLORS - Violet Trust Palette */
+  --color-lavender-50: #F5F0FF;
+  --color-lavender-100: #EDE8FF;
+  --color-lavender-200: #D4C5F5;
+  --color-violet-primary: #6E50C8;
+  --color-violet-dark: #5A3EAA;
+  --color-violet-night: #1A1040;
+  --color-violet-night-deep: #2A1E60;
+
+  --color-text-primary: #1A1040;
+  --color-text-secondary: #5A4880;
+  --color-text-tertiary: #9082B8;
+  --color-text-disabled: #C4B8E0;
+
+  --color-sage: #2EA86A;
+  --color-sage-bg: #E4F5ED;
+  --color-amber: #C97A20;
+  --color-amber-bg: #FBF0E2;
+  --color-coral: #D94F63;
+  --color-coral-bg: #FDEAED;
+  --color-blue-info: #3D6FCC;
+  --color-blue-info-bg: #E5EDFF;
+
+  /* SEMANTIC COLORS */
+  --color-background: var(--color-lavender-50);
+  --color-foreground: var(--color-text-primary);
+  --color-card: #FFFFFF;
+  --color-card-foreground: var(--color-text-primary);
+  --color-popover: #FFFFFF;
+  --color-popover-foreground: var(--color-text-primary);
+
+  --color-primary: var(--color-violet-primary);
+  --color-primary-foreground: #FFFFFF;
+  --color-primary-hover: var(--color-violet-dark);
+
+  --color-secondary: var(--color-lavender-200);
+  --color-secondary-foreground: var(--color-violet-primary);
+
+  --color-muted: var(--color-lavender-100);
+  --color-muted-foreground: var(--color-text-secondary);
+
+  --color-accent: var(--color-lavender-200);
+  --color-accent-foreground: var(--color-violet-primary);
+
+  --color-destructive: var(--color-coral);
+  --color-destructive-foreground: #FFFFFF;
+
+  --color-success: var(--color-sage);
+  --color-success-foreground: #FFFFFF;
+
+  --color-warning: var(--color-amber);
+  --color-warning-foreground: #FFFFFF;
+
+  --color-info: var(--color-blue-info);
+  --color-info-foreground: #FFFFFF;
+
+  --color-border: rgba(110, 80, 200, 0.10);
+  --color-input: transparent;
+  --color-input-background: #FFFFFF;
+  --color-ring: var(--color-violet-primary);
+
+  /* SIDEBAR */
+  --color-sidebar: #FFFFFF;
+  --color-sidebar-foreground: var(--color-text-primary);
+  --color-sidebar-primary: var(--color-violet-primary);
+  --color-sidebar-primary-foreground: #FFFFFF;
+  --color-sidebar-accent: var(--color-lavender-100);
+  --color-sidebar-accent-foreground: var(--color-text-primary);
+  --color-sidebar-border: var(--color-border);
+  --color-sidebar-ring: var(--color-violet-primary);
+
+  /* SHADOWS - Violet tinted */
+  --shadow-xs: 0 1px 4px rgba(110, 80, 200, 0.07);
+  --shadow-sm: 0 2px 16px rgba(110, 80, 200, 0.08);
+  --shadow-md: 0 6px 28px rgba(110, 80, 200, 0.11);
+  --shadow-lg: 0 16px 56px rgba(110, 80, 200, 0.14);
+  --shadow-xl: 0 24px 80px rgba(110, 80, 200, 0.16);
+  --shadow-button: 0 2px 12px rgba(110, 80, 200, 0.35);
+
+  /* BORDER RADIUS */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+  --radius-3xl: 36px;
+  --radius-pill: 999px;
+  --radius: 14px; /* Default radius */
+
+  /* TYPOGRAPHY */
+  --font-sans: "Epilogue", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: "Epilogue", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", "Courier New", monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--color-text-primary);
+  }
+
+  h1 {
+    font-size: 44px;
+    font-weight: 900;
+    letter-spacing: -0.035em;
+    line-height: 1.05;
+  }
+
+  h2 {
+    font-size: 32px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+  }
+
+  h3 {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  h4 {
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  p {
+    color: var(--color-text-secondary);
+  }
+
+  input, textarea, select {
+    background-color: var(--color-input-background);
+    font-family: var(--font-sans);
+  }
+
+  button, a, input, textarea, select {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--color-lavender-50);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-lavender-200);
+    border-radius: var(--radius-pill);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-primary);
+  }
+}
+
+@layer components {
+  @keyframes knowy-wave {
+    0%, 60%, 100% { transform: rotate(0deg); }
+    10%, 30% { transform: rotate(14deg); }
+    20% { transform: rotate(-8deg); }
+    40% { transform: rotate(-4deg); }
+    50% { transform: rotate(10deg); }
+  }
+
+  .animate-wave {
+    animation: knowy-wave 2s ease-in-out infinite;
+    display: inline-block;
+    transform-origin: 70% 70%;
+  }
+
+  .knowy-progress {
+    appearance: none;
+  }
+
+  .knowy-progress::-webkit-progress-bar {
+    background-color: var(--color-muted);
+    border-radius: var(--radius-pill);
+  }
+
+  .knowy-progress::-webkit-progress-value {
+    border-radius: var(--radius-pill);
+  }
+
+  .knowy-progress::-moz-progress-bar {
+    border-radius: var(--radius-pill);
+  }
+
+  .knowy-progress-primary::-webkit-progress-value,
+  .knowy-progress-primary::-moz-progress-bar {
+    background-color: var(--color-primary);
+  }
+
+  .knowy-progress-sage::-webkit-progress-value,
+  .knowy-progress-sage::-moz-progress-bar {
+    background-color: var(--color-sage);
+  }
+
+  .knowy-progress-amber::-webkit-progress-value,
+  .knowy-progress-amber::-moz-progress-bar {
+    background-color: var(--color-amber);
+  }
+
+  .knowy-progress-blue::-webkit-progress-value,
+  .knowy-progress-blue::-moz-progress-bar {
+    background-color: var(--color-blue-info);
+  }
+}
