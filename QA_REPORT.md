@@ -1,6 +1,6 @@
 # QA REPORT — Knowy Easy
 
-Date: 2026-05-26
+Date: 2026-05-27
 
 ## Fonctionnalités Validées
 
@@ -8,6 +8,9 @@ Date: 2026-05-26
 - ✓ Build production validé avec `npm run build`.
 - ✓ Audit npm haute sévérité résolu : Vite mis à jour vers `6.4.2`.
 - ✓ Netlify SPA fallback configuré via `netlify.toml`.
+- ✓ Netlify lié au projet `knowy-ai` sous le nom opérationnel `mcp-net-knowy`.
+- ✓ Variables Netlify `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` configurées.
+- ✓ Déploiement production Netlify validé : `https://knowy-ai.netlify.app`.
 - ✓ Supabase P0 scaffold créé : config, migration SQL, seed, stubs Edge Functions.
 - ✓ Page publique non connectée créée sur `/`.
 - ✓ CTA `Essayer maintenant` branché vers `/signin`.
@@ -16,12 +19,13 @@ Date: 2026-05-26
 - ✓ Supabase distant `mcp-supaknowy` connecté : URL, publishable key, `.env.local`.
 - ✓ Migrations Supabase distantes appliquées : `core_p0_schema`, `hardening_and_fk_indexes`, `optimize_auth_rls_policies`, `move_rls_helpers_to_private_schema`, `create_user_workspace_on_signup`, `revoke_signup_trigger_rpc_access`, `profile_contexts_for_llm_memory`.
 - ✓ Création automatique du profil, workspace, membership owner et préférences à l'inscription.
-- ✓ 24 tables `public` créées avec RLS activé.
-- ✓ Advisors Supabase sécurité propres après hardening.
+- ✓ Tables P0 tenant-scoped créées avec RLS activé.
+- ⚠ Advisor Supabase sécurité à traiter : `subscription_plans`, `subscriptions`, `ai_usage_events` ont RLS désactivé.
 - ✓ Edge Functions déployées et actives avec `verify_jwt=true` :
   - `generate-brief`
   - `score-cognitive-profile`
   - `ingest-communication`
+  - `analyze-website`
 - ✓ Repositories frontend branchés en Supabase-first avec fallback mock :
   - contacts et fiches cognitives
   - meetings et participants
@@ -30,6 +34,10 @@ Date: 2026-05-26
 - ✓ Onboarding profil branché sur Supabase Auth `linkIdentity` pour LinkedIn, Google/Gmail et Microsoft Outlook.
 - ✓ Analyse de site web connectée à l’Edge Function `analyze-website`.
 - ✓ Mémoire de contexte LLM créée dans `profile_contexts`.
+- ✓ Description produit, site web, analyse IA et résumé LLM sauvegardés dans `profiles` et `profile_contexts`.
+- ✓ Préférences de notification sauvegardées dans `notification_preferences`.
+- ✓ Préférences de confidentialité sauvegardées dans `privacy_settings`.
+- ✓ Finalisation onboarding sauvegardée et job `initial_onboarding_sync` mis en file dans `sync_jobs`.
 - ✓ Compte test réel `jordan.knowy@gmail.com` initialisé avec profil, workspace, membership owner et contexte initial.
 - ✓ Étape CRM active retirée du parcours et annoncée comme v2.
 - ✓ RLS prévue sur les tables tenant-scoped avec policies basées sur `memberships`.
@@ -59,6 +67,7 @@ Date: 2026-05-26
 - Helpers RLS déplacés dans le schema privé `private` pour conserver l'évaluation des policies sans exposer de RPC public.
 - Accès RPC à la fonction trigger d'inscription révoqué.
 - Faux onboarding LinkedIn/CRM simulé remplacé par des connexions Auth réelles ou un jalon v2 assumé.
+- Simulation d'onboarding étapes 1 à 5 remplacée par des lectures/écritures Supabase réelles.
 - Index FK ajoutés pour éviter les warnings de performance structurels.
 - Policies `auth.uid()` optimisées pour éviter les init plans ligne par ligne.
 
@@ -69,6 +78,7 @@ Date: 2026-05-26
 - Configurer les secrets OAuth Google, Microsoft et LinkedIn dans Supabase Auth.
 - Ajouter `OPENAI_API_KEY` comme secret Supabase Edge Function pour activer l’analyse LLM réelle du site.
 - Activer la protection Supabase Auth contre les mots de passe compromis.
+- Activer RLS et définir les policies adaptées sur `subscription_plans`, `subscriptions`, `ai_usage_events` avant d'exposer ces tables.
 - Générer les types Supabase complets avec un token CLI authentifié.
 - Ajouter `tsconfig.json` et un script `typecheck` progressivement.
 - Ajouter tests unitaires pour règles zéro hallucination : donnée absente = `null`.
@@ -86,7 +96,12 @@ npm install -D vite@6.4.2
 npm run build
 npm audit --audit-level=high
 npm run dev:host
+netlify link --id d4c6fedb-7175-4e81-a1c1-13da02aeb020
+netlify env:set VITE_SUPABASE_URL
+netlify env:set VITE_SUPABASE_ANON_KEY
+netlify deploy --prod
 curl -I http://127.0.0.1:5173/
+curl -I https://knowy-ai.netlify.app
 curl -I http://127.0.0.1:5173/signin
 curl -I http://127.0.0.1:5173/dashboard
 curl -I http://127.0.0.1:5173/meeting/1

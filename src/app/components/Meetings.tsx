@@ -19,11 +19,14 @@ import {
   Database,
   ArrowUpRight,
   TrendingUp,
-  X
+  X,
+  RefreshCw,
 } from 'lucide-react';
 import KnowyCard from './knowy/KnowyCard';
 import KnowyBadge from './knowy/KnowyBadge';
 import KnowyButton from './knowy/KnowyButton';
+import { supabase } from '../../lib/supabase';
+import { getActiveOrganizationId } from '../../lib/api/org';
 
 interface Meeting {
   id: string;
@@ -47,13 +50,57 @@ interface Meeting {
 
 export default function Meetings() {
   const navigate = useNavigate();
-  const { meetings: domainMeetings, loading } = useMeetings();
+  const { meetings: domainMeetings, loading, reload } = useMeetings();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTime, setFilterTime] = useState<'all' | 'future' | 'past'>('all');
   const [filterType, setFilterType] = useState<'all' | 'external' | 'internal'>('all');
   const [filterBrief, setFilterBrief] = useState<'all' | 'ready' | 'to_generate' | 'consulted'>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [meetingSyncs, setMeetingSyncs] = useState<Record<string, boolean>>({});
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ stats?: any; error?: string } | null>(null);
+
+  async function handleGoogleCalendarSync() {
+    if (!supabase || syncing) return;
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Non authentifié');
+
+      const providerToken = session.provider_token;
+      if (!providerToken) {
+        setSyncResult({
+          error: 'Token Google expiré. Déconnectez-vous puis reconnectez-vous avec Google pour réactiver la synchronisation.'
+        });
+        return;
+      }
+
+      const orgId = await getActiveOrganizationId();
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ organizationId: orgId, providerToken }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setSyncResult({ error: data.error || 'Erreur de synchronisation' });
+      } else {
+        setSyncResult({ stats: data.stats });
+        reload?.();
+      }
+    } catch (e: any) {
+      setSyncResult({ error: e.message || 'Erreur inattendue' });
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -325,6 +372,15 @@ export default function Meetings() {
               <KnowyButton
                 variant="secondary"
                 size="md"
+                icon={syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                onClick={handleGoogleCalendarSync}
+                disabled={syncing}
+              >
+                {syncing ? 'Synchronisation...' : 'Sync Google Calendar'}
+              </KnowyButton>
+              <KnowyButton
+                variant="secondary"
+                size="md"
                 icon={<TrendingUp className="size-4" />}
                 onClick={() => {}}
               >
@@ -332,6 +388,44 @@ export default function Meetings() {
               </KnowyButton>
             </div>
           </div>
+
+          {/* Sync result banner */}
+          {syncResult && (
+            <div className={`mb-4 p-4 rounded-xl border flex items-start gap-3 ${
+              syncResult.error
+                ? 'bg-destructive/10 border-destructive/20 text-destructive'
+                : 'bg-success/10 border-success/20 text-success'
+            }`}>
+              {syncResult.error ? (
+                <>
+                  <AlertCircle className="size-5 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm">{syncResult.error}</p>
+                    {syncResult.error.includes('Token') && (
+                      <p className="text-xs mt-1 opacity-80">
+                        Allez dans Paramètres → déconnexion → reconnectez-vous avec Google en cliquant "Continuer avec Google"
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="size-5 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm">Synchronisation réussie !</p>
+                    <p className="text-xs mt-1 opacity-80">
+                      {syncResult.stats?.created} nouvelle{syncResult.stats?.created !== 1 ? 's' : ''} réunion{syncResult.stats?.created !== 1 ? 's' : ''} importée{syncResult.stats?.created !== 1 ? 's' : ''} ·{' '}
+                      {syncResult.stats?.updated} mise{syncResult.stats?.updated !== 1 ? 's' : ''} à jour ·{' '}
+                      {syncResult.stats?.meeting_events} réunion{syncResult.stats?.meeting_events !== 1 ? 's' : ''} trouvée{syncResult.stats?.meeting_events !== 1 ? 's' : ''} sur {syncResult.stats?.total_events} événements
+                    </p>
+                  </div>
+                </>
+              )}
+              <button onClick={() => setSyncResult(null)} className="ml-auto opacity-60 hover:opacity-100">
+                <X className="size-4" />
+              </button>
+            </div>
+          )}
 
           {/* Search */}
           <div className="mb-4">

@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router';
+import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router';
+import { useEffect, useState } from 'react';
 import '../styles/fonts.css';
 import { useAuth } from '../hooks/useAuth';
 import Layout from './components/Layout';
@@ -17,27 +18,97 @@ import Relations from './components/Relations';
 import RelationDetail from './components/RelationDetail';
 import AccountSettings from './components/AccountSettings';
 import Subscription from './components/Subscription';
+import CGU from './components/CGU';
+import Privacy from './components/Privacy';
+import Cookies from './components/Cookies';
+import Sitemap from './components/Sitemap';
+import { supabase } from '../lib/supabase';
+import { getActiveOrganizationId } from '../lib/api/org';
 
 function ContactRedirect() {
   const { id } = useParams();
   return <Navigate to={`/relation/${id}`} replace />;
 }
 
+/** Checks Supabase for onboarding completion flag */
+async function checkOnboardingDone(): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+    const orgId = await getActiveOrganizationId();
+    if (!orgId) return false;
+    const { data } = await (supabase as any)
+      .from('profile_contexts')
+      .select('source_payload')
+      .eq('user_id', user.id)
+      .eq('organization_id', orgId)
+      .maybeSingle();
+    const onb = data?.source_payload?.onboarding;
+    // Completed = step5 done OR completed_at present
+    return Boolean(onb?.step5 || onb?.completed_at);
+  } catch {
+    return false;
+  }
+}
+
+const Spinner = () => (
+  <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+    Chargement de votre espace Knowy...
+  </div>
+);
+
+/**
+ * Guards authenticated app routes.
+ * - Not logged in → /signin
+ * - Logged in but onboarding not done → /onboarding/step1
+ * - Logged in + onboarding done → show children
+ */
 function ProtectedApp({ children }: { children: React.ReactNode }) {
-  const { loading, isAuthenticated } = useAuth();
+  const { loading, isAuthenticated, user } = useAuth();
+  const navigate = useNavigate();
+  const [checking, setChecking] = useState(true);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
-        Chargement de votre espace Knowy...
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (loading) return;
+    if (!isAuthenticated) {
+      setChecking(false);
+      return;
+    }
+    checkOnboardingDone().then(done => {
+      if (!done) navigate('/onboarding/step1', { replace: true });
+      setChecking(false);
+    });
+  }, [loading, isAuthenticated, user?.id]);
 
-  if (!isAuthenticated) {
-    return <Navigate to="/signin" replace />;
-  }
+  if (loading || checking) return <Spinner />;
+  if (!isAuthenticated) return <Navigate to="/signin" replace />;
+  return <>{children}</>;
+}
 
+/**
+ * Guards onboarding routes.
+ * - Not logged in → /signin
+ * - Logged in + onboarding already complete → /dashboard (skip)
+ * - Logged in + onboarding in progress → show onboarding step
+ */
+function OnboardingRoute({ children }: { children: React.ReactNode }) {
+  const { loading, isAuthenticated, user } = useAuth();
+  const [status, setStatus] = useState<'checking' | 'show' | 'done'>('checking');
+
+  useEffect(() => {
+    if (loading) return;
+    if (!isAuthenticated) {
+      setStatus('show'); // let the step handle the redirect to signin
+      return;
+    }
+    checkOnboardingDone().then(done => {
+      setStatus(done ? 'done' : 'show');
+    });
+  }, [loading, isAuthenticated, user?.id]);
+
+  if (loading || status === 'checking') return <Spinner />;
+  if (status === 'done') return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
@@ -45,16 +116,22 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public routes without sidebar */}
+        {/* Public routes */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/signin" element={<SignIn />} />
-        <Route path="/onboarding/step1" element={<OnboardingStep1 />} />
-        <Route path="/onboarding/step2" element={<OnboardingStep2 />} />
-        <Route path="/onboarding/step3" element={<OnboardingStep3 />} />
-        <Route path="/onboarding/step4" element={<OnboardingStep4 />} />
-        <Route path="/onboarding/step5" element={<OnboardingStep5 />} />
+        <Route path="/cgu" element={<CGU />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/cookies" element={<Cookies />} />
+        <Route path="/sitemap" element={<Sitemap />} />
 
-        {/* Authenticated routes with sidebar */}
+        {/* Onboarding routes — auto-skip if already complete */}
+        <Route path="/onboarding/step1" element={<OnboardingRoute><OnboardingStep1 /></OnboardingRoute>} />
+        <Route path="/onboarding/step2" element={<OnboardingRoute><OnboardingStep2 /></OnboardingRoute>} />
+        <Route path="/onboarding/step3" element={<OnboardingRoute><OnboardingStep3 /></OnboardingRoute>} />
+        <Route path="/onboarding/step4" element={<OnboardingRoute><OnboardingStep4 /></OnboardingRoute>} />
+        <Route path="/onboarding/step5" element={<OnboardingRoute><OnboardingStep5 /></OnboardingRoute>} />
+
+        {/* Authenticated app routes — redirect to onboarding if not complete */}
         <Route path="/dashboard" element={<ProtectedApp><Layout><Dashboard /></Layout></ProtectedApp>} />
         <Route path="/meetings" element={<ProtectedApp><Layout><Meetings /></Layout></ProtectedApp>} />
         <Route path="/meeting/:id" element={<ProtectedApp><Layout><MeetingAnalysis /></Layout></ProtectedApp>} />

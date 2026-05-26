@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { useNavigate, useParams } from 'react-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ArrowLeft,
   RefreshCw,
@@ -19,12 +19,23 @@ import {
   AlertTriangle,
   CircleDot,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  Loader2,
+  Clock,
+  MapPin,
+  Video,
+  Calendar,
+  ExternalLink,
+  UserPlus,
 } from 'lucide-react';
 import KnowyCard from './knowy/KnowyCard';
 import KnowyBadge from './knowy/KnowyBadge';
 import KnowyButton from './knowy/KnowyButton';
 import RadarChart from './RadarChart';
+import { getMeeting, getMeetingParticipants } from '../../lib/api/meetings';
+import { getActiveOrganizationId } from '../../lib/api/org';
+import { supabase } from '../../lib/supabase';
+import type { Meeting } from '../../types/domain';
 
 interface Participant {
   id: string;
@@ -61,135 +72,175 @@ interface Participant {
 export default function MeetingAnalysis() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [selectedParticipant, setSelectedParticipant] = useState<string>('1');
+  const [selectedParticipant, setSelectedParticipant] = useState<string>('');
 
-  // Simulate meeting status - in real app this would come from API/props
-  const isPast = id === '8' || id === '9' || id === '10' || id === '11'; // IDs from past meetings
-  const [activeTab, setActiveTab] = useState<'summary' | 'prep' | 'participants'>(
-    isPast ? 'summary' : 'prep'
-  );
+  // Real meeting data
+  const [realMeeting, setRealMeeting] = useState<Meeting | null>(null);
+  const [loadedParticipants, setLoadedParticipants] = useState<Participant[]>([]);
+  const [loadedSources, setLoadedSources] = useState<{ name: string; icon: any; connected: boolean; gain?: number }[]>([]);
+  const [postSummary, setPostSummary] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const meeting = {
-    title: 'Q1 Strategic Review',
-    company: 'Contentsquare',
-    logo: '🎯',
-    type: 'Brief Commercial',
-    date: '2026-05-28',
-    time: '14:00 → 15:00',
-    platform: 'Google Meet'
-  };
+  useEffect(() => {
+    if (!id) return;
+    let mounted = true;
 
-  const confidenceScore = 42;
+    async function load() {
+      setLoading(true);
 
-  const sources = [
-    { name: 'Gmail', icon: Mail, connected: true },
-    { name: 'Slack', icon: Slack, connected: false, gain: 20 },
-    { name: 'LinkedIn', icon: Linkedin, connected: true },
-    { name: 'HubSpot', icon: Database, connected: false, gain: 12 }
-  ];
+      // Load meeting
+      const mtg = await getMeeting(id);
+      if (mounted && mtg) setRealMeeting(mtg);
 
-  const executiveSummary = {
-    text: "Sarah Chen (VP Partnerships) cherche un pilote rapide pour prouver sa valeur dans son nouveau rôle. Marc Dubois (Product) est analytique et demandera des KPIs précis. Contentsquare lève 380M€ et recrute massivement (+50 Sales) — momentum favorable. Risque : dernier contact il y a 23 jours, le deal peut refroidir.",
-    tags: [
-      { label: 'Momentum favorable', variant: 'sage' as const },
-      { label: 'Champion confirmé', variant: 'sage' as const },
-      { label: 'MEDDPICC partiel (3/8)', variant: 'amber' as const }
-    ],
-    sources: ['LinkedIn', 'Gmail', 'Mémoire Knowy']
-  };
+      // Load participants with cognitive profiles
+      const parts = await getMeetingParticipants(id);
+      if (mounted && parts.length > 0) {
+        // Load relationship snapshots for each participant
+        const snapshots: Record<string, any> = {};
+        if (supabase) {
+          const { data: snaps } = await supabase
+            .from('relationship_snapshots')
+            .select('*')
+            .in('contact_id', parts.map(p => p.contact.id));
+          (snaps ?? []).forEach((s: any) => { snapshots[s.contact_id] = s; });
+        }
 
-  const companyContext = {
-    stats: [
-      { label: 'Employés', value: '450+' },
-      { label: 'Levée', value: '380M€' },
-      { label: 'Secteur', value: 'Analytics' },
-      { label: 'Croissance', value: '+50 Sales' }
-    ],
-    timeline: [
-      { date: '14j', title: 'Série D de 380M€', detail: 'Expansion EMEA annoncée', impact: 'positive', source: 'Crunchbase' },
-      { date: '7j', title: '+50 Sales recrutés', detail: 'Signal d\'accélération forte', impact: 'positive', source: 'LinkedIn' },
-      { date: '23j', title: 'Dernier contact', detail: 'Momentum en baisse', impact: 'negative', source: 'Gmail' }
-    ]
-  };
+        const mapped: Participant[] = parts.map((p, idx) => {
+          const prof = p.profile;
+          const snap = snapshots[p.contact.id];
 
-  const participants: Participant[] = [
-    {
-      id: '1',
-      name: 'Sarah Chen',
-      role: 'VP of Partnerships',
-      company: 'Contentsquare',
-      badge: 'champion',
-      influenceDots: 5,
-      behavioralSignals: [
-        'A vécu 3 ans à San Francisco → tolérance à l\'incertitude',
-        'Passée de Finance à Tech → curiosité transversale',
-        'Nouveau dans le rôle (6 mois) → cherche quick wins'
-      ],
-      resultVsRelation: 75,
-      speedVsCaution: 70,
-      structureVsIntuition: 45,
-      controlVsConsensus: 55,
-      interactionModes: {
-        primary: ['Challenger', 'Explorer'],
-        secondary: ['Strategist']
-      },
-      personalAgenda: {
-        motivations: [
-          'Prouver sa valeur dans son nouveau rôle VP',
-          'Livrer un quick win avant Q2',
-          'Élargir son réseau partenaires US'
-        ],
-        confidence: 72
-      },
-      validatesBy: ['Marc Dubois'],
-      influences: ['Équipe Sales'],
-      relationContext: {
-        engagementScore: 87,
-        phase: 'growth',
-        relationSince: '18 mois',
-        lastContactDays: 23,
-        avgFrequencyDays: 11,
-        totalInteractions: 47
+          // Map axes from cognitive profile
+          const getAxisValue = (axis: string) => prof?.axes.find(a => a.axis === axis)?.value ?? 50;
+          const getModes = (primary: boolean) => {
+            if (!prof) return [];
+            const sorted = [...prof.interactionModes].sort((a, b) => b.score - a.score);
+            const top = sorted.filter(m => m.score >= 60);
+            if (primary) return top.slice(0, 2).map(m => m.mode);
+            return sorted.filter(m => m.score >= 40 && m.score < 60).slice(0, 1).map(m => m.mode);
+          };
+
+          return {
+            id: p.contact.id,
+            name: p.contact.name,
+            role: p.contact.title,
+            company: p.contact.company,
+            badge: null,
+            influenceDots: Math.max(1, Math.min(5, Math.round((prof?.globalConfidence ?? 0) / 20))),
+            behavioralSignals: prof?.signals.slice(0, 3).map(s => s.text) ?? [],
+            resultVsRelation: getAxisValue('relation_result'),
+            speedVsCaution: getAxisValue('caution_speed'),
+            structureVsIntuition: getAxisValue('intuition_structure'),
+            controlVsConsensus: getAxisValue('consensus_control'),
+            interactionModes: { primary: getModes(true) as any[], secondary: getModes(false) as any[] },
+            personalAgenda: null,
+            relationContext: snap ? {
+              engagementScore: snap.engagement_score ?? 0,
+              phase: snap.phase ?? 'stagnant',
+              relationSince: '—',
+              lastContactDays: snap.last_contact_date
+                ? Math.floor((Date.now() - new Date(snap.last_contact_date).getTime()) / 86400000)
+                : 0,
+              avgFrequencyDays: snap.frequency_days ?? 30,
+              totalInteractions: (snap.emails_exchanged ?? 0) + (snap.meetings_count ?? 0),
+            } : undefined,
+          };
+        });
+        setLoadedParticipants(mapped);
+        if (mapped.length > 0) setSelectedParticipant(mapped[0].id);
       }
-    },
-    {
-      id: '2',
-      name: 'Marc Dubois',
-      role: 'Head of Product Strategy',
-      company: 'Contentsquare',
-      badge: 'decider',
-      influenceDots: 4,
-      behavioralSignals: [
-        'Promu récemment (3 mois) → besoin de prouver sa capacité stratégique',
-        'Background Finance + Product → analytique, data-driven'
-      ],
-      resultVsRelation: 85,
-      speedVsCaution: 40,
-      structureVsIntuition: 80,
-      controlVsConsensus: 65,
-      interactionModes: {
-        primary: ['Validator', 'Operator'],
-        secondary: []
-      },
-      personalAgenda: {
-        motivations: [
-          'Valider l\'alignement stratégique produit',
-          'Obtenir des benchmarks et données chiffrées',
-          'Sécuriser l\'intégration technique'
-        ],
-        confidence: 68
-      },
-      influences: ['Équipe Produit'],
-      relationContext: {
-        engagementScore: 62,
-        phase: 'stagnant',
-        relationSince: '8 mois',
-        lastContactDays: 31,
-        avgFrequencyDays: 21,
-        totalInteractions: 18
+
+      // Load connector statuses for the sidebar
+      if (supabase) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: connectors } = await supabase
+            .from('connectors')
+            .select('provider, status')
+            .eq('user_id', user.id);
+          const map: Record<string, boolean> = {};
+          (connectors ?? []).forEach((c: any) => { map[c.provider] = c.status === 'connected'; });
+          setLoadedSources([
+            { name: 'Gmail', icon: Mail, connected: map['google'] ?? false },
+            { name: 'Slack', icon: Slack, connected: map['slack'] ?? false, gain: 20 },
+            { name: 'LinkedIn', icon: Linkedin, connected: map['linkedin'] ?? false },
+            { name: 'HubSpot', icon: Database, connected: map['hubspot'] ?? false, gain: 12 },
+          ]);
+        }
       }
+
+      // Load post-meeting summary if exists
+      if (supabase) {
+        const { data: psum } = await supabase
+          .from('meeting_post_summaries')
+          .select('*')
+          .eq('meeting_id', id)
+          .maybeSingle();
+        if (mounted) setPostSummary(psum ?? null);
+      }
+
+      if (mounted) setLoading(false);
     }
+
+    load();
+    return () => { mounted = false; };
+  }, [id]);
+
+  // Derive display values from real data (fall back to placeholders)
+  const isPast = realMeeting ? new Date(realMeeting.startsAt) < new Date() : false;
+  const [activeTab, setActiveTab] = useState<'summary' | 'prep' | 'participants'>('prep');
+
+  // Duration in minutes
+  const durationMin = realMeeting && (realMeeting as any).endsAt
+    ? Math.round((new Date((realMeeting as any).endsAt).getTime() - new Date(realMeeting.startsAt).getTime()) / 60000)
+    : null;
+
+  // Use real meeting or placeholder
+  const meeting = realMeeting ? {
+    title: realMeeting.title,
+    company: realMeeting.company || '—',
+    logo: '📅',
+    type: realMeeting.briefStatus === 'ready' || realMeeting.briefStatus === 'consulted' ? 'Brief prêt' : 'Brief en attente',
+    date: new Date(realMeeting.startsAt).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+    time: new Date(realMeeting.startsAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+    timeEnd: (realMeeting as any).endsAt
+      ? new Date((realMeeting as any).endsAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      : null,
+    location: (realMeeting as any).location ?? null,
+    platform: (realMeeting as any).format === 'physical' ? 'Présentiel' : 'Google Meet',
+    isExternal: (realMeeting as any).isExternal ?? true,
+  } : {
+    title: 'Réunion',
+    company: '—',
+    logo: '📅',
+    type: '—',
+    date: '—',
+    time: '—',
+    timeEnd: null,
+    location: null,
+    platform: '—',
+    isExternal: true,
+  };
+
+  const confidenceScore = realMeeting?.importanceScore ?? 0;
+  const sources = loadedSources.length > 0 ? loadedSources : [
+    { name: 'Gmail', icon: Mail, connected: false },
+    { name: 'Slack', icon: Slack, connected: false, gain: 20 },
+    { name: 'LinkedIn', icon: Linkedin, connected: false },
+    { name: 'HubSpot', icon: Database, connected: false, gain: 12 },
   ];
+  const participants = loadedParticipants;
+
+  // executiveSummary — comes from AI post-processing (meeting_post_summaries table)
+  // When empty, display "Brief not yet generated" state
+  const executiveSummary = postSummary ? {
+    text: postSummary.summary_text ?? '',
+    tags: (postSummary.tags ?? []).map((t: any) => ({ label: t.label, variant: (t.variant ?? 'muted') as any })),
+    sources: postSummary.sources ?? [],
+  } : null;
+
+  // companyContext — would come from company_signals table (loaded per participant company)
+  // Left as null for now; will be populated by future AI processing
+  const companyContext = null;
 
   const meddpicc = [
     { letter: 'M', label: 'Metrics', status: 'unknown', detail: 'Non qualifié' },
@@ -289,6 +340,32 @@ export default function MeetingAnalysis() {
 
   const currentParticipant = participants.find(p => p.id === selectedParticipant) || participants[0];
 
+  if (loading) {
+    return (
+      <div className="size-full flex items-center justify-center bg-background">
+        <div className="text-center">
+          <Loader2 className="size-10 text-primary animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Chargement de la réunion…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!realMeeting) {
+    return (
+      <div className="size-full flex items-center justify-center bg-background">
+        <div className="text-center">
+          <Calendar className="size-12 text-muted-foreground mx-auto mb-4 opacity-40" />
+          <h2 className="text-xl font-semibold mb-2">Réunion introuvable</h2>
+          <p className="text-muted-foreground mb-6">Cette réunion n'existe pas ou a été supprimée.</p>
+          <button onClick={() => navigate('/meetings')} className="px-4 py-2 bg-primary text-white rounded-xl text-sm">
+            Retour aux réunions
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="size-full overflow-auto bg-background">
       {/* Header Sticky */}
@@ -300,29 +377,55 @@ export default function MeetingAnalysis() {
                 variant="ghost"
                 size="sm"
                 icon={<ArrowLeft className="size-4" />}
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate('/meetings')}
               />
               <div>
                 <div className="flex items-center gap-3 mb-1">
-                  <span className="text-3xl">{meeting.logo}</span>
                   <h1 className="text-2xl font-black">{meeting.title}</h1>
-                  <KnowyBadge variant="violet">{meeting.type}</KnowyBadge>
+                  {meeting.company !== '—' && (
+                    <span className="text-lg text-muted-foreground font-normal">· {meeting.company}</span>
+                  )}
+                  <KnowyBadge variant={isPast ? 'muted' : 'violet'}>
+                    {isPast ? 'Terminée' : meeting.type}
+                  </KnowyBadge>
                 </div>
-                <p className="text-xs font-mono text-muted-foreground">
-                  {meeting.date} · {meeting.time} · {meeting.platform}
-                  {isPast && <span className="ml-2 text-success">• Terminée</span>}
-                </p>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="size-3" />
+                    {meeting.date}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Clock className="size-3" />
+                    {meeting.time}{meeting.timeEnd ? ` → ${meeting.timeEnd}` : ''}{durationMin ? ` (${durationMin}min)` : ''}
+                  </span>
+                  {meeting.location ? (
+                    <a href={meeting.location} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1 hover:text-primary transition-colors">
+                      <Video className="size-3" /> {meeting.platform} <ExternalLink className="size-2.5" />
+                    </a>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <Video className="size-3" /> {meeting.platform}
+                    </span>
+                  )}
+                  {participants.length > 0 && (
+                    <span className="flex items-center gap-1">
+                      <Users className="size-3" /> {participants.length} participant{participants.length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground mb-1">Confiance</p>
-                <p className={`text-2xl font-black ${confidenceScore >= 60 ? 'text-sage' : 'text-amber'}`}>
-                  {confidenceScore}%
-                </p>
-              </div>
-              <KnowyButton variant="secondary" size="sm" icon={<RefreshCw className="size-4" />} />
+              {confidenceScore > 0 && (
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground mb-1">Confiance</p>
+                  <p className={`text-2xl font-black ${confidenceScore >= 60 ? 'text-sage' : 'text-amber'}`}>
+                    {confidenceScore}%
+                  </p>
+                </div>
+              )}
               <KnowyButton variant="secondary" size="sm" icon={<Share2 className="size-4" />} />
             </div>
           </div>
@@ -452,49 +555,38 @@ export default function MeetingAnalysis() {
                   </div>
                 )}
 
-                <div className="p-4 bg-primary/5 rounded-xl mb-3">
-                  <p className="text-base leading-relaxed italic">{executiveSummary.text}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {executiveSummary.tags.map((tag, i) => (
-                    <KnowyBadge key={i} variant={tag.variant}>{tag.label}</KnowyBadge>
-                  ))}
-                </div>
+                {executiveSummary ? (
+                  <>
+                    <div className="p-4 bg-primary/5 rounded-xl mb-3">
+                      <p className="text-base leading-relaxed italic">{executiveSummary.text}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {executiveSummary.tags.map((tag: any, i: number) => (
+                        <KnowyBadge key={i} variant={tag.variant}>{tag.label}</KnowyBadge>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 bg-muted/20 rounded-xl">
+                    <Sparkles className="size-8 mx-auto mb-2 text-muted-foreground/50" />
+                    <p className="text-sm font-semibold mb-1">Brief IA non encore généré</p>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Le résumé exécutif sera généré automatiquement avant votre réunion.
+                    </p>
+                    <button className="px-4 py-2 bg-primary text-white rounded-xl text-sm hover:bg-accent transition-colors">
+                      Générer le brief maintenant
+                    </button>
+                  </div>
+                )}
               </KnowyCard>
 
               {/* Section B — Contexte Entreprise */}
               <KnowyCard className="p-6">
                 <h3 className="text-sm font-bold mb-4 text-muted-foreground">CONTEXTE ENTREPRISE</h3>
 
-                <div className="grid grid-cols-4 gap-3 mb-6">
-                  {companyContext.stats.map((stat, i) => (
-                    <div key={i} className="text-center p-4 bg-muted/50 rounded-xl">
-                      <p className="text-3xl font-black mb-1">{stat.value}</p>
-                      <p className="text-xs text-muted-foreground">{stat.label}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="space-y-3">
-                  {companyContext.timeline.map((event, i) => (
-                    <div key={i} className="flex gap-3">
-                      <div className="flex flex-col items-center">
-                        <div className={`size-3 rounded-full ${
-                          event.impact === 'positive' ? 'bg-sage' : 'bg-coral'
-                        }`} />
-                        {i < companyContext.timeline.length - 1 && (
-                          <div className="w-px h-full bg-border mt-1" />
-                        )}
-                      </div>
-                      <div className="flex-1 pb-3">
-                        <div className="flex items-start justify-between mb-1">
-                          <p className="font-bold">{event.title}</p>
-                          <span className="text-xs text-muted-foreground">{event.date}</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{event.detail}</p>
-                      </div>
-                    </div>
-                  ))}
+                <div className="text-center py-6 text-muted-foreground text-sm">
+                  <p>Données entreprise non disponibles.</p>
+                  <p className="text-xs mt-1">Connectez LinkedIn ou HubSpot pour enrichir le contexte.</p>
                 </div>
               </KnowyCard>
             </div>

@@ -80,10 +80,10 @@ supabase/functions/
 
 Remote status:
 
-- 24 public tables created with RLS enabled.
+- Core public tables created with RLS enabled.
 - Migrations applied remotely: `core_p0_schema`, `hardening_and_fk_indexes`, `optimize_auth_rls_policies`, `move_rls_helpers_to_private_schema`, `create_user_workspace_on_signup`, `revoke_signup_trigger_rpc_access`, `profile_contexts_for_llm_memory`.
 - Edge Functions deployed with JWT verification: `generate-brief`, `score-cognitive-profile`, `ingest-communication`, `analyze-website`.
-- Security advisor: no active lints after hardening.
+- Security advisor: `subscription_plans`, `subscriptions`, and `ai_usage_events` currently have RLS disabled. Do not expose subscription/admin data from the frontend before adding the right policies.
 
 Frontend credentials are in `.env.local`:
 
@@ -94,24 +94,54 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_...
 
 The current P0 repositories in `src/lib/api/*` are Supabase-first with mock fallback: after sign-in and membership resolution they query live contacts, meetings, cognitive profiles and the `generate-brief` function; without data/auth they keep the demo usable.
 
+## Real Onboarding Setup
+
+The onboarding flow is now wired to real Supabase writes:
+
+- Email magic link creates/signs in users and redirects to `/onboarding/step1`.
+- Google, Outlook/Microsoft, and LinkedIn use Supabase OAuth.
+- Step 1 stores `profiles` and `profile_contexts` for the LLM memory.
+- Step 2 records connected Google/Microsoft providers in `connectors`.
+- Step 3 marks CRM as planned for v2.
+- Step 4 stores `notification_preferences` and `privacy_settings`.
+- Step 5 marks onboarding complete and queues an `initial_onboarding_sync` job.
+
 OAuth providers must be enabled in Supabase Auth before production use:
 
 ```txt
-Redirect URL: https://<your-domain>/onboarding/step1
-Local redirect URL: http://127.0.0.1:5173/onboarding/step1
+Site URL: https://<your-netlify-domain>
+Additional redirect URLs:
+http://127.0.0.1:5173/onboarding/step1
+http://127.0.0.1:5173/onboarding/step2
+https://<your-netlify-domain>/onboarding/step1
+https://<your-netlify-domain>/onboarding/step2
 Providers: Google, Azure/Microsoft, LinkedIn OIDC
 ```
 
 For real provider connections, configure these in Supabase Auth:
 
-- Google provider: client ID/secret from Google Cloud, Gmail/Calendar scopes approved.
-- Azure provider: client ID/secret from Microsoft Entra, Outlook/Calendar scopes approved.
-- LinkedIn OIDC provider: client ID/secret from LinkedIn Developer Portal.
+- Google provider: client ID/secret from Google Cloud, Gmail/Calendar scopes approved. Provider callback: `https://bgmtzwfafcgjklgygvtx.supabase.co/auth/v1/callback`.
+- Azure provider: client ID/secret from Microsoft Entra, Outlook/Calendar scopes approved. Provider callback: `https://bgmtzwfafcgjklgygvtx.supabase.co/auth/v1/callback`.
+- LinkedIn OIDC provider: client ID/secret from LinkedIn Developer Portal. Provider callback: `https://bgmtzwfafcgjklgygvtx.supabase.co/auth/v1/callback`.
+
+The frontend requests these scopes:
+
+```txt
+Google: email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly
+Microsoft: email openid profile offline_access Calendars.Read Mail.Read
+LinkedIn: openid profile email
+```
 
 For real LLM website analysis, configure this Edge Function secret:
 
 ```txt
 OPENAI_API_KEY=...
+```
+
+CLI example:
+
+```bash
+npx supabase secrets set OPENAI_API_KEY=sk-... --project-ref bgmtzwfafcgjklgygvtx
 ```
 
 Without `OPENAI_API_KEY`, `analyze-website` still returns a deterministic heuristic analysis so the onboarding remains usable.

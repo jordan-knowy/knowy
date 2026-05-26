@@ -1,11 +1,17 @@
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router';
-import { useState } from 'react';
-import { Bell, Mail, Smartphone, Clock, Sparkles, CheckCircle2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertCircle, Bell, Mail, Smartphone, Clock, Sparkles, CheckCircle2 } from 'lucide-react';
 import KnowyButton from './knowy/KnowyButton';
+import { supabase } from '../../lib/supabase';
+import { requireOnboardingContext, updateOnboardingContext } from '../../lib/onboarding';
 
 export default function OnboardingStep4() {
   const navigate = useNavigate();
+  const [userId, setUserId] = useState('');
+  const [organizationId, setOrganizationId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Notification timing
   const [briefTiming, setBriefTiming] = useState('2h');
@@ -23,7 +29,76 @@ export default function OnboardingStep4() {
   const [dealAlerts, setDealAlerts] = useState(true);
   const [weeklyInsights, setWeeklyInsights] = useState(true);
 
-  const handleContinue = () => {
+  useEffect(() => {
+    requireOnboardingContext()
+      .then(({ user, organizationId }) => {
+        setUserId(user.id);
+        setOrganizationId(organizationId);
+      })
+      .catch(() => navigate('/signin', { replace: true }));
+  }, [navigate]);
+
+  const timingToMinutes: Record<string, number> = {
+    '24h': 1440,
+    '12h': 720,
+    '6h': 360,
+    '2h': 120,
+    '1h': 60,
+  };
+
+  const handleContinue = async () => {
+    if (!supabase || !userId || !organizationId) return;
+
+    setSaving(true);
+    setError(null);
+    const client = supabase as any;
+
+    const { error: notifError } = await client.from('notification_preferences').upsert(
+      {
+        organization_id: organizationId,
+        user_id: userId,
+        brief_timing_minutes: timingToMinutes[briefTiming] ?? 120,
+        email_enabled: emailNotifs,
+        push_enabled: pushNotifs,
+        daily_digest_enabled: dailyDigest,
+        daily_digest_time: dailyDigestTime,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'organization_id,user_id' }
+    );
+
+    const { error: privacyError } = await client.from('privacy_settings').upsert(
+      {
+        organization_id: organizationId,
+        user_id: userId,
+        analyze_email: briefReady || dealAlerts || weeklyInsights,
+        analyze_calendar: meetingReminder || briefReady,
+        analyze_transcripts: false,
+        share_with_team: false,
+        retention_days: 365,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'organization_id,user_id' }
+    );
+
+    if (notifError || privacyError) {
+      setError(notifError?.message ?? privacyError?.message ?? 'Préférences impossibles à sauvegarder.');
+      setSaving(false);
+      return;
+    }
+
+    await updateOnboardingContext(organizationId, userId, {
+      current_step: 5,
+      step4: true,
+      notification_types: {
+        brief_ready: briefReady,
+        meeting_reminder: meetingReminder,
+        deal_alerts: dealAlerts,
+        weekly_insights: weeklyInsights,
+        slack_enabled: slackNotifs,
+      },
+    });
+
     navigate('/onboarding/step5');
   };
 
@@ -273,6 +348,13 @@ export default function OnboardingStep4() {
           </motion.div>
         </div>
 
+        {error && (
+          <div className="flex items-start gap-3 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive mt-8">
+            <AlertCircle className="size-5 flex-shrink-0" />
+            <p>{error}</p>
+          </div>
+        )}
+
         {/* Actions */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -291,6 +373,8 @@ export default function OnboardingStep4() {
             variant="primary"
             size="lg"
             onClick={handleContinue}
+            loading={saving}
+            disabled={saving}
           >
             Continuer
           </KnowyButton>

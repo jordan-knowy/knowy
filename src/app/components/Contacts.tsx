@@ -1,187 +1,549 @@
-import { motion } from 'motion/react';
-import { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Users,
   Search,
   Mail,
   Calendar,
-  TrendingUp,
   Building2,
   ArrowRight,
   Sparkles,
-  AlertTriangle,
   Filter,
   ChevronDown,
-  Zap,
-  Star
+  Star,
+  Loader2,
+  RefreshCw,
+  Plus,
+  X,
+  Upload,
+  Linkedin,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+  Brain,
 } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { getActiveOrganizationId } from '../../lib/api/org';
 
 interface Contact {
   id: string;
   name: string;
   role: string;
   company: string;
-  photo: string;
+  email: string | null;
+  initials: string;
   engagementScore: number;
-  emails30d: number;
-  meetings30d: number;
-  lastContactDays: number;
+  meetingsCount: number;
+  lastContactDays: number | null;
   isDecisionMaker: boolean;
-  signals: ('hot' | 'new-role' | 'mutual' | 'risk')[];
+  source: 'contact' | 'participant';
 }
 
-interface Company {
-  id: string;
+interface CompanyGroup {
   name: string;
-  logo: string;
-  activeContacts: number;
-  totalContacts: number;
-  emails30d: number;
-  meetings30d: number;
-  healthScore: number;
-  lastContactDays: number;
-  signals: ('hot' | 'risk' | 'expansion')[];
+  contacts: Contact[];
+  meetingsTotal: number;
+  lastContactDays: number | null;
 }
 
-type SortType = 'signals' | 'engagement' | 'risk' | 'deciders' | 'emails';
+type SortType = 'engagement' | 'risk' | 'deciders' | 'meetings' | 'alpha';
+
+function initials(name: string) {
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
+function daysSince(dateStr: string | null): number | null {
+  if (!dateStr) return null;
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+}
+
+function getDaysText(days: number | null): string {
+  if (days === null) return '—';
+  if (days === 0) return "Aujourd'hui";
+  if (days === 1) return 'Hier';
+  if (days < 7) return `${days}j`;
+  if (days < 30) return `${Math.floor(days / 7)}sem`;
+  return `${Math.floor(days / 30)}m`;
+}
+
+// ─── Add Contact Modal ───────────────────────────────────────────────────────
+
+interface AddContactModalProps {
+  onClose: () => void;
+  onAdded: () => void;
+  orgId: string;
+}
+
+function AddContactModal({ onClose, onAdded, orgId }: AddContactModalProps) {
+  const [tab, setTab] = useState<'manual' | 'pdf'>('manual');
+  const [form, setForm] = useState({ firstName: '', lastName: '', role: '', company: '', email: '', linkedin: '' });
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const fullName = `${form.firstName} ${form.lastName}`.trim();
+
+  async function handleManualSave() {
+    if (!supabase || !fullName) return;
+    setSaving(true);
+    setStatus(null);
+    try {
+      const { data, error } = await supabase
+        .from('contacts')
+        .insert({
+          organization_id: orgId,
+          full_name: fullName,
+          role_title: form.role || null,
+          email: form.email || null,
+          linkedin_url: form.linkedin || null,
+          source_summary: {
+            company: form.company || null,
+            source: 'manual',
+            ai_enrichment_pending: true,
+          },
+        })
+        .select('id')
+        .single();
+
+      if (error) throw error;
+
+      setStatus({ type: 'success', msg: `${fullName} ajouté. L'IA va enrichir son profil automatiquement.` });
+      setTimeout(() => { onAdded(); onClose(); }, 1800);
+    } catch (e: any) {
+      setStatus({ type: 'error', msg: e.message || 'Erreur lors de l\'ajout' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handlePdfUpload() {
+    if (!supabase || !file) return;
+    setSaving(true);
+    setStatus(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Non authentifié');
+
+      // Upload PDF to storage
+      const filePath = `contacts/${orgId}/${Date.now()}_${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from('knowy-documents')
+        .upload(filePath, file, { contentType: 'application/pdf' });
+
+      // If bucket doesn't exist yet, still create the contact with pending state
+      const contactName = form.firstName || file.name.replace('.pdf', '');
+
+      const { error: insertError } = await supabase
+        .from('contacts')
+        .insert({
+          organization_id: orgId,
+          full_name: contactName,
+          role_title: form.role || null,
+          email: form.email || null,
+          source_summary: {
+            company: form.company || null,
+            source: 'pdf_upload',
+            pdf_path: uploadError ? null : filePath,
+            pdf_filename: file.name,
+            ai_enrichment_pending: true,
+          },
+        });
+
+      if (insertError) throw insertError;
+
+      setStatus({ type: 'success', msg: `Fiche uploadée. L'IA va analyser le PDF et rédiger le profil cognitif.` });
+      setTimeout(() => { onAdded(); onClose(); }, 2000);
+    } catch (e: any) {
+      setStatus({ type: 'error', msg: e.message || 'Erreur lors de l\'upload' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="relative bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl z-10"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <div>
+            <h2 className="text-xl font-semibold">Ajouter un contact</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">L'IA enrichira automatiquement le profil cognitif</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-muted rounded-xl transition-colors">
+            <X className="size-5 text-muted-foreground" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-border">
+          <button
+            onClick={() => setTab('manual')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+              tab === 'manual' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Users className="size-4" /> Saisie manuelle
+          </button>
+          <button
+            onClick={() => setTab('pdf')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+              tab === 'pdf' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <FileText className="size-4" /> Depuis un PDF
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {tab === 'manual' ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Prénom *</label>
+                  <input
+                    type="text"
+                    placeholder="Jean"
+                    value={form.firstName}
+                    onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))}
+                    className="w-full px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Nom *</label>
+                  <input
+                    type="text"
+                    placeholder="Dupont"
+                    value={form.lastName}
+                    onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))}
+                    className="w-full px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Poste</label>
+                <input
+                  type="text"
+                  placeholder="CEO, VP Sales..."
+                  value={form.role}
+                  onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+                  className="w-full px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Entreprise</label>
+                <input
+                  type="text"
+                  placeholder="Nom de l'entreprise"
+                  value={form.company}
+                  onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
+                  className="w-full px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block flex items-center gap-1">
+                  <Mail className="size-3" /> Email <span className="opacity-60">(optionnel)</span>
+                </label>
+                <input
+                  type="email"
+                  placeholder="jean@entreprise.com"
+                  value={form.email}
+                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                  className="w-full px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block flex items-center gap-1">
+                  <Linkedin className="size-3" /> LinkedIn <span className="opacity-60">(optionnel)</span>
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://linkedin.com/in/jean-dupont"
+                  value={form.linkedin}
+                  onChange={e => setForm(f => ({ ...f, linkedin: e.target.value }))}
+                  className="w-full px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div className="flex items-start gap-2 p-3 bg-primary/5 rounded-xl border border-primary/10">
+                <Brain className="size-4 text-primary flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">
+                  L'IA recherchera des informations publiques sur ce contact et rédigera automatiquement son profil cognitif Knowy.
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div
+                onClick={() => fileRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                  file ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-primary/30 hover:bg-muted/30'
+                }`}
+              >
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={e => setFile(e.target.files?.[0] || null)}
+                />
+                {file ? (
+                  <div className="flex items-center justify-center gap-3">
+                    <FileText className="size-8 text-primary" />
+                    <div className="text-left">
+                      <p className="font-medium text-sm">{file.name}</p>
+                      <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+                    </div>
+                    <button onClick={e => { e.stopPropagation(); setFile(null); }} className="ml-auto">
+                      <X className="size-4 text-muted-foreground" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="size-8 text-muted-foreground mx-auto mb-3" />
+                    <p className="font-medium mb-1">Déposez un PDF ou cliquez pour sélectionner</p>
+                    <p className="text-xs text-muted-foreground">CV, fiche entreprise, présentation, article…</p>
+                  </>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Nom du contact</label>
+                  <input
+                    type="text"
+                    placeholder="Si connu"
+                    value={form.firstName}
+                    onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))}
+                    className="w-full px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Email</label>
+                  <input
+                    type="email"
+                    placeholder="optionnel"
+                    value={form.email}
+                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                    className="w-full px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+              </div>
+              <div className="flex items-start gap-2 p-3 bg-primary/5 rounded-xl border border-primary/10">
+                <Brain className="size-4 text-primary flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">
+                  L'IA analysera le contenu du PDF (CV, fiche, article) et rédigera automatiquement le profil cognitif complet du contact.
+                </p>
+              </div>
+            </>
+          )}
+
+          {status && (
+            <div className={`flex items-start gap-2 p-3 rounded-xl border text-sm ${
+              status.type === 'success'
+                ? 'bg-success/10 border-success/20 text-success'
+                : 'bg-destructive/10 border-destructive/20 text-destructive'
+            }`}>
+              {status.type === 'success' ? <CheckCircle2 className="size-4 flex-shrink-0 mt-0.5" /> : <AlertCircle className="size-4 flex-shrink-0 mt-0.5" />}
+              {status.msg}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Annuler
+          </button>
+          <button
+            onClick={tab === 'manual' ? handleManualSave : handlePdfUpload}
+            disabled={saving || (tab === 'manual' ? !fullName : !file)}
+            className="px-5 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-accent transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {saving ? 'Enregistrement…' : 'Ajouter et analyser'}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function Contacts() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [viewType, setViewType] = useState<'people' | 'companies'>('people');
-  const [sortBy, setSortBy] = useState<SortType>('signals');
-  const [displayCount, setDisplayCount] = useState(25);
+  const [sortBy, setSortBy] = useState<SortType>('meetings');
+  const [displayCount, setDisplayCount] = useState(50);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [orgId, setOrgId] = useState<string>('');
 
-  // Generate realistic contacts (143 total)
-  const allContacts: Contact[] = [
-    // High priority contacts with signals
-    { id: '1', name: 'Sarah Chen', role: 'VP of Partnerships', company: 'Contentsquare', photo: '👩‍💼', engagementScore: 88, emails30d: 24, meetings30d: 3, lastContactDays: 2, isDecisionMaker: true, signals: ['hot', 'new-role', 'mutual'] },
-    { id: '2', name: 'Alexandre Garcia', role: 'CFO', company: 'Qonto', photo: '👨‍💼', engagementScore: 94, emails30d: 45, meetings30d: 5, lastContactDays: 1, isDecisionMaker: true, signals: ['hot'] },
-    { id: '3', name: 'Marc Dubois', role: 'Head of Product Strategy', company: 'Contentsquare', photo: '👨‍💻', engagementScore: 72, emails30d: 12, meetings30d: 2, lastContactDays: 5, isDecisionMaker: true, signals: ['risk'] },
-    { id: '4', name: 'Julie Martin', role: 'Enterprise Sales Director', company: 'Swile', photo: '👩', engagementScore: 85, emails30d: 18, meetings30d: 3, lastContactDays: 3, isDecisionMaker: true, signals: [] },
-    { id: '5', name: 'Thomas Lebrun', role: 'Customer Success Manager', company: 'Alan', photo: '👨', engagementScore: 76, emails30d: 32, meetings30d: 4, lastContactDays: 6, isDecisionMaker: false, signals: ['risk'] },
-    { id: '6', name: 'Emma Wilson', role: 'Partnerships Lead', company: 'Contentsquare', photo: '👩‍💼', engagementScore: 68, emails30d: 8, meetings30d: 1, lastContactDays: 12, isDecisionMaker: false, signals: ['risk'] },
-    { id: '7', name: 'Pierre Durand', role: 'VP Sales', company: 'Stripe', photo: '👨‍💼', engagementScore: 71, emails30d: 15, meetings30d: 2, lastContactDays: 8, isDecisionMaker: true, signals: [] },
-    { id: '8', name: 'Claire Moreau', role: 'Product Manager', company: 'PayFit', photo: '👩', engagementScore: 65, emails30d: 6, meetings30d: 1, lastContactDays: 15, isDecisionMaker: false, signals: ['risk'] },
-    { id: '9', name: 'Jean Martin', role: 'Director of BD', company: 'BlaBlaCar', photo: '👨‍💼', engagementScore: 73, emails30d: 21, meetings30d: 2, lastContactDays: 7, isDecisionMaker: true, signals: ['mutual'] },
-    { id: '10', name: 'Sophie Laurent', role: 'CEO', company: 'Doctolib', photo: '👩‍💼', engagementScore: 82, emails30d: 28, meetings30d: 3, lastContactDays: 4, isDecisionMaker: true, signals: ['hot'] },
+  useEffect(() => {
+    loadContacts();
+  }, []);
 
-    // More contacts (mix of active and at-risk)
-    { id: '11', name: 'Antoine Rousseau', role: 'CTO', company: 'Qonto', photo: '👨‍💻', engagementScore: 79, emails30d: 19, meetings30d: 2, lastContactDays: 5, isDecisionMaker: true, signals: [] },
-    { id: '12', name: 'Camille Bernard', role: 'VP Marketing', company: 'Alan', photo: '👩', engagementScore: 74, emails30d: 16, meetings30d: 2, lastContactDays: 9, isDecisionMaker: true, signals: [] },
-    { id: '13', name: 'Lucas Petit', role: 'Sales Manager', company: 'Swile', photo: '👨', engagementScore: 70, emails30d: 14, meetings30d: 2, lastContactDays: 6, isDecisionMaker: false, signals: [] },
-    { id: '14', name: 'Marie Dubois', role: 'Head of Partnerships', company: 'Stripe', photo: '👩‍💼', engagementScore: 77, emails30d: 22, meetings30d: 3, lastContactDays: 3, isDecisionMaker: true, signals: ['mutual'] },
-    { id: '15', name: 'Nicolas Lefebvre', role: 'Account Executive', company: 'PayFit', photo: '👨', engagementScore: 63, emails30d: 9, meetings30d: 1, lastContactDays: 14, isDecisionMaker: false, signals: ['risk'] },
-    { id: '16', name: 'Isabelle Moreau', role: 'VP Operations', company: 'BlaBlaCar', photo: '👩', engagementScore: 81, emails30d: 25, meetings30d: 3, lastContactDays: 2, isDecisionMaker: true, signals: ['hot'] },
-    { id: '17', name: 'François Girard', role: 'Product Lead', company: 'Doctolib', photo: '👨‍💻', engagementScore: 69, emails30d: 11, meetings30d: 1, lastContactDays: 11, isDecisionMaker: false, signals: ['risk'] },
-    { id: '18', name: 'Nathalie Roux', role: 'CFO', company: 'Contentsquare', photo: '👩‍💼', engagementScore: 86, emails30d: 31, meetings30d: 4, lastContactDays: 3, isDecisionMaker: true, signals: ['hot'] },
-    { id: '19', name: 'Olivier Simon', role: 'Director Sales', company: 'Qonto', photo: '👨‍💼', engagementScore: 75, emails30d: 17, meetings30d: 2, lastContactDays: 7, isDecisionMaker: true, signals: [] },
-    { id: '20', name: 'Julien Lambert', role: 'CSM', company: 'Alan', photo: '👨', engagementScore: 67, emails30d: 13, meetings30d: 2, lastContactDays: 10, isDecisionMaker: false, signals: ['risk'] },
+  async function loadContacts() {
+    if (!supabase) return;
+    setLoading(true);
+    try {
+      const resolvedOrgId = await getActiveOrganizationId();
+      if (!resolvedOrgId) return;
+      const orgId = resolvedOrgId;
+      setOrgId(orgId);
 
-    // Additional 60 contacts for realism (mix of companies)
-    ...Array.from({ length: 60 }, (_, i) => ({
-      id: `${21 + i}`,
-      name: `Contact ${21 + i}`,
-      role: ['VP Sales', 'Account Manager', 'CEO', 'CTO', 'Director', 'Manager'][Math.floor(Math.random() * 6)],
-      company: ['Contentsquare', 'Qonto', 'Swile', 'Alan', 'Stripe', 'PayFit', 'BlaBlaCar', 'Doctolib', 'Ledger', 'Aircall', 'Spendesk', 'Pennylane'][Math.floor(Math.random() * 12)],
-      photo: ['👨‍💼', '👩‍💼', '👨', '👩', '👨‍💻', '👩‍💻'][Math.floor(Math.random() * 6)],
-      engagementScore: Math.floor(Math.random() * 40) + 50,
-      emails30d: Math.floor(Math.random() * 30) + 2,
-      meetings30d: Math.floor(Math.random() * 4),
-      lastContactDays: Math.floor(Math.random() * 20) + 1,
-      isDecisionMaker: Math.random() > 0.6,
-      signals: Math.random() > 0.7 ? ['risk'] : []
-    }))
-  ];
+      // Load contacts from contacts table
+      const { data: dbContacts } = await supabase
+        .from('contacts')
+        .select('id, full_name, role_title, email, source_summary, updated_at')
+        .eq('organization_id', orgId)
+        .order('updated_at', { ascending: false });
 
-  const companies: Company[] = [
-    { id: 'c1', name: 'Contentsquare', logo: '🎯', activeContacts: 8, totalContacts: 12, emails30d: 127, meetings30d: 6, healthScore: 95, lastContactDays: 2, signals: ['hot', 'risk'] },
-    { id: 'c2', name: 'Qonto', logo: '💳', activeContacts: 6, totalContacts: 8, emails30d: 184, meetings30d: 9, healthScore: 92, lastContactDays: 1, signals: ['hot'] },
-    { id: 'c3', name: 'Swile', logo: '🍔', activeContacts: 3, totalContacts: 5, emails30d: 68, meetings30d: 4, healthScore: 88, lastContactDays: 3, signals: ['risk'] },
-    { id: 'c4', name: 'Alan', logo: '💙', activeContacts: 4, totalContacts: 7, emails30d: 112, meetings30d: 7, healthScore: 82, lastContactDays: 6, signals: ['risk'] },
-    { id: 'c5', name: 'Stripe', logo: '💳', activeContacts: 2, totalContacts: 5, emails30d: 43, meetings30d: 3, healthScore: 71, lastContactDays: 8, signals: [] },
-    { id: 'c6', name: 'PayFit', logo: '💰', activeContacts: 2, totalContacts: 4, emails30d: 31, meetings30d: 2, healthScore: 65, lastContactDays: 15, signals: ['risk'] },
-    { id: 'c7', name: 'BlaBlaCar', logo: '🚗', activeContacts: 3, totalContacts: 4, emails30d: 56, meetings30d: 3, healthScore: 77, lastContactDays: 7, signals: [] },
-    { id: 'c8', name: 'Doctolib', logo: '🏥', activeContacts: 3, totalContacts: 5, emails30d: 72, meetings30d: 4, healthScore: 80, lastContactDays: 4, signals: ['hot'] },
-  ];
+      // Load participants from meeting_participants (external people from synced meetings)
+      const { data: participants } = await (supabase as any)
+        .from('meeting_participants')
+        .select(`
+          id, email, display_name, name, response_status,
+          meetings!inner(id, title, company, starts_at, is_external, organization_id)
+        `)
+        .eq('meetings.organization_id', orgId)
+        .eq('meetings.is_external', true)
+        .eq('is_current_user', false)
+        .not('email', 'is', null);
 
-  const getSortedContacts = () => {
-    let sorted = [...allContacts];
+      const built: Contact[] = [];
+      const seen = new Set<string>();
 
+      // From contacts table
+      for (const c of dbContacts || []) {
+        const key = c.email?.toLowerCase() || c.id;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        built.push({
+          id: c.id,
+          name: c.full_name || c.email || 'Contact',
+          role: c.role_title || '',
+          company: (c.source_summary as any)?.company || '',
+          email: c.email,
+          initials: initials(c.full_name || c.email || '?'),
+          engagementScore: (c.source_summary as any)?.engagement_score || 50,
+          meetingsCount: 0,
+          lastContactDays: daysSince(c.updated_at),
+          isDecisionMaker: false,
+          source: 'contact',
+        });
+      }
+
+      // From meeting participants
+      const participantMap = new Map<string, { contact: Contact; count: number; lastDate: string | null }>();
+      for (const p of participants || []) {
+        const emailKey = (p.email || '').toLowerCase();
+        if (!emailKey || seen.has(emailKey)) continue;
+        const m = p.meetings;
+        const displayName = p.display_name || p.name || emailKey.split('@')[0];
+        const company = m?.company || emailKey.split('@')[1]?.split('.')[0] || '';
+
+        if (participantMap.has(emailKey)) {
+          const existing = participantMap.get(emailKey)!;
+          existing.count++;
+          if (!existing.lastDate || (m?.starts_at && m.starts_at > existing.lastDate)) {
+            existing.lastDate = m?.starts_at || null;
+          }
+        } else {
+          participantMap.set(emailKey, {
+            contact: {
+              id: p.id,
+              name: displayName,
+              role: '',
+              company,
+              email: p.email,
+              initials: initials(displayName),
+              engagementScore: 0,
+              meetingsCount: 1,
+              lastContactDays: null,
+              isDecisionMaker: false,
+              source: 'participant',
+            },
+            count: 1,
+            lastDate: m?.starts_at || null,
+          });
+        }
+      }
+
+      for (const [, { contact, count, lastDate }] of participantMap) {
+        contact.meetingsCount = count;
+        contact.lastContactDays = daysSince(lastDate);
+        contact.engagementScore = Math.min(100, count * 15);
+        built.push(contact);
+      }
+
+      setContacts(built);
+    } catch (e) {
+      console.error('Contacts load error:', e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const sorted = useMemo(() => {
+    let result = [...contacts];
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(c =>
+        c.name.toLowerCase().includes(q) ||
+        c.company.toLowerCase().includes(q) ||
+        c.role.toLowerCase().includes(q) ||
+        (c.email || '').toLowerCase().includes(q)
+      );
+    }
     switch (sortBy) {
-      case 'signals':
-        sorted.sort((a, b) => b.signals.length - a.signals.length || b.engagementScore - a.engagementScore);
-        break;
-      case 'engagement':
-        sorted.sort((a, b) => b.engagementScore - a.engagementScore);
-        break;
-      case 'risk':
-        sorted.sort((a, b) => b.lastContactDays - a.lastContactDays);
-        break;
-      case 'deciders':
-        sorted = sorted.filter(c => c.isDecisionMaker).sort((a, b) => b.engagementScore - a.engagementScore);
-        break;
-      case 'emails':
-        sorted.sort((a, b) => b.emails30d - a.emails30d);
-        break;
+      case 'engagement': result.sort((a, b) => b.engagementScore - a.engagementScore); break;
+      case 'risk': result.sort((a, b) => (b.lastContactDays ?? 999) - (a.lastContactDays ?? 999)); break;
+      case 'deciders': result = result.filter(c => c.isDecisionMaker); break;
+      case 'meetings': result.sort((a, b) => b.meetingsCount - a.meetingsCount); break;
+      case 'alpha': result.sort((a, b) => a.name.localeCompare(b.name)); break;
     }
+    return result;
+  }, [contacts, searchQuery, sortBy]);
 
-    if (searchQuery) {
-      sorted = sorted.filter(c =>
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.role.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+  const companies = useMemo<CompanyGroup[]>(() => {
+    const map = new Map<string, CompanyGroup>();
+    for (const c of contacts) {
+      if (!c.company) continue;
+      if (!map.has(c.company)) {
+        map.set(c.company, { name: c.company, contacts: [], meetingsTotal: 0, lastContactDays: null });
+      }
+      const grp = map.get(c.company)!;
+      grp.contacts.push(c);
+      grp.meetingsTotal += c.meetingsCount;
+      if (c.lastContactDays !== null) {
+        if (grp.lastContactDays === null || c.lastContactDays < grp.lastContactDays) {
+          grp.lastContactDays = c.lastContactDays;
+        }
+      }
     }
+    const filtered = Array.from(map.values()).filter(g =>
+      !searchQuery || g.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    return filtered.sort((a, b) => b.meetingsTotal - a.meetingsTotal);
+  }, [contacts, searchQuery]);
 
-    return sorted;
-  };
-
-  const getFilteredCompanies = () => {
-    let filtered = [...companies];
-
-    if (searchQuery) {
-      filtered = filtered.filter(c =>
-        c.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    return filtered.sort((a, b) => b.healthScore - a.healthScore);
-  };
-
-  const sortedContacts = getSortedContacts();
-  const displayedContacts = sortedContacts.slice(0, displayCount);
-  const filteredCompanies = getFilteredCompanies();
-  const activeContacts = allContacts.filter(c => c.lastContactDays <= 30).length;
-  const totalSignals = allContacts.filter(c => c.signals.length > 0).length;
-
-  const getDaysText = (days: number) => {
-    if (days === 0) return "Aujourd'hui";
-    if (days === 1) return "Hier";
-    if (days < 7) return `${days}j`;
-    if (days < 30) return `${Math.floor(days / 7)}sem`;
-    return `${Math.floor(days / 30)}m`;
-  };
-
-  const getSignalIcon = (signal: string) => {
-    switch (signal) {
-      case 'hot': return '🔥';
-      case 'new-role': return '⚡';
-      case 'mutual': return '🤝';
-      case 'risk': return '⚠️';
-      case 'expansion': return '📈';
-      default: return '';
-    }
-  };
-
-  const sortOptions = [
-    { value: 'signals', label: '⚡ Signaux actifs', icon: Zap },
-    { value: 'engagement', label: '📊 Engagement', icon: TrendingUp },
-    { value: 'risk', label: '⏰ À risque', icon: AlertTriangle },
-    { value: 'deciders', label: '🎯 Décideurs', icon: Star },
-    { value: 'emails', label: '📧 Volume emails', icon: Mail }
+  const sortOptions: { value: SortType; label: string }[] = [
+    { value: 'meetings', label: '📅 Réunions' },
+    { value: 'engagement', label: '📊 Engagement' },
+    { value: 'risk', label: '⏰ À risque' },
+    { value: 'alpha', label: '🔤 A→Z' },
   ];
+
+  const displayed = sorted.slice(0, displayCount);
 
   return (
     <div className="size-full bg-background overflow-auto">
@@ -197,55 +559,70 @@ export default function Contacts() {
             <div>
               <h1 className="text-4xl font-semibold mb-2">Intelligence Relationnelle</h1>
               <p className="text-muted-foreground flex items-center gap-4">
-                <span className="font-medium">{allContacts.length} contacts</span>
-                <span className="text-xs">•</span>
-                <span>{activeContacts} actifs (30j)</span>
-                <span className="text-xs">•</span>
-                <span className="flex items-center gap-1">
-                  <Sparkles className="size-3 text-primary" />
-                  {totalSignals} signaux détectés
-                </span>
+                {loading ? (
+                  <span className="flex items-center gap-2"><Loader2 className="size-3 animate-spin" /> Chargement…</span>
+                ) : (
+                  <>
+                    <span className="font-medium">{contacts.length} contact{contacts.length !== 1 ? 's' : ''}</span>
+                    {contacts.length > 0 && (
+                      <>
+                        <span className="text-xs">•</span>
+                        <span>{companies.size ?? companies.length} entreprise{companies.length !== 1 ? 's' : ''}</span>
+                        <span className="text-xs">•</span>
+                        <span className="flex items-center gap-1">
+                          <Calendar className="size-3 text-primary" />
+                          {contacts.reduce((s, c) => s + c.meetingsCount, 0)} réunion{contacts.reduce((s, c) => s + c.meetingsCount, 0) !== 1 ? 's' : ''}
+                        </span>
+                      </>
+                    )}
+                  </>
+                )}
               </p>
             </div>
-            <button className="px-6 py-3 bg-primary text-white rounded-xl hover:bg-accent transition-colors flex items-center gap-2 font-medium">
-              <Sparkles className="size-4" />
-              Analyser
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadContacts}
+                className="px-4 py-2 bg-muted hover:bg-muted/70 rounded-xl flex items-center gap-2 text-sm transition-colors"
+              >
+                <RefreshCw className="size-4" />
+                Actualiser
+              </button>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-4 py-2 bg-primary text-white hover:bg-accent rounded-xl flex items-center gap-2 text-sm font-medium transition-colors"
+              >
+                <Plus className="size-4" />
+                Ajouter un contact
+              </button>
+            </div>
           </div>
 
-          {/* View Toggle */}
+          {/* View Toggle + Search */}
           <div className="flex items-center justify-between">
             <div className="flex gap-2">
               <button
                 onClick={() => setViewType('people')}
-                className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${
-                  viewType === 'people'
-                    ? 'bg-primary text-white'
-                    : 'bg-card border border-border hover:bg-muted/50'
+                className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-sm ${
+                  viewType === 'people' ? 'bg-primary text-white' : 'bg-card border border-border hover:bg-muted/50'
                 }`}
               >
-                <Users className="size-4" />
-                Personnes
+                <Users className="size-4" /> Personnes
               </button>
               <button
                 onClick={() => setViewType('companies')}
-                className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${
-                  viewType === 'companies'
-                    ? 'bg-primary text-white'
-                    : 'bg-card border border-border hover:bg-muted/50'
+                className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-sm ${
+                  viewType === 'companies' ? 'bg-primary text-white' : 'bg-card border border-border hover:bg-muted/50'
                 }`}
               >
-                <Building2 className="size-4" />
-                Entreprises
+                <Building2 className="size-4" /> Entreprises
               </button>
             </div>
 
-            {/* Search */}
             <div className="relative w-96">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Rechercher..."
+                placeholder="Rechercher un contact, entreprise..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
@@ -254,9 +631,40 @@ export default function Contacts() {
           </div>
         </motion.div>
 
-        {viewType === 'people' ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="size-8 text-primary animate-spin" />
+          </div>
+        ) : contacts.length === 0 ? (
+          /* Empty state */
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center py-24 text-center"
+          >
+            <div className="size-20 bg-muted/50 rounded-3xl flex items-center justify-center mb-6">
+              <Users className="size-10 text-muted-foreground" />
+            </div>
+            <h2 className="text-2xl font-semibold mb-3">Aucun contact pour le moment</h2>
+            <p className="text-muted-foreground max-w-md mb-8">
+              Vos contacts apparaîtront automatiquement après la synchronisation de votre Google Calendar.
+              Chaque participant à vos réunions externes sera importé.
+            </p>
+            <div className="bg-card border border-border rounded-2xl p-6 max-w-sm text-left">
+              <p className="font-medium mb-3 flex items-center gap-2">
+                <Calendar className="size-4 text-primary" />
+                Comment importer vos contacts
+              </p>
+              <ol className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex gap-2"><span className="text-primary font-bold">1.</span> Allez dans <strong>Réunions</strong></li>
+                <li className="flex gap-2"><span className="text-primary font-bold">2.</span> Cliquez <strong>"Sync Google Calendar"</strong></li>
+                <li className="flex gap-2"><span className="text-primary font-bold">3.</span> Vos contacts arrivent automatiquement</li>
+              </ol>
+            </div>
+          </motion.div>
+        ) : viewType === 'people' ? (
           <>
-            {/* Sort Options */}
+            {/* Sort */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -264,126 +672,96 @@ export default function Contacts() {
               className="mb-6 flex items-center gap-3"
             >
               <Filter className="size-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Tri:</span>
-              {sortOptions.map((option) => (
+              <span className="text-sm text-muted-foreground">Tri :</span>
+              {sortOptions.map(opt => (
                 <button
-                  key={option.value}
-                  onClick={() => setSortBy(option.value as SortType)}
-                  className={`px-3 py-1.5 rounded-lg transition-all text-sm flex items-center gap-1.5 ${
-                    sortBy === option.value
-                      ? 'bg-primary text-white'
-                      : 'bg-card border border-border hover:bg-muted/50'
+                  key={opt.value}
+                  onClick={() => setSortBy(opt.value)}
+                  className={`px-3 py-1.5 rounded-lg transition-all text-sm ${
+                    sortBy === opt.value ? 'bg-primary text-white' : 'bg-card border border-border hover:bg-muted/50'
                   }`}
                 >
-                  {option.label}
+                  {opt.label}
                 </button>
               ))}
             </motion.div>
 
-            {/* Dense Table */}
+            {/* Table */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
               className="bg-card rounded-2xl border border-border overflow-hidden"
             >
-              {/* Table Header */}
-              <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-muted/30 border-b border-border text-xs font-semibold text-muted-foreground">
-                <div className="col-span-3">Contact</div>
-                <div className="col-span-2">Entreprise</div>
-                <div className="col-span-2 text-center">Engagement</div>
-                <div className="col-span-1 text-center">Emails<br/>(30j)</div>
-                <div className="col-span-1 text-center">Meetings<br/>(30j)</div>
-                <div className="col-span-1 text-center">Dernier<br/>Contact</div>
-                <div className="col-span-1 text-center">Signaux</div>
-                <div className="col-span-1"></div>
+              <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-muted/30 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                <div className="col-span-4">Contact</div>
+                <div className="col-span-3">Entreprise</div>
+                <div className="col-span-2 text-center">Réunions</div>
+                <div className="col-span-2 text-center">Dernier contact</div>
+                <div className="col-span-1" />
               </div>
 
-              {/* Table Rows */}
               <div className="divide-y divide-border">
-                {displayedContacts.map((contact, i) => (
+                {displayed.map((contact, i) => (
                   <motion.div
                     key={contact.id}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3, delay: i * 0.02 }}
-                    className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-muted/20 transition-colors cursor-pointer group"
+                    transition={{ duration: 0.3, delay: i * 0.015 }}
+                    className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-muted/20 transition-colors cursor-pointer group items-center"
                     onClick={() => navigate(`/contact/${contact.id}`)}
                   >
                     {/* Contact */}
-                    <div className="col-span-3 flex items-center gap-3">
-                      <span className="text-2xl">{contact.photo}</span>
+                    <div className="col-span-4 flex items-center gap-3">
+                      <div className="size-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
+                        {contact.initials}
+                      </div>
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <p className="font-semibold text-sm truncate">{contact.name}</p>
                           {contact.isDecisionMaker && (
                             <Star className="size-3 text-primary fill-primary flex-shrink-0" />
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground truncate">{contact.role}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {contact.role || contact.email || '—'}
+                        </p>
                       </div>
                     </div>
 
                     {/* Company */}
-                    <div className="col-span-2 flex items-center">
-                      <p className="text-sm truncate">{contact.company}</p>
-                    </div>
-
-                    {/* Engagement Score */}
-                    <div className="col-span-2 flex flex-col items-center justify-center">
-                      <div className="w-full max-w-[120px]">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-semibold">{contact.engagementScore}</span>
-                          <span className="text-xs text-muted-foreground">/100</span>
-                        </div>
-                        <div className="w-full bg-border rounded-full h-1.5">
-                          <div
-                            className={`rounded-full h-1.5 transition-all ${
-                              contact.engagementScore >= 80 ? 'bg-success' :
-                              contact.engagementScore >= 70 ? 'bg-primary' :
-                              contact.engagementScore >= 60 ? 'bg-warning' :
-                              'bg-destructive'
-                            }`}
-                            style={{ width: `${contact.engagementScore}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Emails */}
-                    <div className="col-span-1 flex items-center justify-center">
-                      <span className="text-sm font-medium">{contact.emails30d}</span>
-                      <span className="text-xs text-muted-foreground ml-0.5">↔️</span>
+                    <div className="col-span-3 flex items-center gap-2">
+                      {contact.company ? (
+                        <>
+                          <div className="size-6 rounded-md bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground flex-shrink-0">
+                            {contact.company[0].toUpperCase()}
+                          </div>
+                          <p className="text-sm truncate">{contact.company}</p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
                     </div>
 
                     {/* Meetings */}
-                    <div className="col-span-1 flex items-center justify-center">
-                      <span className="text-sm font-medium">{contact.meetings30d}</span>
+                    <div className="col-span-2 flex items-center justify-center gap-1">
+                      <Calendar className="size-3 text-muted-foreground" />
+                      <span className="text-sm font-medium">{contact.meetingsCount}</span>
                     </div>
 
-                    {/* Last Contact */}
-                    <div className="col-span-1 flex items-center justify-center">
+                    {/* Last contact */}
+                    <div className="col-span-2 flex items-center justify-center">
                       <span className={`text-sm font-medium ${
-                        contact.lastContactDays > 10 ? 'text-destructive' :
-                        contact.lastContactDays > 5 ? 'text-warning' :
+                        contact.lastContactDays === null ? 'text-muted-foreground' :
+                        contact.lastContactDays > 14 ? 'text-destructive' :
+                        contact.lastContactDays > 7 ? 'text-warning' :
                         'text-success'
                       }`}>
                         {getDaysText(contact.lastContactDays)}
                       </span>
                     </div>
 
-                    {/* Signals */}
-                    <div className="col-span-1 flex items-center justify-center gap-0.5">
-                      {contact.signals.length > 0 ? (
-                        contact.signals.map((signal, idx) => (
-                          <span key={idx} className="text-base">{getSignalIcon(signal)}</span>
-                        ))
-                      ) : (
-                        <span className="text-muted-foreground text-xs">-</span>
-                      )}
-                    </div>
-
-                    {/* Action */}
+                    {/* Arrow */}
                     <div className="col-span-1 flex items-center justify-end">
                       <ArrowRight className="size-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                     </div>
@@ -392,118 +770,71 @@ export default function Contacts() {
               </div>
             </motion.div>
 
-            {/* Load More */}
-            {displayCount < sortedContacts.length && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="mt-6 text-center"
-              >
+            {displayCount < sorted.length && (
+              <div className="mt-6 text-center">
                 <button
-                  onClick={() => setDisplayCount(displayCount + 25)}
-                  className="px-6 py-3 bg-card hover:bg-muted/50 border border-border rounded-xl transition-colors flex items-center gap-2 mx-auto"
+                  onClick={() => setDisplayCount(d => d + 50)}
+                  className="px-6 py-3 bg-card hover:bg-muted/50 border border-border rounded-xl transition-colors flex items-center gap-2 mx-auto text-sm"
                 >
                   <ChevronDown className="size-4" />
-                  Charger 25 contacts de plus ({sortedContacts.length - displayCount} restants)
+                  Charger 50 de plus ({sorted.length - displayCount} restants)
                 </button>
-              </motion.div>
+              </div>
             )}
           </>
         ) : (
-          /* Companies View */
+          /* Companies view */
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
             className="bg-card rounded-2xl border border-border overflow-hidden"
           >
-            {/* Table Header */}
-            <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-muted/30 border-b border-border text-xs font-semibold text-muted-foreground">
-              <div className="col-span-3">Entreprise</div>
-              <div className="col-span-2 text-center"># Contacts<br/>actifs</div>
-              <div className="col-span-2 text-center">Email Vol<br/>(30j)</div>
-              <div className="col-span-1 text-center">Meetings<br/>(30j)</div>
-              <div className="col-span-2 text-center">Health Score</div>
-              <div className="col-span-1 text-center">Dernier<br/>Contact</div>
-              <div className="col-span-1"></div>
+            <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-muted/30 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <div className="col-span-4">Entreprise</div>
+              <div className="col-span-3 text-center">Contacts</div>
+              <div className="col-span-2 text-center">Réunions</div>
+              <div className="col-span-2 text-center">Dernier contact</div>
+              <div className="col-span-1" />
             </div>
 
-            {/* Table Rows */}
             <div className="divide-y divide-border">
-              {filteredCompanies.map((company, i) => (
+              {companies.map((grp, i) => (
                 <motion.div
-                  key={company.id}
+                  key={grp.name}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, delay: i * 0.05 }}
-                  className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-muted/20 transition-colors cursor-pointer group"
-                  onClick={() => navigate(`/company/${company.id}`)}
+                  transition={{ duration: 0.3, delay: i * 0.04 }}
+                  className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-muted/20 transition-colors cursor-pointer group items-center"
                 >
-                  {/* Company */}
-                  <div className="col-span-3 flex items-center gap-3">
-                    <span className="text-3xl">{company.logo}</span>
-                    <p className="font-semibold">{company.name}</p>
-                  </div>
-
-                  {/* Contacts */}
-                  <div className="col-span-2 flex flex-col items-center justify-center">
-                    <p className="text-sm font-semibold">{company.activeContacts} contacts</p>
-                    <p className="text-xs text-muted-foreground">
-                      {Math.round((company.activeContacts / company.totalContacts) * 100)}% coverage
-                    </p>
-                  </div>
-
-                  {/* Emails */}
-                  <div className="col-span-2 flex items-center justify-center">
-                    <span className="text-sm font-medium">{company.emails30d}</span>
-                    <span className="text-xs text-muted-foreground ml-0.5">↔️</span>
-                  </div>
-
-                  {/* Meetings */}
-                  <div className="col-span-1 flex items-center justify-center">
-                    <span className="text-sm font-medium">{company.meetings30d}</span>
-                  </div>
-
-                  {/* Health Score */}
-                  <div className="col-span-2 flex flex-col items-center justify-center">
-                    <div className="w-full max-w-[120px]">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-semibold">{company.healthScore}</span>
-                        <span className="text-xs text-muted-foreground">/100</span>
-                      </div>
-                      <div className="w-full bg-border rounded-full h-1.5">
-                        <div
-                          className={`rounded-full h-1.5 transition-all ${
-                            company.healthScore >= 80 ? 'bg-success' :
-                            company.healthScore >= 70 ? 'bg-primary' :
-                            company.healthScore >= 60 ? 'bg-warning' :
-                            'bg-destructive'
-                          }`}
-                          style={{ width: `${company.healthScore}%` }}
-                        />
-                      </div>
+                  <div className="col-span-4 flex items-center gap-3">
+                    <div className="size-10 rounded-xl bg-muted flex items-center justify-center text-base font-bold flex-shrink-0">
+                      {grp.name[0].toUpperCase()}
                     </div>
+                    <p className="font-semibold">{grp.name}</p>
                   </div>
 
-                  {/* Last Contact */}
-                  <div className="col-span-1 flex flex-col items-center justify-center">
+                  <div className="col-span-3 flex items-center justify-center gap-1">
+                    <Users className="size-3 text-muted-foreground" />
+                    <span className="text-sm font-medium">{grp.contacts.length}</span>
+                  </div>
+
+                  <div className="col-span-2 flex items-center justify-center gap-1">
+                    <Calendar className="size-3 text-muted-foreground" />
+                    <span className="text-sm font-medium">{grp.meetingsTotal}</span>
+                  </div>
+
+                  <div className="col-span-2 flex items-center justify-center">
                     <span className={`text-sm font-medium ${
-                      company.lastContactDays > 10 ? 'text-destructive' :
-                      company.lastContactDays > 5 ? 'text-warning' :
+                      grp.lastContactDays === null ? 'text-muted-foreground' :
+                      grp.lastContactDays > 14 ? 'text-destructive' :
+                      grp.lastContactDays > 7 ? 'text-warning' :
                       'text-success'
                     }`}>
-                      {getDaysText(company.lastContactDays)}
+                      {getDaysText(grp.lastContactDays)}
                     </span>
-                    {company.signals.length > 0 && (
-                      <div className="flex gap-0.5 mt-1">
-                        {company.signals.map((signal, idx) => (
-                          <span key={idx} className="text-xs">{getSignalIcon(signal)}</span>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
-                  {/* Action */}
                   <div className="col-span-1 flex items-center justify-end">
                     <ArrowRight className="size-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                   </div>
@@ -513,6 +844,17 @@ export default function Contacts() {
           </motion.div>
         )}
       </div>
+
+      {/* Add Contact Modal */}
+      <AnimatePresence>
+        {showAddModal && orgId && (
+          <AddContactModal
+            orgId={orgId}
+            onClose={() => setShowAddModal(false)}
+            onAdded={() => { loadContacts(); }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1,18 +1,30 @@
 import { motion } from 'motion/react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Users, Network, Calendar, Shield } from 'lucide-react';
+import { Users, Network, Calendar, Shield, Linkedin, Mail } from 'lucide-react';
 import logoKnowy from '../../imports/Pre_sentation1.jpg';
 import { supabase } from '../../lib/supabase';
 
+// After OAuth, OnboardingRoute/ProtectedApp will decide where to go
 const redirectTo = `${window.location.origin}/onboarding/step1`;
 
-type OAuthProvider = 'google' | 'azure';
+type OAuthProvider = 'google' | 'azure' | 'linkedin_oidc';
 
 export default function SignIn() {
   const navigate = useNavigate();
   const [pending, setPending] = useState<OAuthProvider | null>(null);
+
+  // Already logged in → go straight to dashboard
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) navigate('/dashboard', { replace: true });
+    });
+  }, [navigate]);
+  const [emailPending, setEmailPending] = useState(false);
+  const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   async function handleOAuth(provider: OAuthProvider) {
     setError(null);
@@ -24,14 +36,23 @@ export default function SignIn() {
       return;
     }
 
-    const scopes =
-      provider === 'google'
-        ? 'email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly'
-        : 'email openid profile offline_access Calendars.Read Mail.Read';
+    const scopes = {
+      google: 'email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly',
+      azure: 'email openid profile offline_access Calendars.Read Mail.Read',
+      linkedin_oidc: 'openid profile email',
+    }[provider];
 
     const { error: authError } = await supabase.auth.signInWithOAuth({
       provider: provider as any,
-      options: { redirectTo, scopes },
+      options: {
+        redirectTo,
+        scopes,
+        // Request offline access to get refresh_token for long-lived Calendar/Gmail sync
+        queryParams: provider === 'google' ? {
+          access_type: 'offline',
+          prompt: 'consent',
+        } : undefined,
+      },
     });
 
     if (authError) {
@@ -39,6 +60,38 @@ export default function SignIn() {
       setError(`Connexion impossible : ${authError.message}`);
     }
     // On success, Supabase redirects — no need to navigate()
+  }
+
+  async function handleEmailLink() {
+    setError(null);
+    setMagicLinkSent(false);
+
+    if (!supabase) {
+      setError('Configuration Supabase absente. Vérifiez VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY.');
+      return;
+    }
+
+    if (!email.trim()) {
+      setError('Renseignez votre email pour recevoir un lien de connexion.');
+      return;
+    }
+
+    setEmailPending(true);
+    const { error: authError } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        emailRedirectTo: redirectTo,
+        shouldCreateUser: true,
+      },
+    });
+    setEmailPending(false);
+
+    if (authError) {
+      setError(`Email impossible à envoyer : ${authError.message}`);
+      return;
+    }
+
+    setMagicLinkSent(true);
   }
 
   return (
@@ -150,6 +203,16 @@ export default function SignIn() {
                 <span>{pending === 'azure' ? 'Ouverture…' : 'Continuer avec Outlook'}</span>
               </button>
 
+              {/* LinkedIn */}
+              <button
+                onClick={() => handleOAuth('linkedin_oidc')}
+                disabled={Boolean(pending) || emailPending}
+                className="w-full flex items-center justify-center gap-3 bg-white hover:bg-muted/50 text-foreground rounded-2xl px-6 py-4 border border-border transition-all duration-300 hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <Linkedin className="size-5 flex-shrink-0 text-[#0A66C2]" />
+                <span>{pending === 'linkedin_oidc' ? 'Ouverture…' : 'Continuer avec LinkedIn'}</span>
+              </button>
+
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-border" />
@@ -159,13 +222,36 @@ export default function SignIn() {
                 </div>
               </div>
 
-              <button
-                onClick={() => navigate('/onboarding/step1')}
-                disabled={Boolean(pending)}
-                className="w-full bg-primary hover:bg-accent text-primary-foreground rounded-2xl px-6 py-4 transition-all duration-300 hover:shadow-lg hover:shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                Créer un compte manuellement
-              </button>
+              <div className="space-y-3">
+                <label className="text-sm font-medium" htmlFor="email">
+                  Continuer avec email
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Mail className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="jordan.knowy@gmail.com"
+                      className="w-full rounded-2xl border border-border bg-input-background py-4 pl-11 pr-4 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+                    />
+                  </div>
+                  <button
+                    onClick={handleEmailLink}
+                    disabled={Boolean(pending) || emailPending}
+                    className="rounded-2xl bg-primary px-5 py-4 text-sm font-medium text-primary-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {emailPending ? 'Envoi…' : 'Envoyer'}
+                  </button>
+                </div>
+                {magicLinkSent && (
+                  <p className="rounded-xl border border-success/20 bg-success/10 p-3 text-sm text-success">
+                    Lien envoyé. Ouvrez votre email pour continuer l'onboarding.
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Error */}

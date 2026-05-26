@@ -11,3 +11,4 @@ These items should be resolved before connecting real production services.
 7. Is the UI language French-only for MVP, or should text be prepared for FR/EN later?
 8. Which OpenAI project/API key should be stored as the Supabase `OPENAI_API_KEY` Edge Function secret?
 9. Should Supabase Auth leaked password protection be enabled now for production hardening?
+10. What RLS policies should govern `subscription_plans`, `subscriptions`, and `ai_usage_events` before subscription screens are exposed to real users?

@@ -1,10 +1,9 @@
 import { motion } from 'motion/react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft,
   Sparkles,
-  Share2,
   Database,
   TrendingUp,
   TrendingDown,
@@ -16,8 +15,6 @@ import {
   CheckCircle,
   AlertTriangle,
   AlertCircle,
-  MessageSquare,
-  ExternalLink,
   ChevronDown,
   ChevronUp,
   Globe,
@@ -25,16 +22,61 @@ import {
   Target,
   Zap,
   Users,
-  FileText,
-  Tag,
-  Building2,
-  User
+  Loader2,
+  ExternalLink,
+  Plus
 } from 'lucide-react';
 import KnowyCard from './knowy/KnowyCard';
 import KnowyButton from './knowy/KnowyButton';
 import KnowyBadge from './knowy/KnowyBadge';
+import { getContact, getCognitiveProfile } from '../../lib/api/contacts';
+import { getActiveOrganizationId } from '../../lib/api/org';
+import { supabase } from '../../lib/supabase';
+import type { CognitiveProfile } from '../../types/domain';
 
 type Phase = 'growth' | 'stagnant' | 'decline';
+
+function relDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const d = Math.floor(diff / 86400000);
+  if (d === 0) return "Aujourd'hui";
+  if (d === 1) return 'Hier';
+  if (d < 7) return `Il y a ${d} jours`;
+  if (d < 30) return `Il y a ${Math.floor(d / 7)} sem.`;
+  return `Il y a ${Math.floor(d / 30)} mois`;
+}
+
+function jobDuration(job: any): string {
+  const start = job.started_at ? new Date(job.started_at).getFullYear() : null;
+  const end = job.is_current ? 'Présent' : (job.ended_at ? new Date(job.ended_at).getFullYear() : null);
+  if (!start) return '';
+  const startMs = new Date(job.started_at).getTime();
+  const endMs = job.is_current ? Date.now() : (job.ended_at ? new Date(job.ended_at).getTime() : Date.now());
+  const months = Math.round((endMs - startMs) / (1000 * 60 * 60 * 24 * 30));
+  const years = Math.floor(months / 12);
+  const rem = months % 12;
+  const dur = years > 0 ? `${years} an${years > 1 ? 's' : ''}${rem > 0 ? ` ${rem} mois` : ''}` : `${months} mois`;
+  return `${start} - ${end} (${dur})`;
+}
+
+const axisLabelMap: Record<string, { label: string; opposite: string }> = {
+  relation_result: { label: 'Résultat', opposite: 'Relation' },
+  caution_speed: { label: 'Rapidité', opposite: 'Réflexion' },
+  intuition_structure: { label: 'Structure', opposite: 'Flexibilité' },
+  consensus_control: { label: 'Contrôle', opposite: 'Délégation' },
+};
+
+const sourceLabel: Record<string, string> = {
+  gmail: 'Gmail',
+  calendar: 'Calendar',
+  linkedin_public: 'LinkedIn',
+  crm: 'CRM',
+  slack: 'Slack',
+  meeting_transcript: 'Réunion',
+  public_news: 'Actualités',
+  knowy_memory: 'Mémoire Knowy',
+};
 
 export default function RelationDetail() {
   const { id } = useParams();
@@ -46,241 +88,335 @@ export default function RelationDetail() {
     history: false,
     topics: false,
     company: false,
-    network: false
+    network: false,
   });
 
-  const toggleBlock = (block: keyof typeof openBlocks) => {
-    setOpenBlocks(prev => ({ ...prev, [block]: !prev[block] }));
-  };
+  const [loading, setLoading] = useState(true);
+  const [rawContact, setRawContact] = useState<any>(null);
+  const [snapshot, setSnapshot] = useState<any>(null);
+  const [cogProfile, setCogProfile] = useState<CognitiveProfile | null>(null);
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [topicsData, setTopicsData] = useState<any[]>([]);
+  const [objectionsData, setObjectionsData] = useState<any[]>([]);
+  const [careerData, setCareerData] = useState<any[]>([]);
+  const [memoryData, setMemoryData] = useState<any[]>([]);
+  const [companySignalsData, setCompanySignalsData] = useState<any[]>([]);
+  const [meetingsHistory, setMeetingsHistory] = useState<any[]>([]);
 
-  // Mock data - in real app this would come from API
-  const contact = {
-    name: 'Sarah Chen',
-    title: 'VP Partnerships',
-    titleConfirmed: true,
-    company: 'Contentsquare',
-    companyLogo: '🎯',
-    sector: 'SaaS · Analytics',
-    location: 'Paris, France',
-    tenure: '2 ans et 4 mois',
-    avatar: 'SC',
-    phase: 'growth' as Phase,
-    phaseDuration: '6 semaines',
-    engagementScore: 87,
-    lastContact: {
-      date: 'Il y a 3 jours',
-      type: 'email'
-    },
-    frequency: 21,
-    nextRecommended: 9,
-    reciprocity: 30,
-    sources: {
-      gmail: true,
-      calendar: true,
-      linkedin: true,
-      crm: false
+  const toggleBlock = (block: keyof typeof openBlocks) =>
+    setOpenBlocks((prev) => ({ ...prev, [block]: !prev[block] }));
+
+  useEffect(() => {
+    if (!id) return;
+    let mounted = true;
+
+    async function load() {
+      setLoading(true);
+
+      if (!supabase) {
+        setLoading(false);
+        return;
+      }
+
+      // 1. Load contact with company join
+      const { data: rc } = await supabase
+        .from('contacts')
+        .select('*, companies(name, sector)')
+        .eq('id', id)
+        .maybeSingle();
+      if (mounted && rc) setRawContact(rc);
+
+      const orgId = await getActiveOrganizationId();
+
+      // 2. Parallel v2 table queries (graceful — tables may not exist)
+      const [snapRes, alertsRes, topicsRes, objRes, careerRes, memRes] = await Promise.all([
+        supabase
+          .from('relationship_snapshots')
+          .select('*')
+          .eq('contact_id', id)
+          .order('snapshot_date', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('contact_alerts')
+          .select('*')
+          .eq('contact_id', id)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('contact_topics')
+          .select('*')
+          .eq('contact_id', id)
+          .order('mention_count', { ascending: false }),
+        supabase
+          .from('contact_objections')
+          .select('*')
+          .eq('contact_id', id),
+        supabase
+          .from('contact_career_path')
+          .select('*')
+          .eq('contact_id', id)
+          .order('started_at', { ascending: false }),
+        supabase
+          .from('knowy_memory_snapshots')
+          .select('*')
+          .eq('contact_id', id)
+          .order('brief_number', { ascending: true }),
+      ]);
+
+      if (mounted) {
+        if (!snapRes.error) setSnapshot(snapRes.data ?? null);
+        if (!alertsRes.error) setAlerts(alertsRes.data ?? []);
+        if (!topicsRes.error) setTopicsData(topicsRes.data ?? []);
+        if (!objRes.error) setObjectionsData(objRes.data ?? []);
+        if (!careerRes.error) setCareerData(careerRes.data ?? []);
+        if (!memRes.error) setMemoryData(memRes.data ?? []);
+      }
+
+      // 3. Company signals — needs company name from contact
+      if (rc?.companies?.name) {
+        const { data: sigData } = await supabase
+          .from('company_signals')
+          .select('*')
+          .ilike('company_name', `%${rc.companies.name}%`)
+          .eq('is_active', true)
+          .order('signal_date', { ascending: false })
+          .limit(5);
+        if (mounted && sigData) setCompanySignalsData(sigData);
+      }
+
+      // 4. Recent meetings involving this contact
+      if (orgId) {
+        const { data: partRows } = await supabase
+          .from('meeting_participants')
+          .select('meeting_id')
+          .eq('contact_id', id);
+
+        if (partRows?.length) {
+          const mids = partRows.map((p: any) => p.meeting_id);
+          const { data: mts } = await supabase
+            .from('meetings')
+            .select('id, title, starts_at, actual_duration_minutes, brief_status')
+            .in('id', mids)
+            .eq('organization_id', orgId)
+            .order('starts_at', { ascending: false })
+            .limit(8);
+          if (mounted) setMeetingsHistory(mts ?? []);
+        }
+      }
+
+      // 5. Cognitive profile (existing API with mock fallback)
+      const cog = await getCognitiveProfile(id);
+      if (mounted) setCogProfile(cog);
+
+      if (mounted) setLoading(false);
     }
-  };
 
-  const alerts = [
-    {
-      type: 'news',
-      severity: 'success',
-      title: 'Actualité favorable',
-      message: 'Contentsquare vient de lever 500M$ — fenêtre d\'opportunité',
-      date: 'Il y a 2 jours'
-    }
-  ];
+    load();
+    return () => { mounted = false; };
+  }, [id]);
 
-  const stats = [
-    { label: 'Emails échangés', value: '47', source: 'Gmail' },
-    { label: 'Réunions tenues', value: '8', source: 'Calendar' },
-    { label: 'Durée moyenne', value: '42 min', source: 'Calendar' },
-    { label: 'Dernier contact', value: 'Il y a 3 jours', source: 'Gmail' },
-    { label: 'Taux de réponse', value: '< 4h', source: 'Gmail' },
-    { label: 'Réunions manquées', value: '0 / 8', source: 'Calendar' }
-  ];
+  // ─── Derived display objects ────────────────────────────────────────────────
 
-  const interactionProfile = {
-    confidence: 72,
-    axes: [
-      { label: 'Résultat', opposite: 'Relation', value: 75, confidence: 80, description: 'Forte orientation résultat', level: 'Observable' },
-      { label: 'Rapidité', opposite: 'Réflexion', value: 85, confidence: 85, description: 'Préfère l\'action rapide', level: 'Observable' },
-      { label: 'Structure', opposite: 'Flexibilité', value: 45, confidence: 70, description: 'Préfère la flexibilité', level: 'Inféré' },
-      { label: 'Contrôle', opposite: 'Délégation', value: 60, confidence: 65, description: 'Équilibre contrôle/autonomie', level: 'Inféré' }
-    ],
-    modes: [
-      { name: 'Directif', probability: 85, description: 'Communication directe, orientation action' },
-      { name: 'Analytique', probability: 60, description: 'Recherche de données factuelles' }
-    ]
-  };
+  const contact = rawContact
+    ? {
+        name: rawContact.full_name ?? '—',
+        title: rawContact.role_title ?? '—',
+        titleConfirmed: rawContact.title_confirmed ?? false,
+        company: rawContact.companies?.name ?? rawContact.company_name ?? '—',
+        companyLogo: '🏢',
+        sector: rawContact.companies?.sector ?? '—',
+        location: '—',
+        avatar: (rawContact.full_name ?? '?')
+          .split(/\s+/)
+          .map((n: string) => n[0] ?? '')
+          .join('')
+          .slice(0, 2)
+          .toUpperCase(),
+        phase: (snapshot?.phase ?? 'stagnant') as Phase,
+        phaseDuration: snapshot?.phase_since_weeks
+          ? `${snapshot.phase_since_weeks} semaines`
+          : '—',
+        engagementScore: snapshot?.engagement_score ?? 0,
+        lastContact: {
+          date: relDate(snapshot?.last_contact_date),
+          type: snapshot?.last_contact_type ?? '—',
+        },
+        frequency: snapshot?.frequency_days ?? 0,
+        nextRecommended: snapshot?.next_contact_recommended_days ?? 0,
+        reciprocity: snapshot?.reciprocity_you_percentage ?? 50,
+        sources: {
+          gmail: snapshot?.source_gmail ?? false,
+          calendar: snapshot?.source_calendar ?? false,
+          linkedin: snapshot?.source_linkedin ?? false,
+          crm: snapshot?.source_crm ?? false,
+        },
+      }
+    : null;
 
-  const behavioralInsights = [
-    {
-      icon: Globe,
-      type: 'Mobilité / Aventure',
-      insight: 'A vécu à l\'étranger 3+ ans → tolérance à l\'incertitude, ouverture au changement',
-      source: 'LinkedIn',
-      confidence: 65
-    },
-    {
-      icon: Briefcase,
-      type: 'Transversalité',
-      insight: 'A travaillé dans 3 industries différentes (Tech · Retail · Conseil) → curiosité transversale',
-      source: 'LinkedIn',
-      confidence: 70
-    },
-    {
-      icon: Target,
-      type: 'Style de communication',
-      insight: 'Emails courts (23 mots en moyenne), réponses < 2h → directivité, orientation action',
-      source: 'Gmail',
-      confidence: 80
-    },
-    {
-      icon: Zap,
-      type: 'Entrepreneuriat',
-      insight: 'A fondé une startup en 2018 → tolérance à l\'ambiguïté, orientation résultat',
-      source: 'LinkedIn',
-      confidence: 75
-    }
-  ];
+  const displayAlerts = alerts.map((a: any) => ({
+    type: a.alert_type,
+    severity: a.severity as 'success' | 'warning' | 'danger' | 'info',
+    title: a.title,
+    message: a.message ?? '',
+    date: relDate(a.created_at),
+  }));
 
-  const careerPath = [
-    {
-      title: 'VP Partnerships',
-      company: 'Contentsquare',
-      duration: '2024 - Présent (2 ans 4 mois)',
-      sector: 'SaaS',
-      isCurrent: true,
-      badges: []
-    },
-    {
-      title: 'Director of Business Development',
-      company: 'Amplitude',
-      duration: '2021 - 2024 (3 ans)',
-      sector: 'SaaS',
-      isCurrent: false,
-      badges: ['Promotion']
-    },
-    {
-      title: 'Senior BD Manager',
-      company: 'Shopify',
-      duration: '2018 - 2021 (3 ans)',
-      sector: 'Tech',
-      isCurrent: false,
-      badges: ['Pivot']
-    },
-    {
-      title: 'Founder & CEO',
-      company: 'FoodTech Startup',
-      duration: '2016 - 2018 (2 ans)',
-      sector: 'Food',
-      isCurrent: false,
-      badges: ['Fondateur']
-    }
-  ];
+  const stats = snapshot
+    ? [
+        { label: 'Emails échangés', value: String(snapshot.emails_exchanged ?? 0), source: 'Gmail' },
+        { label: 'Réunions tenues', value: String(snapshot.meetings_count ?? 0), source: 'Calendar' },
+        {
+          label: 'Durée moyenne',
+          value: snapshot.avg_meeting_duration_minutes
+            ? `${snapshot.avg_meeting_duration_minutes} min`
+            : '—',
+          source: 'Calendar',
+        },
+        { label: 'Dernier contact', value: relDate(snapshot.last_contact_date), source: 'Gmail' },
+        {
+          label: 'Taux de réponse',
+          value: snapshot.response_rate_hours
+            ? `< ${Math.round(snapshot.response_rate_hours)}h`
+            : '—',
+          source: 'Gmail',
+        },
+        {
+          label: 'Réunions manquées',
+          value: `${snapshot.missed_meetings ?? 0} / ${snapshot.meetings_count ?? 0}`,
+          source: 'Calendar',
+        },
+      ]
+    : [];
 
-  const exchangeHistory = [
-    {
-      type: 'email',
-      date: 'Il y a 3 jours',
-      subject: 'Re: Partnership discussion Q2',
-      tone: 'chaleureux',
-      wordCount: 34,
-      initiator: 'them'
-    },
-    {
-      type: 'meeting',
-      date: 'Il y a 1 semaine',
-      title: 'Q1 Partnership Review',
-      duration: '45 min',
-      planned: '30 min',
-      participants: 3,
-      hasBrief: true,
-      meetingId: '1' // Links to /meeting/1
-    },
-    {
-      type: 'email',
-      date: 'Il y a 2 semaines',
-      subject: 'Quick sync on analytics integration',
-      tone: 'neutre',
-      wordCount: 18,
-      initiator: 'you'
-    },
-    {
-      type: 'brief',
-      date: 'Il y a 3 semaines',
-      briefType: 'Commercial',
-      confidence: 85
-    }
-  ];
+  const interactionProfile = cogProfile
+    ? {
+        confidence: cogProfile.globalConfidence ?? 0,
+        axes: cogProfile.axes.map((a) => ({
+          label: axisLabelMap[a.axis]?.label ?? a.axis,
+          opposite: axisLabelMap[a.axis]?.opposite ?? '—',
+          value: a.value ?? 50,
+          confidence: a.confidence ?? 0,
+          level: a.level === 'observable' ? 'Observable' : 'Inféré',
+        })),
+        modes: cogProfile.interactionModes.slice(0, 3).map((m) => ({
+          name: m.mode,
+          probability: m.score ?? 0,
+        })),
+      }
+    : null;
 
-  const topics = [
-    { name: 'Budget', count: 4 },
-    { name: 'Intégration technique', count: 3 },
-    { name: 'Timeline', count: 2 },
-    { name: 'ROI', count: 2 },
-    { name: 'Équipe', count: 1 }
-  ];
+  const behavioralInsights = (cogProfile?.signals ?? []).slice(0, 4).map((sig) => ({
+    type: sig.type,
+    insight: sig.text,
+    source: sourceLabel[sig.sourceType] ?? sig.sourceType,
+    confidence: sig.confidence ?? 0,
+  }));
 
-  const objections = [
-    {
-      objection: 'Complexité d\'intégration',
-      firstMentioned: 'Il y a 2 mois',
-      mentions: 2,
-      status: 'resolved'
-    },
-    {
-      objection: 'Contraintes budgétaires',
-      firstMentioned: 'Il y a 1 mois',
-      mentions: 3,
-      status: 'active'
-    }
-  ];
+  const careerPath = careerData.map((job: any) => ({
+    title: job.job_title,
+    company: job.company_name,
+    duration: jobDuration(job),
+    sector: job.sector ?? '—',
+    isCurrent: job.is_current ?? false,
+    badges: job.career_badges ?? [],
+  }));
 
-  const companyContext = {
-    momentum: 'favorable',
-    news: 'Levée de 500M$ annoncée',
-    newsDate: 'Il y a 2 jours',
-    activeJobs: 23,
-    signals: ['Levée', 'Expansion', 'Recrutement actif']
-  };
+  const topics = topicsData.map((t: any) => ({
+    name: t.topic_name,
+    count: t.mention_count ?? 1,
+  }));
 
-  const sharedNetwork = [
-    { name: 'Marc Dubois', role: 'AE', interactions: '3 réunions', lastContact: 'Il y a 1 mois' },
-    { name: 'Julie Martin', role: 'CSM', interactions: '2 emails', lastContact: 'Il y a 2 semaines' }
-  ];
+  const objections = objectionsData.map((o: any) => ({
+    objection: o.objection_text,
+    firstMentioned: relDate(o.first_mentioned_at),
+    mentions: o.mention_count ?? 1,
+    status: o.status ?? 'active',
+  }));
 
-  const getPhaseConfig = (phase: Phase) => {
-    const configs = {
+  const companyContext =
+    companySignalsData.length > 0
+      ? {
+          momentum: companySignalsData.some((s: any) => s.impact === 'positive')
+            ? 'favorable'
+            : 'neutre',
+          news: companySignalsData[0]?.signal_title ?? '',
+          newsDate: relDate(companySignalsData[0]?.signal_date),
+          signals: companySignalsData.map((s: any) => s.signal_type).slice(0, 4),
+        }
+      : null;
+
+  const exchangeHistory = meetingsHistory.map((m: any) => ({
+    type: 'meeting' as const,
+    date: relDate(m.starts_at),
+    title: m.title,
+    duration: m.actual_duration_minutes ? `${m.actual_duration_minutes} min` : '—',
+    hasBrief: m.brief_status === 'ready' || m.brief_status === 'consulted',
+    meetingId: m.id,
+  }));
+
+  const sharedNetwork = (cogProfile?.relationships ?? []).slice(0, 4).map((rel) => ({
+    contactId: rel.toContactId,
+    role: rel.relationType,
+    strength: rel.strength,
+  }));
+
+  const getPhaseConfig = (phase: Phase) =>
+    ({
       growth: {
         label: 'Développement',
         icon: TrendingUp,
         color: 'text-success',
         bgColor: 'bg-success/10',
-        borderColor: 'border-success/20'
+        borderColor: 'border-success/20',
       },
       stagnant: {
         label: 'Stagnation',
         icon: Minus,
         color: 'text-muted-foreground',
         bgColor: 'bg-muted/30',
-        borderColor: 'border-border'
+        borderColor: 'border-border',
       },
       decline: {
         label: 'Décroissance',
         icon: TrendingDown,
         color: 'text-destructive',
         bgColor: 'bg-destructive/10',
-        borderColor: 'border-destructive/20'
-      }
-    };
-    return configs[phase];
-  };
+        borderColor: 'border-destructive/20',
+      },
+    })[phase];
+
+  // ─── Loading & not-found states ──────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="size-full flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="size-8 animate-spin text-primary" />
+          <p className="text-sm">Chargement du profil relationnel…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!contact) {
+    return (
+      <div className="size-full flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-2xl font-bold mb-2">Contact introuvable</p>
+          <p className="text-muted-foreground mb-6">Ce contact n'existe pas ou vous n'y avez pas accès.</p>
+          <KnowyButton variant="primary" onClick={() => navigate('/relations')}>
+            Retour aux contacts
+          </KnowyButton>
+        </div>
+      </div>
+    );
+  }
 
   const phaseConfig = getPhaseConfig(contact.phase);
   const PhaseIcon = phaseConfig.icon;
+
+  // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="size-full bg-background overflow-auto">
@@ -306,7 +442,7 @@ export default function RelationDetail() {
           </div>
         </motion.div>
 
-        {/* BLOC 1 - Identity & Current Status */}
+        {/* BLOC 1 — Identity & Current Status */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -317,7 +453,9 @@ export default function RelationDetail() {
               {/* Left - Identity */}
               <div>
                 <div className="flex items-start gap-4 mb-4">
-                  <div className={`size-16 rounded-xl ${phaseConfig.bgColor} ${phaseConfig.color} flex items-center justify-center font-bold text-2xl flex-shrink-0`}>
+                  <div
+                    className={`size-16 rounded-xl ${phaseConfig.bgColor} ${phaseConfig.color} flex items-center justify-center font-bold text-2xl flex-shrink-0`}
+                  >
                     {contact.avatar}
                   </div>
                   <div className="flex-1">
@@ -337,12 +475,13 @@ export default function RelationDetail() {
                   </div>
                 </div>
                 <div className="space-y-1 text-sm text-muted-foreground">
-                  <p>{contact.sector}</p>
-                  <p>En poste depuis {contact.tenure}</p>
-                  <div className="flex items-center gap-1">
-                    <MapPin className="size-3" />
-                    <span>{contact.location}</span>
-                  </div>
+                  {contact.sector !== '—' && <p>{contact.sector}</p>}
+                  {contact.location !== '—' && (
+                    <div className="flex items-center gap-1">
+                      <MapPin className="size-3" />
+                      <span>{contact.location}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -350,22 +489,9 @@ export default function RelationDetail() {
               <div className="flex flex-col items-center justify-center border-x border-border px-6">
                 <div className="relative size-28 mb-3">
                   <svg className="size-full -rotate-90">
+                    <circle cx="56" cy="56" r="48" fill="none" stroke="currentColor" strokeWidth="6" className="text-muted/20" />
                     <circle
-                      cx="56"
-                      cy="56"
-                      r="48"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="6"
-                      className="text-muted/20"
-                    />
-                    <circle
-                      cx="56"
-                      cy="56"
-                      r="48"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="6"
+                      cx="56" cy="56" r="48" fill="none" stroke="currentColor" strokeWidth="6"
                       strokeDasharray={`${(contact.engagementScore / 100) * 2 * Math.PI * 48} ${2 * Math.PI * 48}`}
                       className="text-primary transition-all duration-1000"
                     />
@@ -379,7 +505,10 @@ export default function RelationDetail() {
 
                 <div className="flex items-center gap-2 mb-2">
                   <PhaseIcon className={`size-3 ${phaseConfig.color}`} />
-                  <KnowyBadge variant={contact.phase === 'growth' ? 'sage' : contact.phase === 'decline' ? 'coral' : 'muted'} size="sm">
+                  <KnowyBadge
+                    variant={contact.phase === 'growth' ? 'sage' : contact.phase === 'decline' ? 'coral' : 'muted'}
+                    size="sm"
+                  >
                     {phaseConfig.label}
                   </KnowyBadge>
                 </div>
@@ -392,24 +521,24 @@ export default function RelationDetail() {
                     <div className="bg-primary" style={{ width: `${contact.reciprocity}%` }} />
                     <div className="bg-accent flex-1" />
                   </div>
-                  <p className="text-xs text-center text-muted-foreground">
-                    Vous {contact.reciprocity}%
-                  </p>
+                  <p className="text-xs text-center text-muted-foreground">Vous {contact.reciprocity}%</p>
                 </div>
               </div>
 
               {/* Right - Contact Info */}
-              <div>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Dernier contact</p>
-                    <p className="font-semibold text-sm">{contact.lastContact.date}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{contact.lastContact.type}</p>
-                  </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Dernier contact</p>
+                  <p className="font-semibold text-sm">{contact.lastContact.date}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{contact.lastContact.type}</p>
+                </div>
+                {contact.frequency > 0 && (
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Fréquence</p>
                     <p className="font-semibold text-sm">Tous les {contact.frequency}j</p>
                   </div>
+                )}
+                {contact.nextRecommended > 0 && (
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Prochain contact</p>
                     <div className="flex items-center gap-1.5">
@@ -417,22 +546,22 @@ export default function RelationDetail() {
                       <p className="font-semibold text-sm text-primary">Dans {contact.nextRecommended}j</p>
                     </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2">Sources</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      <KnowyBadge variant={contact.sources.gmail ? 'sage' : 'muted'} size="sm">
-                        Gmail {contact.sources.gmail && '✓'}
-                      </KnowyBadge>
-                      <KnowyBadge variant={contact.sources.calendar ? 'sage' : 'muted'} size="sm">
-                        Calendar {contact.sources.calendar && '✓'}
-                      </KnowyBadge>
-                      <KnowyBadge variant={contact.sources.linkedin ? 'sage' : 'muted'} size="sm">
-                        LinkedIn {contact.sources.linkedin && '✓'}
-                      </KnowyBadge>
-                      <KnowyBadge variant={contact.sources.crm ? 'sage' : 'muted'} size="sm">
-                        CRM {contact.sources.crm && '✓'}
-                      </KnowyBadge>
-                    </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground mb-2">Sources</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <KnowyBadge variant={contact.sources.gmail ? 'sage' : 'muted'} size="sm">
+                      Gmail {contact.sources.gmail && '✓'}
+                    </KnowyBadge>
+                    <KnowyBadge variant={contact.sources.calendar ? 'sage' : 'muted'} size="sm">
+                      Calendar {contact.sources.calendar && '✓'}
+                    </KnowyBadge>
+                    <KnowyBadge variant={contact.sources.linkedin ? 'sage' : 'muted'} size="sm">
+                      LinkedIn {contact.sources.linkedin && '✓'}
+                    </KnowyBadge>
+                    <KnowyBadge variant={contact.sources.crm ? 'sage' : 'muted'} size="sm">
+                      CRM {contact.sources.crm && '✓'}
+                    </KnowyBadge>
                   </div>
                 </div>
               </div>
@@ -440,7 +569,7 @@ export default function RelationDetail() {
           </KnowyCard>
         </motion.div>
 
-        {/* MÉMOIRE KNOWY - Timeline de progression des briefs */}
+        {/* MÉMOIRE KNOWY */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -448,395 +577,187 @@ export default function RelationDetail() {
           className="mb-4"
         >
           <KnowyCard className="p-6 bg-gradient-to-br from-primary/5 to-accent/5 border-primary/10">
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-2">
               <Sparkles className="size-5 text-primary" />
-              <h2 className="text-lg font-bold">Mémoire Knowy · Sarah Chen</h2>
+              <h2 className="text-lg font-bold">Mémoire Knowy · {contact.name}</h2>
             </div>
-            <p className="text-sm text-muted-foreground mb-6">
-              7 réunions mémorisées · Brief #1 → Brief #7
-            </p>
 
-            <div className="space-y-4">
-              {/* Brief #1 */}
-              <div className="relative pl-6 pb-4 border-l-2 border-muted">
-                <div className="absolute -left-[9px] top-0 size-4 rounded-full bg-muted border-2 border-background" />
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="font-semibold text-sm">BRIEF #1 · JAN 2026</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Données publiques uniquement. Profil LinkedIn + site entreprise.
-                    </p>
-                  </div>
-                  <KnowyBadge variant="coral" size="sm">34%</KnowyBadge>
-                </div>
-              </div>
-
-              {/* Brief #3 */}
-              <div className="relative pl-6 pb-4 border-l-2 border-muted">
-                <div className="absolute -left-[9px] top-0 size-4 rounded-full bg-amber-600 border-2 border-background" />
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="font-semibold text-sm">BRIEF #3 · MAR 2026</p>
-                    <p className="text-xs text-muted-foreground mt-1 mb-2">
-                      12 emails analysés. Style de communication inféré. 2 signaux LinkedIn ajoutés.
-                    </p>
-                    <div className="flex gap-2">
-                      <span className="px-2 py-0.5 bg-amber-600/10 text-amber-600 rounded text-xs font-medium">
-                        + style comm détecté
-                      </span>
-                    </div>
-                  </div>
-                  <KnowyBadge variant="amber" size="sm">58%</KnowyBadge>
-                </div>
-              </div>
-
-              {/* Brief #5 */}
-              <div className="relative pl-6 pb-4 border-l-2 border-primary">
-                <div className="absolute -left-[9px] top-0 size-4 rounded-full bg-primary border-2 border-background" />
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="font-semibold text-sm">BRIEF #5 · AVR 2026</p>
-                    <p className="text-xs text-muted-foreground mt-1 mb-2">
-                      3 réunions mémorisées. Mots-clés déclencheurs identifiés. Objections typiques modélisées.
-                    </p>
-                    <div className="flex gap-2">
-                      <span className="px-2 py-0.5 bg-success/10 text-success rounded text-xs font-medium">
-                        + objections modélisées
-                      </span>
-                      <span className="px-2 py-0.5 bg-success/10 text-success rounded text-xs font-medium">
-                        + mots-clés détectés
-                      </span>
-                    </div>
-                  </div>
-                  <KnowyBadge variant="sage" size="sm">74%</KnowyBadge>
-                </div>
-              </div>
-
-              {/* Brief #7 - Current */}
-              <div className="relative pl-6">
-                <div className="absolute -left-[9px] top-0 size-4 rounded-full bg-primary border-2 border-background shadow-lg shadow-primary/50" />
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="font-semibold text-sm flex items-center gap-2">
-                      BRIEF #7 · AUJOURD'HUI
-                      <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium">ACTUEL</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1 mb-2">
-                      47 interactions analysées. Profil chirurgical. Agenda personnel inféré à 72% de confiance.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium">
-                        ✨ niveau chirurgical
-                      </span>
-                      <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium">
-                        + agenda personnel
-                      </span>
-                    </div>
-                  </div>
-                  <KnowyBadge variant="sage" size="sm">87%</KnowyBadge>
-                </div>
-              </div>
-            </div>
-          </KnowyCard>
-        </motion.div>
-
-        {/* 2-Column Layout: Intelligence (left) + Activity Feed (right) */}
-        <div className="grid grid-cols-[1fr_400px] gap-6">
-          {/* LEFT COLUMN - Intelligence Blocks */}
-          <div className="space-y-4">
-
-        {/* BLOC 2 - Active Alerts */}
-        {alerts.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.2 }}
-            className="mb-4"
-          >
-            {alerts.map((alert, i) => (
-              <KnowyCard key={i} className={`p-3 mb-2 border-l-4 ${
-                alert.severity === 'success' ? 'border-success bg-success/5' :
-                alert.severity === 'warning' ? 'border-amber-600 bg-amber-600/5' :
-                'border-destructive bg-destructive/5'
-              }`}>
-                <div className="flex items-start gap-2">
-                  <AlertCircle className={`size-4 flex-shrink-0 mt-0.5 ${
-                    alert.severity === 'success' ? 'text-success' :
-                    alert.severity === 'warning' ? 'text-amber-600' :
-                    'text-destructive'
-                  }`} />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-sm mb-0.5">{alert.title}</h3>
-                    <p className="text-xs text-muted-foreground mb-0.5">{alert.message}</p>
-                    <p className="text-xs text-muted-foreground opacity-70">{alert.date}</p>
-                  </div>
-                </div>
-              </KnowyCard>
-            ))}
-          </motion.div>
-        )}
-
-        {/* BLOC 3 - Relational Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.3 }}
-          className="mb-4"
-        >
-          <KnowyCard className="p-4">
-            <h2 className="text-lg font-bold mb-4">Statistiques relationnelles</h2>
-            <div className="grid grid-cols-3 gap-4">
-              {stats.map((stat, i) => (
-                <div key={i} className="text-center p-3 bg-muted/20 rounded-lg">
-                  <p className="text-2xl font-black mb-1">{stat.value}</p>
-                  <p className="text-xs text-muted-foreground mb-0.5">{stat.label}</p>
-                  <p className="text-xs text-muted-foreground opacity-60">via {stat.source}</p>
-                </div>
-              ))}
-            </div>
-          </KnowyCard>
-        </motion.div>
-
-        {/* BLOC 4 - Relationship Evolution Graph */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.4 }}
-          className="mb-4"
-        >
-          <KnowyCard className="p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold">Évolution de la relation</h2>
-              <div className="flex gap-2">
-                {['3M', '6M', '12M', 'Tout'].map((period) => (
-                  <button
-                    key={period}
-                    className="px-3 py-1 text-sm bg-muted/50 hover:bg-muted rounded-lg transition-colors"
-                  >
-                    {period}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="h-80 relative">
-              <svg viewBox="0 0 800 300" className="w-full h-full">
-                {/* Grid lines */}
-                <line x1="40" y1="50" x2="760" y2="50" stroke="currentColor" strokeWidth="1" className="text-border" strokeDasharray="4 4" />
-                <line x1="40" y1="112.5" x2="760" y2="112.5" stroke="currentColor" strokeWidth="1" className="text-border" strokeDasharray="4 4" />
-                <line x1="40" y1="175" x2="760" y2="175" stroke="currentColor" strokeWidth="1" className="text-border" strokeDasharray="4 4" />
-                <line x1="40" y1="237.5" x2="760" y2="237.5" stroke="currentColor" strokeWidth="1" className="text-border" strokeDasharray="4 4" />
-
-                {/* Y-axis labels */}
-                <text x="25" y="55" className="text-xs fill-muted-foreground" textAnchor="end">100</text>
-                <text x="25" y="117" className="text-xs fill-muted-foreground" textAnchor="end">75</text>
-                <text x="25" y="180" className="text-xs fill-muted-foreground" textAnchor="end">50</text>
-                <text x="25" y="242" className="text-xs fill-muted-foreground" textAnchor="end">25</text>
-                <text x="25" y="280" className="text-xs fill-muted-foreground" textAnchor="end">0</text>
-
-                {/* X-axis labels */}
-                <text x="100" y="295" className="text-xs fill-muted-foreground" textAnchor="middle">Janv</text>
-                <text x="220" y="295" className="text-xs fill-muted-foreground" textAnchor="middle">Fév</text>
-                <text x="340" y="295" className="text-xs fill-muted-foreground" textAnchor="middle">Mars</text>
-                <text x="460" y="295" className="text-xs fill-muted-foreground" textAnchor="middle">Avr</text>
-                <text x="580" y="295" className="text-xs fill-muted-foreground" textAnchor="middle">Mai</text>
-                <text x="700" y="295" className="text-xs fill-muted-foreground" textAnchor="middle">Juin</text>
-
-                {/* Area under curve */}
-                <path
-                  d="M 40 237.5 L 100 225 L 160 200 L 220 187.5 L 280 175 L 340 162.5 L 400 137.5 L 460 125 L 520 112.5 L 580 87.5 L 640 75 L 700 62.5 L 760 50 L 760 275 L 40 275 Z"
-                  fill="url(#scoreGradient)"
-                  opacity="0.3"
-                />
-
-                {/* Gradient definition */}
-                <defs>
-                  <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor="rgb(var(--primary))" stopOpacity="0.5" />
-                    <stop offset="100%" stopColor="rgb(var(--primary))" stopOpacity="0.1" />
-                  </linearGradient>
-                </defs>
-
-                {/* Main curve */}
-                <path
-                  d="M 40 237.5 L 100 225 L 160 200 L 220 187.5 L 280 175 L 340 162.5 L 400 137.5 L 460 125 L 520 112.5 L 580 87.5 L 640 75 L 700 62.5 L 760 50"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="text-primary"
-                />
-
-                {/* Event markers */}
-                <circle cx="220" cy="187.5" r="6" className="fill-primary stroke-white" strokeWidth="2" />
-                <circle cx="400" cy="137.5" r="6" className="fill-primary stroke-white" strokeWidth="2" />
-                <circle cx="580" cy="87.5" r="6" className="fill-primary stroke-white" strokeWidth="2" />
-                <circle cx="700" cy="62.5" r="6" className="fill-primary stroke-white" strokeWidth="2" />
-
-                {/* Event icons */}
-                <text x="220" y="192" className="text-sm" textAnchor="middle">📧</text>
-                <text x="400" y="142" className="text-sm" textAnchor="middle">📅</text>
-                <text x="580" y="92" className="text-sm" textAnchor="middle">📅</text>
-                <text x="700" y="67" className="text-sm" textAnchor="middle">⚡</text>
-              </svg>
-
-              {/* Legend */}
-              <div className="mt-4 flex items-center justify-center gap-6 text-xs text-muted-foreground flex-wrap">
-                <div className="flex items-center gap-2">
-                  <div className="size-3 rounded-full bg-primary" />
-                  <span>Score d'engagement</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span>📧</span>
-                  <span>Email</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span>📅</span>
-                  <span>Réunion</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span>⚡</span>
-                  <span>Événement</span>
-                </div>
-              </div>
-            </div>
-          </KnowyCard>
-        </motion.div>
-
-        {/* BLOC 5 - Interaction Profile */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.5 }}
-          className="mb-4"
-        >
-          <KnowyCard className="p-4">
-            <h2 className="text-lg font-bold mb-4">Profil interactionnel</h2>
-            <div className="grid grid-cols-2 gap-6">
-              {/* Left - Radar */}
-              <div className="flex flex-col items-center">
-                <div className="size-64 relative mb-4">
-                  <svg viewBox="0 0 200 200" className="w-full h-full">
-                    {/* Background hexagon layers */}
-                    <polygon
-                      points="100,20 173.2,60 173.2,140 100,180 26.8,140 26.8,60"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-border"
-                    />
-                    <polygon
-                      points="100,50 146.6,75 146.6,125 100,150 53.4,125 53.4,75"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-border"
-                      strokeDasharray="2 2"
-                    />
-
-                    {/* Axis lines */}
-                    <line x1="100" y1="100" x2="100" y2="20" stroke="currentColor" strokeWidth="1" className="text-border" />
-                    <line x1="100" y1="100" x2="173.2" y2="60" stroke="currentColor" strokeWidth="1" className="text-border" />
-                    <line x1="100" y1="100" x2="173.2" y2="140" stroke="currentColor" strokeWidth="1" className="text-border" />
-                    <line x1="100" y1="100" x2="100" y2="180" stroke="currentColor" strokeWidth="1" className="text-border" />
-                    <line x1="100" y1="100" x2="26.8" y2="140" stroke="currentColor" strokeWidth="1" className="text-border" />
-                    <line x1="100" y1="100" x2="26.8" y2="60" stroke="currentColor" strokeWidth="1" className="text-border" />
-
-                    {/* Data polygon */}
-                    <polygon
-                      points="100,40 158.9,70 158.9,115 100,165 56.4,125 61.3,70"
-                      fill="currentColor"
-                      fillOpacity="0.2"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      className="text-primary"
-                    />
-
-                    {/* Data points */}
-                    <circle cx="100" cy="40" r="4" className="fill-primary" />
-                    <circle cx="158.9" cy="70" r="4" className="fill-primary" />
-                    <circle cx="158.9" cy="115" r="4" className="fill-primary" />
-                    <circle cx="100" cy="165" r="4" className="fill-primary" />
-                    <circle cx="56.4" cy="125" r="4" className="fill-primary" />
-                    <circle cx="61.3" cy="70" r="4" className="fill-primary" />
-
-                    {/* Labels */}
-                    <text x="100" y="15" className="text-xs fill-foreground font-medium" textAnchor="middle">Résultat</text>
-                    <text x="180" y="65" className="text-xs fill-foreground font-medium" textAnchor="start">Rapidité</text>
-                    <text x="180" y="145" className="text-xs fill-foreground font-medium" textAnchor="start">Structure</text>
-                    <text x="100" y="195" className="text-xs fill-foreground font-medium" textAnchor="middle">Relation</text>
-                    <text x="20" y="145" className="text-xs fill-foreground font-medium" textAnchor="end">Intuition</text>
-                    <text x="20" y="65" className="text-xs fill-foreground font-medium" textAnchor="end">Contrôle</text>
-                  </svg>
-                </div>
-                <p className="text-sm text-muted-foreground text-center">
-                  Confiance {interactionProfile.confidence}% · basé sur 47 emails + 8 réunions
+            {memoryData.length === 0 ? (
+              <div className="text-center py-8">
+                <Sparkles className="size-10 mx-auto mb-3 text-primary/30" />
+                <p className="text-sm text-muted-foreground mb-1">Aucun brief généré pour ce contact</p>
+                <p className="text-xs text-muted-foreground">
+                  Planifiez une réunion pour générer votre premier brief Knowy.
                 </p>
               </div>
-
-              {/* Right - Axes Details */}
-              <div className="space-y-4">
-                {interactionProfile.axes.map((axis, i) => (
-                  <div key={i}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-medium">{axis.label}</span>
-                      <span className="text-xs font-medium">{axis.opposite}</span>
-                    </div>
-                    <div className="relative h-1.5 bg-muted/30 rounded-full overflow-hidden">
-                      <div
-                        className="absolute top-0 left-0 h-full bg-primary rounded-full"
-                        style={{ width: `${axis.value}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between mt-1.5">
-                      <p className="text-xs text-muted-foreground">{axis.description}</p>
-                      <div className="flex items-center gap-2">
-                        <KnowyBadge variant="muted" size="sm">{axis.level}</KnowyBadge>
-                        <span className="text-xs text-muted-foreground">{axis.confidence}%</span>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground mb-6">
+                  {memoryData.length} brief{memoryData.length > 1 ? 's' : ''} mémorisé{memoryData.length > 1 ? 's' : ''}
+                  {' '}· Brief #1 → Brief #{memoryData[memoryData.length - 1]?.brief_number ?? memoryData.length}
+                </p>
+                <div className="space-y-4">
+                  {memoryData.map((snap: any, i: number) => {
+                    const isLast = i === memoryData.length - 1;
+                    const score = snap.confidence_score ?? 0;
+                    const scoreVariant = score >= 70 ? 'sage' : score >= 50 ? 'amber' : 'coral';
+                    return (
+                      <div key={snap.id} className={`relative pl-6 ${isLast ? '' : 'pb-4'} border-l-2 ${isLast ? 'border-primary' : 'border-muted'}`}>
+                        <div className={`absolute -left-[9px] top-0 size-4 rounded-full border-2 border-background ${isLast ? 'bg-primary shadow-lg shadow-primary/50' : score >= 60 ? 'bg-amber-600' : 'bg-muted'}`} />
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <p className="font-semibold text-sm flex items-center gap-2">
+                              BRIEF #{snap.brief_number} · {snap.brief_date ? new Date(snap.brief_date).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }).toUpperCase() : '—'}
+                              {isLast && <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium">ACTUEL</span>}
+                            </p>
+                            {snap.summary && (
+                              <p className="text-xs text-muted-foreground mt-1 mb-2">{snap.summary}</p>
+                            )}
+                            {snap.new_insights?.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mt-1">
+                                {snap.new_insights.map((ins: string, j: number) => (
+                                  <span key={j} className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium">
+                                    + {ins}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <KnowyBadge variant={scoreVariant} size="sm">{score}%</KnowyBadge>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))}
-
-                <div className="pt-3 border-t border-border">
-                  <p className="text-xs font-medium mb-2 text-muted-foreground">Modes d'interaction</p>
-                  <div className="flex flex-wrap gap-2">
-                    {interactionProfile.modes.map((mode, i) => (
-                      <KnowyBadge key={i} variant="primary" size="sm">
-                        {mode.name} · {mode.probability}%
-                      </KnowyBadge>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
-              </div>
-            </div>
+              </>
+            )}
           </KnowyCard>
         </motion.div>
 
-        {/* BLOC 6 - Behavioral Analysis */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.6 }}
-          className="mb-3"
-        >
-          <KnowyCard className="p-4">
-            <button
-              onClick={() => toggleBlock('behavioral')}
-              className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
+        {/* 2-Column Layout */}
+        <div className="grid grid-cols-[1fr_400px] gap-6">
+          {/* LEFT COLUMN */}
+          <div className="space-y-4">
+
+            {/* Active Alerts */}
+            {displayAlerts.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
+              >
+                {displayAlerts.map((alert, i) => (
+                  <KnowyCard
+                    key={i}
+                    className={`p-3 mb-2 border-l-4 ${
+                      alert.severity === 'success' ? 'border-success bg-success/5' :
+                      alert.severity === 'warning' ? 'border-amber-600 bg-amber-600/5' :
+                      'border-destructive bg-destructive/5'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className={`size-4 flex-shrink-0 mt-0.5 ${alert.severity === 'success' ? 'text-success' : alert.severity === 'warning' ? 'text-amber-600' : 'text-destructive'}`} />
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-sm mb-0.5">{alert.title}</h3>
+                        <p className="text-xs text-muted-foreground mb-0.5">{alert.message}</p>
+                        <p className="text-xs text-muted-foreground opacity-70">{alert.date}</p>
+                      </div>
+                    </div>
+                  </KnowyCard>
+                ))}
+              </motion.div>
+            )}
+
+            {/* Relational Stats */}
+            {stats.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.3 }}
+              >
+                <KnowyCard className="p-4">
+                  <h2 className="text-lg font-bold mb-4">Statistiques relationnelles</h2>
+                  <div className="grid grid-cols-3 gap-4">
+                    {stats.map((stat, i) => (
+                      <div key={i} className="text-center p-3 bg-muted/20 rounded-lg">
+                        <p className="text-2xl font-black mb-1">{stat.value}</p>
+                        <p className="text-xs text-muted-foreground mb-0.5">{stat.label}</p>
+                        <p className="text-xs text-muted-foreground opacity-60">via {stat.source}</p>
+                      </div>
+                    ))}
+                  </div>
+                </KnowyCard>
+              </motion.div>
+            )}
+
+            {/* Interaction Profile */}
+            {interactionProfile && interactionProfile.axes.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.5 }}
+              >
+                <KnowyCard className="p-4">
+                  <h2 className="text-lg font-bold mb-4">Profil interactionnel</h2>
+                  <div className="space-y-4">
+                    {interactionProfile.axes.map((axis, i) => (
+                      <div key={i}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-medium">{axis.label}</span>
+                          <span className="text-xs font-medium">{axis.opposite}</span>
+                        </div>
+                        <div className="relative h-1.5 bg-muted/30 rounded-full overflow-hidden">
+                          <div className="absolute top-0 left-0 h-full bg-primary rounded-full" style={{ width: `${axis.value}%` }} />
+                        </div>
+                        <div className="flex items-center justify-between mt-1.5">
+                          <KnowyBadge variant="muted" size="sm">{axis.level}</KnowyBadge>
+                          <span className="text-xs text-muted-foreground">{axis.confidence}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {interactionProfile.modes.length > 0 && (
+                    <div className="pt-3 border-t border-border mt-4">
+                      <p className="text-xs font-medium mb-2 text-muted-foreground">Modes d'interaction</p>
+                      <div className="flex flex-wrap gap-2">
+                        {interactionProfile.modes.map((mode, i) => (
+                          <KnowyBadge key={i} variant="primary" size="sm">
+                            {mode.name} · {mode.probability}%
+                          </KnowyBadge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Confiance globale: {interactionProfile.confidence}%
+                  </p>
+                </KnowyCard>
+              </motion.div>
+            )}
+
+            {/* Behavioral Analysis */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.6 }}
             >
-              <h2 className="text-base font-bold">Analyse comportementale</h2>
-              {openBlocks.behavioral ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-            </button>
-            {openBlocks.behavioral && (
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                {behavioralInsights.map((insight, i) => {
-                  const Icon = insight.icon;
-                  return (
-                    <div key={i} className="p-3 bg-muted/20 rounded-lg">
-                      <div className="flex items-start gap-2 mb-2">
-                        <Icon className="size-4 text-primary flex-shrink-0 mt-0.5" />
-                        <div className="flex-1">
+              <KnowyCard className="p-4">
+                <button
+                  onClick={() => toggleBlock('behavioral')}
+                  className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
+                >
+                  <h2 className="text-base font-bold">Analyse comportementale</h2>
+                  {openBlocks.behavioral ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                </button>
+                {openBlocks.behavioral && (
+                  behavioralInsights.length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground text-sm">
+                      Pas encore assez d'échanges pour inférer les signaux comportementaux.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      {behavioralInsights.map((insight, i) => (
+                        <div key={i} className="p-3 bg-muted/20 rounded-lg">
                           <h3 className="font-semibold text-sm mb-1">{insight.type}</h3>
                           <p className="text-xs text-muted-foreground mb-2">{insight.insight}</p>
                           <div className="flex items-center justify-between">
@@ -844,307 +765,276 @@ export default function RelationDetail() {
                             <KnowyBadge variant="muted" size="sm">{insight.confidence}%</KnowyBadge>
                           </div>
                         </div>
-                      </div>
+                      ))}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </KnowyCard>
-        </motion.div>
+                  )
+                )}
+              </KnowyCard>
+            </motion.div>
 
-        {/* BLOC 7 - Career Path */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.7 }}
-          className="mb-3"
-        >
-          <KnowyCard className="p-4">
-            <button
-              onClick={() => toggleBlock('career')}
-              className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
+            {/* Career Path */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.7 }}
             >
-              <h2 className="text-base font-bold">Parcours & CV observable</h2>
-              {openBlocks.career ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-            </button>
-            {openBlocks.career && (
-              <>
-                <div className="space-y-6 mb-6">
-                  {careerPath.map((job, i) => (
-                    <div key={i} className="flex gap-4">
-                      <div className="flex flex-col items-center">
-                        <div className={`size-3 rounded-full ${job.isCurrent ? 'bg-primary' : 'bg-muted'}`} />
-                        {i < careerPath.length - 1 && <div className="w-px h-full bg-border mt-2" />}
-                      </div>
-                      <div className="flex-1 pb-6">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <h3 className="font-semibold">{job.title}</h3>
-                            <p className="text-sm text-muted-foreground">{job.company}</p>
+              <KnowyCard className="p-4">
+                <button
+                  onClick={() => toggleBlock('career')}
+                  className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
+                >
+                  <h2 className="text-base font-bold">Parcours & CV observable</h2>
+                  {openBlocks.career ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                </button>
+                {openBlocks.career && (
+                  careerPath.length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground text-sm">
+                      Parcours professionnel non encore renseigné.
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {careerPath.map((job, i) => (
+                        <div key={i} className="flex gap-4">
+                          <div className="flex flex-col items-center">
+                            <div className={`size-3 rounded-full ${job.isCurrent ? 'bg-primary' : 'bg-muted'}`} />
+                            {i < careerPath.length - 1 && <div className="w-px h-full bg-border mt-2" />}
                           </div>
-                          {job.isCurrent && (
-                            <KnowyBadge variant="primary" size="sm">Poste actuel</KnowyBadge>
-                          )}
+                          <div className="flex-1 pb-6">
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <h3 className="font-semibold">{job.title}</h3>
+                                <p className="text-sm text-muted-foreground">{job.company}</p>
+                              </div>
+                              {job.isCurrent && <KnowyBadge variant="primary" size="sm">Poste actuel</KnowyBadge>}
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-2">{job.duration}</p>
+                            <div className="flex gap-2 flex-wrap">
+                              <KnowyBadge variant="muted" size="sm">{job.sector}</KnowyBadge>
+                              {job.badges.map((badge: string, j: number) => (
+                                <KnowyBadge key={j} variant="blue" size="sm">{badge}</KnowyBadge>
+                              ))}
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-sm text-muted-foreground mb-2">{job.duration}</p>
-                        <div className="flex gap-2">
-                          <KnowyBadge variant="muted" size="sm">{job.sector}</KnowyBadge>
-                          {job.badges.map((badge, j) => (
-                            <KnowyBadge key={j} variant="blue" size="sm">{badge}</KnowyBadge>
+                      ))}
+                    </div>
+                  )
+                )}
+              </KnowyCard>
+            </motion.div>
+
+            {/* Exchange History */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.8 }}
+            >
+              <KnowyCard className="p-4">
+                <button
+                  onClick={() => toggleBlock('history')}
+                  className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
+                >
+                  <h2 className="text-base font-bold">Historique des échanges</h2>
+                  {openBlocks.history ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                </button>
+                {openBlocks.history && (
+                  exchangeHistory.length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground text-sm">
+                      Aucune réunion enregistrée avec ce contact.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {exchangeHistory.map((item, i) => (
+                        <div key={i} className="flex items-start gap-4 p-4 bg-muted/20 rounded-xl">
+                          <Calendar className="size-5 text-muted-foreground flex-shrink-0" />
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="font-medium">{item.title}</p>
+                              <p className="text-sm text-muted-foreground">{item.date}</p>
+                            </div>
+                            <div className="flex gap-2 flex-wrap">
+                              <KnowyBadge variant="muted" size="sm">{item.duration}</KnowyBadge>
+                              {item.hasBrief && <KnowyBadge variant="primary" size="sm">Brief disponible</KnowyBadge>}
+                              <button
+                                onClick={() => navigate(`/meeting/${item.meetingId}`)}
+                                className="text-xs text-primary hover:underline ml-1"
+                              >
+                                Voir la réunion →
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+              </KnowyCard>
+            </motion.div>
+
+            {/* Topics & Objections */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.9 }}
+            >
+              <KnowyCard className="p-4">
+                <button
+                  onClick={() => toggleBlock('topics')}
+                  className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
+                >
+                  <h2 className="text-base font-bold">Sujets & Objections historiques</h2>
+                  {openBlocks.topics ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                </button>
+                {openBlocks.topics && (
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <h3 className="font-semibold mb-4">Sujets abordés</h3>
+                      {topics.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Aucun sujet détecté.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {topics.map((topic, i) => (
+                            <KnowyBadge key={i} variant="blue" size="md">
+                              {topic.name} ×{topic.count}
+                            </KnowyBadge>
                           ))}
                         </div>
-                      </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-                <div className="pt-4 border-t border-border">
-                  <p className="text-sm text-muted-foreground">
-                    3 industries · 2 pivots · Secteur dominant: Tech
-                  </p>
-                </div>
-              </>
-            )}
-          </KnowyCard>
-        </motion.div>
-
-        {/* BLOC 8 - Exchange History */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.8 }}
-          className="mb-3"
-        >
-          <KnowyCard className="p-4">
-            <button
-              onClick={() => toggleBlock('history')}
-              className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
-            >
-              <h2 className="text-base font-bold">Historique des échanges</h2>
-              {openBlocks.history ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-            </button>
-            {openBlocks.history && (
-              <div className="space-y-3">
-                {exchangeHistory.map((item, i) => (
-                  <div key={i} className="flex items-start gap-4 p-4 bg-muted/20 rounded-xl">
-                    {item.type === 'email' && (
-                      <>
-                        <Mail className="size-5 text-muted-foreground flex-shrink-0" />
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="font-medium">{item.subject}</p>
-                            <p className="text-sm text-muted-foreground">{item.date}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <KnowyBadge variant="muted" size="sm">{item.tone}</KnowyBadge>
-                            <KnowyBadge variant="muted" size="sm">{item.wordCount} mots</KnowyBadge>
-                            <KnowyBadge variant="blue" size="sm">
-                              Initié par {item.initiator === 'you' ? 'vous' : 'eux'}
-                            </KnowyBadge>
-                          </div>
+                    <div>
+                      <h3 className="font-semibold mb-4">Objections identifiées</h3>
+                      {objections.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Aucune objection enregistrée.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {objections.map((obj, i) => (
+                            <div key={i} className="p-3 bg-muted/20 rounded-lg">
+                              <div className="flex items-start justify-between mb-2">
+                                <p className="font-medium text-sm">{obj.objection}</p>
+                                <KnowyBadge variant={obj.status === 'resolved' ? 'sage' : 'coral'} size="sm">
+                                  {obj.status === 'resolved' ? 'Résolue' : 'Active'}
+                                </KnowyBadge>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {obj.firstMentioned} · {obj.mentions} mention{obj.mentions > 1 ? 's' : ''}
+                              </p>
+                            </div>
+                          ))}
                         </div>
-                      </>
-                    )}
-                    {item.type === 'meeting' && (
-                      <>
-                        <Calendar className="size-5 text-muted-foreground flex-shrink-0" />
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="font-medium">{item.title}</p>
-                            <p className="text-sm text-muted-foreground">{item.date}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <KnowyBadge variant="muted" size="sm">{item.duration} (planifié {item.planned})</KnowyBadge>
-                            <KnowyBadge variant="muted" size="sm">{item.participants} participants</KnowyBadge>
-                            {item.hasBrief && (
-                              <KnowyBadge variant="primary" size="sm">Brief disponible</KnowyBadge>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    )}
-                    {item.type === 'brief' && (
-                      <>
-                        <Sparkles className="size-5 text-primary flex-shrink-0" />
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="font-medium">Brief Knowy - {item.briefType}</p>
-                            <p className="text-sm text-muted-foreground">{item.date}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <KnowyBadge variant="primary" size="sm">Conf. {item.confidence}%</KnowyBadge>
-                            <button className="text-sm text-primary hover:underline">Voir le brief →</button>
-                          </div>
-                        </div>
-                      </>
-                    )}
+                      )}
+                    </div>
                   </div>
-                ))}
-                <button className="w-full py-3 text-sm text-primary hover:underline">
-                  Voir les 23 échanges précédents
+                )}
+              </KnowyCard>
+            </motion.div>
+
+            {/* Company Context */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 1.0 }}
+            >
+              <KnowyCard className="p-4">
+                <button
+                  onClick={() => toggleBlock('company')}
+                  className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
+                >
+                  <h2 className="text-base font-bold">Contexte entreprise actuel</h2>
+                  {openBlocks.company ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
                 </button>
-              </div>
-            )}
-          </KnowyCard>
-        </motion.div>
-
-        {/* BLOC 9 - Topics & Objections */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.9 }}
-          className="mb-3"
-        >
-          <KnowyCard className="p-4">
-            <button
-              onClick={() => toggleBlock('topics')}
-              className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
-            >
-              <h2 className="text-base font-bold">Sujets & Objections historiques</h2>
-              {openBlocks.topics ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-            </button>
-            {openBlocks.topics && (
-              <div className="grid grid-cols-2 gap-6">
-                {/* Topics */}
-                <div>
-                  <h3 className="font-semibold mb-4">Sujets abordés</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {topics.map((topic, i) => (
-                      <KnowyBadge key={i} variant="blue" size="md">
-                        {topic.name} ×{topic.count}
+                {openBlocks.company && (
+                  !companyContext ? (
+                    <div className="text-center py-6 text-muted-foreground text-sm">
+                      Aucun signal d'entreprise détecté pour {contact.company}.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <KnowyBadge variant="sage" size="lg">
+                        Momentum {companyContext.momentum === 'favorable' ? 'favorable 🟢' : 'neutre ⚪'}
                       </KnowyBadge>
-                    ))}
-                  </div>
-                </div>
+                      <div className="p-4 bg-success/5 border border-success/20 rounded-xl">
+                        <p className="font-semibold mb-1">{companyContext.news}</p>
+                        <p className="text-sm text-muted-foreground">{companyContext.newsDate}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {companyContext.signals.map((sig, i) => (
+                          <KnowyBadge key={i} variant="blue" size="sm">{sig}</KnowyBadge>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                )}
+              </KnowyCard>
+            </motion.div>
 
-                {/* Objections */}
-                <div>
-                  <h3 className="font-semibold mb-4">Objections identifiées</h3>
-                  <div className="space-y-3">
-                    {objections.map((obj, i) => (
-                      <div key={i} className="p-3 bg-muted/20 rounded-lg">
-                        <div className="flex items-start justify-between mb-2">
-                          <p className="font-medium text-sm">{obj.objection}</p>
-                          <KnowyBadge
-                            variant={obj.status === 'resolved' ? 'sage' : 'coral'}
-                            size="sm"
-                          >
-                            {obj.status === 'resolved' ? 'Résolue' : 'Active'}
-                          </KnowyBadge>
+            {/* Shared Network */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 1.1 }}
+            >
+              <KnowyCard className="p-4">
+                <button
+                  onClick={() => toggleBlock('network')}
+                  className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
+                >
+                  <h2 className="text-base font-bold">Réseau partagé</h2>
+                  {openBlocks.network ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                </button>
+                {openBlocks.network && (
+                  sharedNetwork.length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground text-sm">
+                      Aucune relation connue dans le réseau partagé.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {sharedNetwork.map((person, i) => (
+                        <div key={i} className="flex items-center justify-between p-4 bg-muted/20 rounded-xl">
+                          <div className="flex items-center gap-3">
+                            <div className="size-10 bg-primary/10 rounded-full flex items-center justify-center font-semibold text-primary">
+                              <Users className="size-4" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm font-mono text-xs">{person.contactId.slice(0, 8)}…</p>
+                              <p className="text-sm text-muted-foreground capitalize">{person.role.replace(/_/g, ' ')}</p>
+                            </div>
+                          </div>
+                          <KnowyBadge variant="muted" size="sm">Force {Math.round(person.strength * 100)}%</KnowyBadge>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          {obj.firstMentioned} · {obj.mentions} mention{obj.mentions > 1 ? 's' : ''}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </KnowyCard>
-        </motion.div>
+                      ))}
+                    </div>
+                  )
+                )}
+              </KnowyCard>
+            </motion.div>
 
-        {/* BLOC 10 - Company Context */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 1.0 }}
-          className="mb-3"
-        >
-          <KnowyCard className="p-4">
-            <button
-              onClick={() => toggleBlock('company')}
-              className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
-            >
-              <h2 className="text-base font-bold">Contexte entreprise actuel</h2>
-              {openBlocks.company ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-            </button>
-            {openBlocks.company && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <KnowyBadge variant="sage" size="lg">
-                    Momentum {companyContext.momentum === 'favorable' ? 'favorable 🟢' : 'neutre ⚪'}
-                  </KnowyBadge>
-                </div>
-                <div className="p-4 bg-success/5 border border-success/20 rounded-xl">
-                  <p className="font-semibold mb-1">{companyContext.news}</p>
-                  <p className="text-sm text-muted-foreground">{companyContext.newsDate}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Users className="size-4 text-muted-foreground" />
+            {/* Action Recommendation */}
+            {(snapshot || cogProfile) && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 1.2 }}
+                className="mb-6"
+              >
+                <KnowyCard className="p-4 bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
+                  <h2 className="text-base font-bold mb-3">Recommandation d'action</h2>
                   <p className="text-sm text-muted-foreground">
-                    {companyContext.activeJobs} postes ouverts au recrutement
+                    {contact.phase === 'growth'
+                      ? `La relation avec ${contact.name} est en phase de développement.`
+                      : contact.phase === 'decline'
+                      ? `⚠️ La relation avec ${contact.name} est en décroissance — réactivez rapidement.`
+                      : `La relation avec ${contact.name} est stable.`}
+                    {contact.nextRecommended > 0 &&
+                      ` Prochain contact recommandé dans ${contact.nextRecommended} jours.`}
                   </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {companyContext.signals.map((signal, i) => (
-                    <KnowyBadge key={i} variant="blue" size="sm">{signal}</KnowyBadge>
-                  ))}
-                </div>
-              </div>
+                </KnowyCard>
+              </motion.div>
             )}
-          </KnowyCard>
-        </motion.div>
-
-        {/* BLOC 11 - Shared Network */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 1.1 }}
-          className="mb-3"
-        >
-          <KnowyCard className="p-4">
-            <button
-              onClick={() => toggleBlock('network')}
-              className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
-            >
-              <h2 className="text-base font-bold">Réseau partagé</h2>
-              {openBlocks.network ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-            </button>
-            {openBlocks.network && (
-              <div className="space-y-3">
-                {sharedNetwork.map((person, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-muted/20 rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="size-10 bg-primary/10 rounded-full flex items-center justify-center font-semibold text-primary">
-                        {person.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div>
-                        <p className="font-medium">{person.name}</p>
-                        <p className="text-sm text-muted-foreground">{person.role}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium">{person.interactions}</p>
-                      <p className="text-xs text-muted-foreground">{person.lastContact}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </KnowyCard>
-        </motion.div>
-
-        {/* BLOC 12 - Action Recommendation */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 1.2 }}
-          className="mb-6"
-        >
-          <KnowyCard className="p-4 bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
-            <h2 className="text-base font-bold mb-3">Recommandation d'action</h2>
-            <p className="text-sm text-muted-foreground">
-              La relation est en bonne dynamique. Dernier contact il y a 3 jours. Prochain contact recommandé dans 9 jours.
-              Angle suggéré : capitaliser sur la récente levée de fonds pour discuter d'expansion du partenariat.
-            </p>
-          </KnowyCard>
-        </motion.div>
 
           </div>
           {/* END LEFT COLUMN */}
 
-          {/* RIGHT COLUMN - Activity Feed (Sticky) */}
+          {/* RIGHT COLUMN — Activity Feed */}
           <div className="sticky top-6 self-start h-fit">
             <KnowyCard className="p-4">
               <h2 className="font-bold mb-4 flex items-center gap-2">
@@ -1152,53 +1042,31 @@ export default function RelationDetail() {
                 Activité récente
               </h2>
 
-              {/* Relationship Health Status */}
-              <div className="mb-6 p-3 bg-success/10 rounded-xl border border-success/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle className="size-4 text-success" />
-                  <span className="font-semibold text-sm text-success">Relation en bonne santé</span>
+              {/* Health Status */}
+              <div className={`mb-6 p-3 rounded-xl border ${contact.phase === 'decline' ? 'bg-destructive/10 border-destructive/20' : contact.phase === 'growth' ? 'bg-success/10 border-success/20' : 'bg-muted/20 border-border'}`}>
+                <div className={`flex items-center gap-2 mb-2 ${contact.phase === 'decline' ? 'text-destructive' : contact.phase === 'growth' ? 'text-success' : 'text-muted-foreground'}`}>
+                  <PhaseIcon className="size-4" />
+                  <span className="font-semibold text-sm">{phaseConfig.label}</span>
                 </div>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Prochain contact recommandé: <strong>4 juin</strong>
-                </p>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span>Derniers 5 jours:</span>
-                  <div className="flex items-center gap-1">
-                    <Mail className="size-3" />
-                    <span>2</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Calendar className="size-3" />
-                    <span>1</span>
-                  </div>
-                </div>
+                {contact.nextRecommended > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Prochain contact: <strong>dans {contact.nextRecommended} jours</strong>
+                  </p>
+                )}
               </div>
 
-              {/* Activity Timeline */}
+              {/* Timeline */}
               <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                {exchangeHistory.map((item, i) => (
-                  <div key={i} className="border-l-2 border-border pl-4 pb-3 relative">
-                    <div className="absolute -left-[5px] top-2 size-2.5 rounded-full bg-primary border-2 border-background" />
-
-                    {item.type === 'email' && (
-                      <div className="bg-muted/20 rounded-lg p-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Mail className="size-3 text-primary" />
-                          <span className="text-xs font-semibold">Email</span>
-                          <span className="text-xs text-muted-foreground ml-auto">{item.date}</span>
-                        </div>
-                        <p className="text-sm font-medium mb-1">{item.subject}</p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span className={item.tone === 'chaleureux' ? 'text-success' : 'text-muted-foreground'}>
-                            Ton: {item.tone}
-                          </span>
-                          <span>•</span>
-                          <span>{item.wordCount} mots</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {item.type === 'meeting' && (
+                {exchangeHistory.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    <Calendar className="size-8 mx-auto mb-2 opacity-30" />
+                    <p>Aucune activité enregistrée</p>
+                    <p className="text-xs mt-1">Connectez Gmail et Calendar pour voir les échanges.</p>
+                  </div>
+                ) : (
+                  exchangeHistory.map((item, i) => (
+                    <div key={i} className="border-l-2 border-border pl-4 pb-3 relative">
+                      <div className="absolute -left-[5px] top-2 size-2.5 rounded-full bg-primary border-2 border-background" />
                       <div className="bg-primary/10 rounded-lg p-3">
                         <div className="flex items-center gap-2 mb-1">
                           <Calendar className="size-3 text-primary" />
@@ -1206,12 +1074,7 @@ export default function RelationDetail() {
                           <span className="text-xs text-muted-foreground ml-auto">{item.date}</span>
                         </div>
                         <p className="text-sm font-medium mb-2">{item.title}</p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                          <span>{item.duration}</span>
-                          <span>•</span>
-                          <span>{item.participants} participants</span>
-                        </div>
-                        {item.meetingId && (
+                        {item.hasBrief && (
                           <KnowyButton
                             variant="ghost"
                             size="sm"
@@ -1222,26 +1085,12 @@ export default function RelationDetail() {
                           </KnowyButton>
                         )}
                       </div>
-                    )}
-
-                    {item.type === 'brief' && (
-                      <div className="bg-violet/10 rounded-lg p-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Sparkles className="size-3 text-violet" />
-                          <span className="text-xs font-semibold">Brief généré</span>
-                          <span className="text-xs text-muted-foreground ml-auto">{item.date}</span>
-                        </div>
-                        <p className="text-sm font-medium mb-1">{item.briefType}</p>
-                        <div className="text-xs text-muted-foreground">
-                          Confiance: {item.confidence}%
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  ))
+                )}
               </div>
 
-              {/* Action Buttons */}
+              {/* Actions */}
               <div className="mt-4 pt-4 border-t border-border space-y-2">
                 <KnowyButton variant="primary" size="sm" className="w-full" icon={<Mail className="size-4" />}>
                   Envoyer un email
@@ -1255,7 +1104,6 @@ export default function RelationDetail() {
           {/* END RIGHT COLUMN */}
 
         </div>
-        {/* END 2-COLUMN LAYOUT */}
       </div>
     </div>
   );

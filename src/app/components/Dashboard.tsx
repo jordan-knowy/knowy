@@ -5,7 +5,7 @@ import {
   Calendar, Sparkles, Plus, Download, X, AlertCircle,
   CheckCircle2, Loader2, Activity, Zap, Database,
   UserCheck, TrendingUp, Cake, Briefcase, ArrowUp,
-  Target, Network, Users, Star
+  Target, Network, Users, Star, RefreshCcw
 } from 'lucide-react';
 import KnowyCard from './knowy/KnowyCard';
 import KnowyButton from './knowy/KnowyButton';
@@ -114,10 +114,45 @@ const getBriefStatusConfig = (status: Meeting['briefStatus']) => ({
 export default function Dashboard() {
   const navigate = useNavigate();
   const { profile } = useCurrentProfile();
-  const { meetings: domainMeetings } = useMeetings();
+  const { meetings: domainMeetings, reload: reloadMeetings } = useMeetings();
   const [showPluginBanner, setShowPluginBanner] = useState(true);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [impact, setImpact] = useState<WeeklyImpact | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  async function handleCalendarSync() {
+    if (!supabase || syncing) return;
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Non authentifié');
+      const providerToken = session.provider_token;
+      if (!providerToken) {
+        setSyncMsg({ type: 'error', text: 'Token Google expiré — déconnectez-vous et reconnectez-vous avec Google.' });
+        return;
+      }
+      const orgId = await getActiveOrganizationId();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-google-calendar`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ organizationId: orgId, providerToken }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur sync');
+      setSyncMsg({ type: 'success', text: `✓ ${data.stats?.created} nouvelles réunions, ${data.stats?.updated} mises à jour` });
+      reloadMeetings?.();
+    } catch (e: any) {
+      setSyncMsg({ type: 'error', text: e.message });
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMsg(null), 5000);
+    }
+  }
 
   const firstName = profile?.fullName?.split(/\s+/)[0] ?? '';
   const todayDate  = new Date().toISOString().slice(0, 10);
@@ -313,10 +348,33 @@ export default function Dashboard() {
 
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="mb-8">
-          <h1 className="text-5xl font-black mb-2">
-            Bonjour{firstName ? ` ${firstName}` : ''} <span className="inline-block animate-wave">👋</span>
-          </h1>
-          <p className="text-lg text-muted-foreground">Votre vue d'ensemble</p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-5xl font-black mb-2">
+                Bonjour{firstName ? ` ${firstName}` : ''} <span className="inline-block animate-wave">👋</span>
+              </h1>
+              <p className="text-lg text-muted-foreground">Votre vue d'ensemble</p>
+            </div>
+            <div className="flex flex-col items-end gap-2 mt-1">
+              <button
+                onClick={handleCalendarSync}
+                disabled={syncing}
+                className="flex items-center gap-2 px-4 py-2 bg-card border border-border hover:border-primary/40 hover:bg-muted/50 rounded-xl text-sm font-medium transition-all disabled:opacity-60"
+              >
+                {syncing
+                  ? <><Loader2 className="size-4 animate-spin text-primary" /> Synchronisation…</>
+                  : <><RefreshCcw className="size-4 text-primary" /> Sync Google Calendar</>
+                }
+              </button>
+              {syncMsg && (
+                <p className={`text-xs px-3 py-1.5 rounded-lg ${
+                  syncMsg.type === 'success' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+                }`}>
+                  {syncMsg.text}
+                </p>
+              )}
+            </div>
+          </div>
         </motion.div>
 
         {/* Widget Impact + KPIs */}

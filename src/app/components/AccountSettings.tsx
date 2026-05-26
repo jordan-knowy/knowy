@@ -15,7 +15,8 @@ import {
   ExternalLink,
   Plus,
   Shield,
-  Globe
+  Globe,
+  LogOut
 } from 'lucide-react';
 
 export default function AccountSettings() {
@@ -23,6 +24,14 @@ export default function AccountSettings() {
   const { profile } = useCurrentProfile();
   const [activeTab, setActiveTab] = useState<'profile' | 'connections'>('profile');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    if (!supabase) return;
+    setLoggingOut(true);
+    await supabase.auth.signOut();
+    navigate('/signin');
+  }
   const [connectedAccounts, setConnectedAccounts] = useState<{ type: string; email: string; status: string; synced: string }[]>([]);
   const [crmConnections, setCrmConnections] = useState([
     { name: 'HubSpot',    logo: '🟠', status: 'not_connected', description: 'Sync contacts, deals et activités' },
@@ -91,11 +100,24 @@ export default function AccountSettings() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          <h1 className="text-4xl font-semibold mb-2">Paramètres</h1>
-          <p className="text-muted-foreground mb-8">
-            Gérez votre profil et vos connexions.
-          </p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-4xl font-semibold mb-2">Paramètres</h1>
+              <p className="text-muted-foreground">
+                Gérez votre profil et vos connexions.
+              </p>
+            </div>
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-destructive/30 text-destructive hover:bg-destructive/10 transition-all text-sm font-medium disabled:opacity-50"
+            >
+              <LogOut className="size-4" />
+              {loggingOut ? 'Déconnexion…' : 'Se déconnecter'}
+            </button>
+          </div>
         </motion.div>
+        <div className="mb-8" />
 
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto pb-2">

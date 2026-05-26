@@ -2,6 +2,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router';
 import { useState, useEffect } from 'react';
 import { Network, Users, Building2, Calendar, Mail, CheckCircle2, Sparkles, FileText } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { requireOnboardingContext, updateOnboardingContext } from '../../lib/onboarding';
 
 interface InitStep {
   id: string;
@@ -13,18 +15,53 @@ interface InitStep {
 
 export default function OnboardingStep5() {
   const navigate = useNavigate();
+  const [userId, setUserId] = useState('');
+  const [organizationId, setOrganizationId] = useState('');
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [steps, setSteps] = useState<InitStep[]>([
-    { id: 'calendar', label: 'Synchronisation de votre calendrier', icon: Calendar, status: 'loading' },
-    { id: 'emails', label: 'Analyse des métadonnées emails', icon: Mail, status: 'pending', stats: '2,847 emails analysés' },
-    { id: 'graph', label: 'Construction du graphe relationnel', icon: Network, status: 'pending', stats: '143 contacts détectés' },
-    { id: 'org', label: 'Mapping organisationnel IA', icon: Building2, status: 'pending', stats: '28 entreprises identifiées' },
-    { id: 'people', label: 'Enrichissement des profils', icon: Users, status: 'pending', stats: '89 profils LinkedIn enrichis' },
-    { id: 'brief', label: 'Génération de votre premier brief', icon: FileText, status: 'pending', stats: 'Brief réunion Qonto prêt' }
+    { id: 'calendar', label: 'Validation des accès calendrier', icon: Calendar, status: 'loading', stats: 'Connecteurs vérifiés' },
+    { id: 'emails', label: 'Préparation de la couche signaux emails', icon: Mail, status: 'pending', stats: 'Ingestion prête' },
+    { id: 'graph', label: 'Initialisation du graphe relationnel', icon: Network, status: 'pending', stats: 'Workspace prêt' },
+    { id: 'org', label: 'Création du contexte entreprise', icon: Building2, status: 'pending', stats: 'Mémoire LLM enregistrée' },
+    { id: 'people', label: 'Activation des profils comportementaux', icon: Users, status: 'pending', stats: 'Scoring prêt' },
+    { id: 'brief', label: 'Préparation du premier brief', icon: FileText, status: 'pending', stats: 'Moteur de brief disponible' }
   ]);
   const [isComplete, setIsComplete] = useState(false);
 
   useEffect(() => {
+    requireOnboardingContext()
+      .then(({ user, organizationId }) => {
+        setUserId(user.id);
+        setOrganizationId(organizationId);
+      })
+      .catch(() => navigate('/signin', { replace: true }));
+  }, [navigate]);
+
+  async function completeOnboarding() {
+    if (!userId || !organizationId) return;
+
+    await updateOnboardingContext(organizationId, userId, {
+      current_step: 5,
+      step5: true,
+      completed_at: new Date().toISOString(),
+    });
+
+    if (supabase) {
+      await (supabase as any).from('sync_jobs').insert({
+        organization_id: organizationId,
+        job_type: 'initial_onboarding_sync',
+        status: 'queued',
+        payload: {
+          source: 'onboarding',
+          requested_at: new Date().toISOString(),
+        },
+      });
+    }
+  }
+
+  useEffect(() => {
+    if (!userId || !organizationId) return;
+
     const timer = setInterval(() => {
       setSteps((prevSteps) => {
         const newSteps = [...prevSteps];
@@ -41,8 +78,10 @@ export default function OnboardingStep5() {
           } else {
             // All steps complete
             setTimeout(() => {
-              setIsComplete(true);
-              setTimeout(() => navigate('/dashboard'), 2000);
+              completeOnboarding().finally(() => {
+                setIsComplete(true);
+                setTimeout(() => navigate('/dashboard'), 2000);
+              });
             }, 1000);
           }
         }
@@ -52,7 +91,7 @@ export default function OnboardingStep5() {
     }, 2000);
 
     return () => clearInterval(timer);
-  }, [currentStepIndex, navigate]);
+  }, [currentStepIndex, navigate, userId, organizationId]);
 
   return (
     <div className="size-full bg-background overflow-auto">
@@ -105,7 +144,7 @@ export default function OnboardingStep5() {
 
             {/* Animated background */}
             <div className="relative bg-gradient-to-br from-primary/5 via-accent/5 to-secondary/5 rounded-3xl p-8 md:p-12 border border-primary/10 overflow-hidden">
-              {/* Floating orbs */}
+                {/* Animated ambient layer */}
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <motion.div
                   className="absolute top-20 left-20 size-32 bg-primary/20 rounded-full blur-3xl"
@@ -245,10 +284,10 @@ export default function OnboardingStep5() {
               className="grid grid-cols-2 md:grid-cols-4 gap-4"
             >
               {[
-                { label: 'Contacts', value: '143' },
-                { label: 'Entreprises', value: '28' },
-                { label: 'Réunions détectées', value: '47' },
-                { label: 'Briefs prêts', value: '3' }
+                { label: 'Connecteurs', value: 'Prêts' },
+                { label: 'Mémoire LLM', value: 'OK' },
+                { label: 'Sync initiale', value: 'Queued' },
+                { label: 'Briefs', value: 'Actifs' }
               ].map((stat, i) => (
                 <div key={i} className="bg-card rounded-xl p-4 border border-border text-center">
                   <p className="text-2xl font-semibold mb-1">{stat.value}</p>
