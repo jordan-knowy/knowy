@@ -16,6 +16,7 @@ import MeetingAnalysis from './components/MeetingAnalysis';
 import Coaching from './components/Coaching';
 import Relations from './components/Relations';
 import RelationDetail from './components/RelationDetail';
+import ContactDetail from './components/ContactDetail';
 import AccountSettings from './components/AccountSettings';
 import SuperAdmin from './components/SuperAdmin';
 import Subscription from './components/Subscription';
@@ -140,7 +141,8 @@ export default function App() {
         <Route path="/relations" element={<ProtectedApp><Layout><Relations /></Layout></ProtectedApp>} />
         <Route path="/relation/:id" element={<ProtectedApp><Layout><RelationDetail /></Layout></ProtectedApp>} />
         <Route path="/network" element={<Navigate to="/relations" replace />} />
-        <Route path="/contact/:id" element={<ContactRedirect />} />
+        {/* /contact/:id → nouveau ContactDetail avec enrichissement IA */}
+        <Route path="/contact/:id" element={<ProtectedApp><Layout><ContactDetail /></Layout></ProtectedApp>} />
         <Route path="/subscription" element={<ProtectedApp><Layout><Subscription /></Layout></ProtectedApp>} />
         <Route path="/account" element={<ProtectedApp><Layout><AccountSettings /></Layout></ProtectedApp>} />
         <Route path="/super-admin" element={<ProtectedApp><Layout><SuperAdmin /></Layout></ProtectedApp>} />

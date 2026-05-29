@@ -2,30 +2,309 @@ import { motion } from 'motion/react';
 import { useNavigate } from 'react-router';
 import { useEffect, useState } from 'react';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
+import { getActiveOrganizationId } from '../../lib/api/org';
+import {
+  linkIdentityProvider,
+  getConnectedIdentityProviders,
+  type OnboardingProvider,
+} from '../../lib/onboarding';
 import {
   User,
-  Building2,
   Mail,
-  Linkedin,
   Settings,
   Calendar,
   Network,
   CheckCircle2,
   ExternalLink,
-  Plus,
   Shield,
   Globe,
-  LogOut
+  LogOut,
+  Lock,
+  Eye,
+  EyeOff,
+  CheckCheck,
+  Save,
+  RefreshCw,
+  Download,
+  AlertCircle,
 } from 'lucide-react';
 
+// ── Official logos (inline SVG) ────────────────────────────────────────
+
+const GoogleLogo = () => (
+  <svg viewBox="0 0 24 24" width="26" height="26" xmlns="http://www.w3.org/2000/svg">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+  </svg>
+);
+
+const OutlookLogo = () => (
+  <svg viewBox="0 0 32 32" width="26" height="26" xmlns="http://www.w3.org/2000/svg">
+    <rect width="32" height="32" rx="4" fill="#0078D4"/>
+    <rect x="14" y="5" width="15" height="20" rx="2" fill="#28A8E8"/>
+    <path d="M14 13l7.5 4.5L29 13" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <rect x="1" y="5" width="14" height="22" rx="2.5" fill="#0364B8"/>
+    <ellipse cx="8" cy="16" rx="3.5" ry="4.5" fill="white"/>
+  </svg>
+);
+
+const LinkedInLogo = () => (
+  <svg viewBox="0 0 24 24" width="26" height="26" xmlns="http://www.w3.org/2000/svg">
+    <rect width="24" height="24" rx="4" fill="#0A66C2"/>
+    <path d="M5 9h2.5v9.5H5V9zm1.25-4a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zM10 9h2.4v1.3c.4-.7 1.3-1.5 2.8-1.5 2.9 0 3.8 1.9 3.8 4.4v5.3H16.5v-4.7c0-1.1-.4-1.9-1.5-1.9-1 0-1.5.7-1.7 1.4-.1.2-.1.5-.1.8v4.4H10V9z" fill="white"/>
+  </svg>
+);
+
+const CRM_LIST = [
+  { name: 'HubSpot',    description: 'Sync contacts, deals et activités',         logo: 'https://logo.clearbit.com/hubspot.com',    color: '#FF7A59' },
+  { name: 'Salesforce', description: 'Sync accounts, opportunities et réunions',   logo: 'https://logo.clearbit.com/salesforce.com', color: '#00A1E0' },
+  { name: 'Pipedrive',  description: 'Sync pipeline et données contacts',          logo: 'https://logo.clearbit.com/pipedrive.com',  color: '#1A1A2E' },
+  { name: 'Attio',      description: 'CRM nouvelle génération',                    logo: 'https://logo.clearbit.com/attio.com',      color: '#1C1C1C' },
+];
+
+const AVAILABLE_CONNECTIONS = [
+  { id: 'google',   name: 'Google',            subtitle: 'Gmail · Google Calendar · Contacts',  logo: <GoogleLogo /> },
+  { id: 'outlook',  name: 'Microsoft Outlook', subtitle: 'Email · Calendrier · Contacts',        logo: <OutlookLogo /> },
+  { id: 'linkedin', name: 'LinkedIn',          subtitle: 'Réseau · Profils professionnels',      logo: <LinkedInLogo /> },
+];
+
+// ── iOS toggle — couleur primaire Knowy #6E50C8 ────────────────────────
+function IOSToggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      className="relative flex-shrink-0 w-[51px] h-[31px] rounded-full border-0 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+      style={{ backgroundColor: checked ? '#6E50C8' : '#E5E5EA', transition: 'background-color 0.22s ease', padding: 0 }}
+    >
+      <span
+        className="absolute top-[2px] w-[27px] h-[27px] rounded-full bg-white"
+        style={{ left: checked ? '22px' : '2px', transition: 'left 0.22s ease', boxShadow: '0 3px 8px rgba(0,0,0,0.22), 0 1px 3px rgba(0,0,0,0.12)' }}
+      />
+    </button>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────
 export default function AccountSettings() {
   const navigate = useNavigate();
   const { profile } = useCurrentProfile();
-  const [activeTab, setActiveTab] = useState<'profile' | 'connections'>('profile');
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<'profile' | 'connections' | 'security'>('profile');
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // Profile editing
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+
+  // Password change — direct updateUser, pas d'OTP
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwDone, setPwDone] = useState(false);
+  const [showPwNew, setShowPwNew] = useState(false);
+  const [showPwConfirm, setShowPwConfirm] = useState(false);
+
+  // Sync settings — persistés dans profiles
+  const [syncSettings, setSyncSettings] = useState({ calendar: true, email: true, enrichment: false });
+
+  // Connections — statut via user.identities, action via linkIdentityProvider
+  const [pending, setPending] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+
+  // Gmail sync
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ messages: number; threads: number; contacts: number } | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const connectedProviders = getConnectedIdentityProviders(user);
+
+  // provider mapping: conn.id → OnboardingProvider
+  const PROVIDER_MAP: Record<string, OnboardingProvider> = {
+    google: 'google',
+    outlook: 'microsoft',
+    linkedin: 'linkedin_oidc',
+  };
+
+  function isConnected(connId: string) {
+    const p = PROVIDER_MAP[connId];
+    return connId === 'outlook'
+      ? connectedProviders.includes('microsoft') || connectedProviders.includes('azure' as any)
+      : connectedProviders.includes(p);
+  }
+
+  async function handleConnect(connId: string) {
+    setConnectError(null);
+    setPending(connId);
+    try {
+      await linkIdentityProvider(PROVIDER_MAP[connId], '/account');
+      // page redirects to OAuth — si on arrive ici c'est une erreur
+    } catch (e: any) {
+      setConnectError(e?.message ?? 'Erreur de connexion.');
+      setPending(null);
+    }
+  }
+
+  async function handleDisconnect(connId: string) {
+    if (!supabase || !user) return;
+    setConnectError(null);
+    setPending(connId);
+    const providerNames = connId === 'outlook' ? ['azure', 'microsoft'] : [PROVIDER_MAP[connId]];
+    const identity = (user.identities ?? []).find((i) => providerNames.includes(i.provider));
+    if (!identity) { setPending(null); return; }
+    const { error } = await (supabase.auth as any).unlinkIdentity(identity);
+    setPending(null);
+    if (error) setConnectError(error.message);
+  }
+
+  async function handleGmailSync() {
+    if (!supabase) return;
+    setSyncing(true);
+    setSyncResult(null);
+    setSyncError(null);
+    try {
+      const orgId = await getActiveOrganizationId();
+      if (!orgId) { setSyncError('Organisation introuvable.'); return; }
+
+      // Pas de providerToken depuis le frontend — l'edge function le lit depuis connectors.metadata
+      // Fonctionne quel que soit le mode de connexion (email / LinkedIn / Google)
+      const { data, error } = await supabase.functions.invoke('ingest-communication', {
+        body: { organizationId: orgId, lookbackDays: 365, maxMessagesPerContact: 1000 },
+      });
+
+      if (error) {
+        const msg: string = (error as any)?.message ?? String(error);
+        if (msg.includes('NOT_CONNECTED') || msg.includes('TOKEN_MISSING')) {
+          setSyncError('Connectez d\'abord votre compte Google dans la section ci-dessus.');
+        } else {
+          setSyncError(msg);
+        }
+        return;
+      }
+      setSyncResult({
+        messages: data?.stats?.messages ?? 0,
+        threads:  data?.stats?.threads  ?? 0,
+        contacts: data?.stats?.contacts ?? 0,
+      });
+    } catch (e: any) {
+      setSyncError(e?.message ?? 'Erreur inconnue');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  const authProvider = (user?.app_metadata as any)?.provider ?? 'email';
+  const isOAuthUser = authProvider !== 'email';
+
+  useEffect(() => {
+    if (profile?.fullName) {
+      const parts = profile.fullName.split(' ');
+      setFirstName(parts[0] ?? '');
+      setLastName(parts.slice(1).join(' ') ?? '');
+    }
+  }, [profile?.fullName]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadData() {
+      if (!supabase) return;
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u || !mounted) return;
+
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('sync_calendar, sync_email, sync_enrichment')
+        .eq('id', u.id)
+        .maybeSingle();
+
+      if (mounted && profileRow) {
+        setSyncSettings({
+          calendar:    (profileRow as any).sync_calendar    ?? true,
+          email:       (profileRow as any).sync_email       ?? true,
+          enrichment:  (profileRow as any).sync_enrichment  ?? false,
+        });
+      }
+
+      const { data: membership } = await supabase
+        .from('memberships').select('role').eq('user_id', u.id).maybeSingle();
+      if (mounted) setIsAdmin((membership as any)?.role === 'admin');
+
+      const SUPER_ADMINS = ['jordan.knowy@gmail.com', 'jolacrypto1@gmail.com'];
+      if (mounted) setIsSuperAdmin(SUPER_ADMINS.includes(u.email ?? ''));
+    }
+    loadData();
+    return () => { mounted = false; };
+  }, []);
+
+  // ── Capture Google token after OAuth redirect → stockage persistant en BDD ──
+  // Fonctionne quel que soit le mode de connexion (email / LinkedIn / Google)
+  useEffect(() => {
+    if (!supabase) return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!session?.provider_token || !supabase) return;
+      const hasGoogleIdentity = session.user.identities?.some(i => i.provider === 'google');
+      if (!hasGoogleIdentity) return;
+
+      const orgId = await getActiveOrganizationId();
+      if (!orgId) return;
+
+      // Stocke le token Google persistant — fonctionne quel que soit le mode de login
+      await (supabase.from('connectors') as any).upsert({
+        organization_id: orgId,
+        user_id: session.user.id,
+        provider: 'google',
+        status: 'connected',
+        metadata: {
+          access_token:  session.provider_token,
+          refresh_token: (session as any).provider_refresh_token ?? null,
+          email:         session.user.email,
+          stored_at:     new Date().toISOString(),
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'organization_id,user_id,provider' });
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function toggleSync(key: keyof typeof syncSettings) {
+    const next = !syncSettings[key];
+    setSyncSettings((s) => ({ ...s, [key]: next }));
+    if (!supabase) return;
+    const { data: { user: u } } = await supabase.auth.getUser();
+    if (!u) return;
+    const col = { calendar: 'sync_calendar', email: 'sync_email', enrichment: 'sync_enrichment' }[key];
+    await supabase.from('profiles').upsert({ id: u.id, [col]: next } as any, { onConflict: 'id' });
+
+    // Quand l'enrichissement est activé → déclenche l'enrich sur tous les contacts en attente
+    if (key === 'enrichment' && next) {
+      const orgId = await getActiveOrganizationId();
+      if (!orgId) return;
+      const { data: pendingContacts } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', orgId)
+        .in('enrichment_status', ['pending', 'failed'])
+        .limit(10); // batch de 10 pour ne pas surcharger
+      if (!pendingContacts?.length) return;
+      const sb = supabase;
+      Promise.all(pendingContacts.map((c: any) =>
+        sb.functions.invoke('enrich-contact', {
+          body: { contactId: c.id, organizationId: orgId },
+        }).catch(() => null)
+      ));
+    }
+  }
 
   async function handleLogout() {
     if (!supabase) return;
@@ -33,84 +312,48 @@ export default function AccountSettings() {
     await supabase.auth.signOut();
     navigate('/signin');
   }
-  const [connectedAccounts, setConnectedAccounts] = useState<{ type: string; email: string; status: string; synced: string }[]>([]);
-  const [crmConnections, setCrmConnections] = useState([
-    { name: 'HubSpot',    logo: '🟠', status: 'not_connected', description: 'Sync contacts, deals et activités' },
-    { name: 'Salesforce', logo: '☁️', status: 'not_connected', description: 'Sync accounts, opportunities et réunions' },
-    { name: 'Pipedrive',  logo: '🔵', status: 'not_connected', description: 'Sync pipeline et données contacts' },
-    { name: 'Attio',      logo: '🔷', status: 'not_connected', description: 'CRM nouvelle génération' },
-  ]);
 
-  useEffect(() => {
-    let mounted = true;
-    async function loadData() {
-      if (!supabase) return;
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !mounted) return;
+  async function handleSaveProfile() {
+    if (!supabase) return;
+    const { data: { user: u } } = await supabase.auth.getUser();
+    if (!u) return;
+    setSavingProfile(true);
+    await supabase.from('profiles')
+      .upsert({ id: u.id, full_name: `${firstName} ${lastName}`.trim() } as any, { onConflict: 'id' });
+    setSavingProfile(false);
+    setProfileSaved(true);
+    setTimeout(() => setProfileSaved(false), 2500);
+  }
 
-      // Load connectors
-      const { data: connectors } = await supabase
-        .from('connectors')
-        .select('provider, status, updated_at, metadata')
-        .eq('user_id', user.id);
-
-      if (mounted && connectors) {
-        const accounts = connectors
-          .filter((c: any) => ['google', 'linkedin'].includes(c.provider) && c.status === 'connected')
-          .map((c: any) => ({
-            type: c.provider === 'google' ? 'gmail' : 'linkedin',
-            email: (c.metadata as any)?.email ?? user.email ?? '',
-            status: 'active',
-            synced: c.updated_at
-              ? new Date(c.updated_at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-              : '—',
-          }));
-        setConnectedAccounts(accounts);
-
-        // Update CRM statuses
-        setCrmConnections(prev => prev.map(crm => {
-          const match = connectors.find((c: any) =>
-            c.provider === crm.name.toLowerCase() && c.status === 'connected'
-          );
-          return match ? { ...crm, status: 'connected' } : crm;
-        }));
-      }
-
-      // Check admin role
-      const { data: membership } = await supabase
-        .from('memberships')
-        .select('role')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (mounted) setIsAdmin((membership as any)?.role === 'admin');
-
-      // Check super admin — email check works immediately, no migration needed
-      const SUPER_ADMIN_EMAILS = ['jordan.knowy@gmail.com', 'jolacrypto1@gmail.com'];
-      if (mounted) setIsSuperAdmin(SUPER_ADMIN_EMAILS.includes(user.email ?? ''));
-    }
-    loadData();
-    return () => { mounted = false; };
-  }, []);
+  async function handleChangePassword() {
+    if (!supabase) return;
+    setPwError('');
+    if (pwNew.length < 8)          { setPwError('Minimum 8 caractères requis.'); return; }
+    if (pwNew !== pwConfirm)        { setPwError('Les mots de passe ne correspondent pas.'); return; }
+    setPwSaving(true);
+    const { error } = await supabase.auth.updateUser({ password: pwNew });
+    setPwSaving(false);
+    if (error) { setPwError(error.message); return; }
+    setPwNew(''); setPwConfirm('');
+    setPwDone(true);
+    setTimeout(() => setPwDone(false), 3000);
+  }
 
   const tabs = [
-    { id: 'profile', label: 'Mon profil', icon: User },
-    { id: 'connections', label: 'Connexions', icon: Settings }
+    { id: 'profile',     label: 'Mon profil',  icon: User },
+    { id: 'connections', label: 'Connexions',  icon: Settings },
+    { id: 'security',    label: 'Sécurité',    icon: Shield },
   ];
 
   return (
     <div className="size-full bg-background overflow-auto">
       <div className="max-w-7xl mx-auto px-4 py-5 md:px-8 md:py-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-4xl font-semibold mb-2">Paramètres</h1>
-              <p className="text-muted-foreground">
-                Gérez votre profil et vos connexions.
-              </p>
+              <p className="text-muted-foreground">Gérez votre profil et vos connexions.</p>
             </div>
             <button
               onClick={handleLogout}
@@ -142,20 +385,16 @@ export default function AccountSettings() {
           ))}
         </div>
 
-        {/* Profile Tab */}
+        {/* ── Profile Tab ─────────────────────────────────────────────── */}
         {activeTab === 'profile' && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="space-y-6"
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-6">
+
             <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
               <h2 className="text-xl font-semibold mb-6">Profil utilisateur</h2>
 
               <div className="flex flex-col gap-5 mb-8 sm:flex-row sm:items-start sm:gap-8">
                 {profile?.avatarUrl ? (
-                  <img src={profile.avatarUrl} alt={profile.fullName} className="size-24 rounded-2xl object-cover" />
+                  <img src={profile.avatarUrl} alt={profile.fullName} className="size-24 rounded-2xl object-cover flex-shrink-0" />
                 ) : (
                   <div className="size-24 flex-shrink-0 bg-gradient-to-br from-primary to-accent rounded-2xl flex items-center justify-center text-white text-4xl font-medium">
                     {profile?.initials ?? '?'}
@@ -166,30 +405,49 @@ export default function AccountSettings() {
                   <p className="text-lg text-muted-foreground mb-4">
                     {profile?.roleTitle ?? ''}{profile?.companyName ? ` chez ${profile.companyName}` : ''}
                   </p>
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                    {profile?.email && (
-                      <a href={`mailto:${profile.email}`} className="flex items-center gap-2 hover:text-primary transition-colors">
-                        <Mail className="size-4" />
-                        <span>{profile.email}</span>
-                      </a>
-                    )}
-                  </div>
+                  {profile?.email && (
+                    <a href={`mailto:${profile.email}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
+                      <Mail className="size-4" /><span>{profile.email}</span>
+                    </a>
+                  )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm text-muted-foreground mb-2">Entreprise</label>
-                  <p className="font-medium">{profile?.companyName ?? '—'}</p>
+              <div className="border-t border-border pt-6">
+                <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+                  <User className="size-4 text-primary" />Modifier le nom
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-2">Prénom</label>
+                    <input
+                      type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="Prénom"
+                      className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-2">Nom</label>
+                    <input
+                      type="text" value={lastName} onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Nom de famille"
+                      className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm text-muted-foreground mb-2">Rôle</label>
-                  <p className="font-medium">{profile?.roleTitle ?? '—'}</p>
-                </div>
+                <button
+                  onClick={handleSaveProfile} disabled={savingProfile}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl transition-colors text-sm font-medium disabled:opacity-60"
+                >
+                  {profileSaved
+                    ? <><CheckCheck className="size-4" /> Sauvegardé !</>
+                    : savingProfile
+                    ? <><Save className="size-4 animate-pulse" /> Sauvegarde…</>
+                    : <><Save className="size-4" /> Sauvegarder</>}
+                </button>
               </div>
             </div>
 
-            {/* Organization Section - Now in Profile Tab */}
             {isSuperAdmin && (
               <button
                 onClick={() => navigate('/super-admin')}
@@ -213,209 +471,276 @@ export default function AccountSettings() {
                     <Shield className="size-6 text-primary" />
                     <div>
                       <h3 className="font-semibold">Paramètres administrateur</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Ces paramètres ne sont accessibles qu'aux administrateurs de l'organisation.
-                      </p>
+                      <p className="text-sm text-muted-foreground">Accessibles aux administrateurs de l'organisation uniquement.</p>
                     </div>
                   </div>
                 </div>
-
                 <div className="bg-card rounded-2xl p-8 border border-border">
                   <h2 className="text-xl font-semibold mb-6">Informations de l'organisation</h2>
-
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm text-muted-foreground mb-2">Nom de l'organisation</label>
-                      <input
-                        type="text"
-                        defaultValue="Knowy"
-                        className="w-full px-4 py-3 bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      />
+                      <input type="text" defaultValue="Knowy" className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" />
                     </div>
                     <div>
                       <label className="block text-sm text-muted-foreground mb-2">Site web</label>
-                      <input
-                        type="text"
-                        defaultValue="knowy.ai"
-                        className="w-full px-4 py-3 bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-muted-foreground mb-2">Secteur</label>
-                      <input
-                        type="text"
-                        defaultValue="SaaS / Enterprise Software"
-                        className="w-full px-4 py-3 bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-muted-foreground mb-2">Taille</label>
-                      <select className="w-full px-4 py-3 bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20">
-                        <option>11-50 employés</option>
-                        <option>51-200 employés</option>
-                        <option>201-500 employés</option>
-                        <option>500+ employés</option>
-                      </select>
+                      <input type="text" defaultValue="knowy.ai" className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" />
                     </div>
                   </div>
-                </div>
-
-                <div className="bg-card rounded-2xl p-8 border border-border">
-                  <h2 className="text-xl font-semibold mb-6">Rôles et permissions</h2>
-
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
-                      <div>
-                        <p className="font-medium">Administrateurs</p>
-                        <p className="text-sm text-muted-foreground">Accès complet à tous les paramètres</p>
-                      </div>
-                      <span className="text-2xl font-semibold">3</span>
-                    </div>
-                    <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
-                      <div>
-                        <p className="font-medium">Utilisateurs standards</p>
-                        <p className="text-sm text-muted-foreground">Accès aux fonctionnalités de base</p>
-                      </div>
-                      <span className="text-2xl font-semibold">12</span>
-                    </div>
-                  </div>
-
-                  <button className="w-full mt-6 px-4 py-3 bg-primary hover:bg-accent text-white rounded-xl transition-colors">
-                    Gérer les rôles
-                  </button>
                 </div>
               </>
             )}
           </motion.div>
         )}
 
-
-        {/* Connections Tab */}
+        {/* ── Connections Tab ─────────────────────────────────────────── */}
         {activeTab === 'connections' && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="space-y-6"
-          >
-            {/* Connected accounts */}
-            <div className="bg-card rounded-2xl p-8 border border-border">
-              <h3 className="text-lg font-semibold mb-6">Comptes connectés</h3>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-6">
 
-              <div className="space-y-4">
-                {connectedAccounts.map((account, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
-                    <div className="flex items-center gap-4">
-                      <div className="size-12 bg-card rounded-xl flex items-center justify-center">
-                        {account.type === 'gmail' ? (
-                          <Mail className="size-6 text-primary" />
+            <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
+              <h3 className="text-lg font-semibold mb-2">Comptes connectés</h3>
+              <p className="text-sm text-muted-foreground mb-6">
+                Connectez vos comptes pour synchroniser vos emails, calendriers et contacts.
+              </p>
+              {connectError && (
+                <p className="mb-4 text-sm text-destructive bg-destructive/10 px-4 py-2 rounded-xl">{connectError}</p>
+              )}
+              {syncError && (
+                <div className="mb-4 flex items-start gap-2 text-sm text-destructive bg-destructive/10 px-4 py-3 rounded-xl">
+                  <AlertCircle className="size-4 flex-shrink-0 mt-0.5" />
+                  <span>{syncError}</span>
+                </div>
+              )}
+              {syncResult && (
+                <div className="mb-4 flex items-center gap-3 text-sm bg-success/10 text-success border border-success/20 px-4 py-3 rounded-xl">
+                  <RefreshCw className="size-4 flex-shrink-0" />
+                  <span>
+                    Synchronisation terminée — <strong>{syncResult.messages}</strong> emails · <strong>{syncResult.threads}</strong> threads · <strong>{syncResult.contacts}</strong> contacts traités
+                  </span>
+                </div>
+              )}
+              <div className="space-y-3">
+                {AVAILABLE_CONNECTIONS.map((conn) => {
+                  const connected = isConnected(conn.id);
+                  const loading = pending === conn.id;
+                  return (
+                    <div key={conn.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl hover:bg-muted/50 transition-colors">
+                      <div className="flex items-center gap-4">
+                        <div className={`size-12 bg-card rounded-xl flex items-center justify-center border ${connected ? 'border-success/40' : 'border-border/50'}`}>
+                          {conn.logo}
+                        </div>
+                        <div>
+                          <p className="font-medium">{conn.name}</p>
+                          <p className="text-sm text-muted-foreground">{conn.subtitle}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        {connected ? (
+                          <>
+                            <div className="hidden sm:flex items-center gap-1.5 text-success text-sm">
+                              <CheckCircle2 className="size-4" /><span>Connecté</span>
+                            </div>
+                            {/* Bouton sync Gmail — visible uniquement pour Google */}
+                            {conn.id === 'google' && (
+                              <button
+                                onClick={handleGmailSync}
+                                disabled={syncing}
+                                title="Synchroniser les 1 000 derniers emails"
+                                className="flex items-center gap-1.5 px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl text-sm transition-colors font-medium disabled:opacity-50"
+                              >
+                                {syncing
+                                  ? <span className="size-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                  : <Download className="size-3.5" />}
+                                {syncing ? 'Sync…' : '1 000 emails'}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDisconnect(conn.id)}
+                              disabled={loading}
+                              className="px-4 py-2 bg-muted hover:bg-muted/70 rounded-xl text-sm transition-colors disabled:opacity-50"
+                            >
+                              {loading
+                                ? <span className="flex items-center gap-2"><span className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" />…</span>
+                                : 'Déconnecter'}
+                            </button>
+                          </>
                         ) : (
-                          <Linkedin className="size-6 text-[#0A66C2]" />
+                          <button
+                            onClick={() => handleConnect(conn.id)}
+                            disabled={loading}
+                            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm transition-colors font-medium disabled:opacity-50"
+                          >
+                            {loading && <span className="size-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                            {loading ? 'Connexion…' : 'Se connecter'}
+                          </button>
                         )}
                       </div>
-                      <div>
-                        <p className="font-medium capitalize">{account.type}</p>
-                        <p className="text-sm text-muted-foreground">{account.email}</p>
-                      </div>
                     </div>
-
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="flex items-center gap-2 text-success mb-1">
-                          <CheckCircle2 className="size-4" />
-                          <span className="text-sm font-medium">Connecté</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">Synchronisé {account.synced}</p>
-                      </div>
-                      <button className="px-4 py-2 bg-muted hover:bg-muted/70 rounded-xl text-sm transition-colors">
-                        Déconnecter
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-                <button className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-border hover:border-primary/50 rounded-xl transition-colors text-muted-foreground hover:text-primary">
-                  <Plus className="size-5" />
-                  <span>Ajouter une connexion</span>
-                </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* CRM Connections */}
-            <div className="bg-card rounded-2xl p-8 border border-border">
-              <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
+            {/* CRM — V2 */}
+            <div className="bg-card rounded-2xl p-5 border border-border md:p-8 opacity-60">
+              <h3 className="text-lg font-semibold mb-2 flex items-center gap-3">
                 <Globe className="size-5 text-primary" />
                 Connexions CRM
+                <span className="px-2.5 py-0.5 text-xs font-semibold bg-muted border border-border rounded-full text-muted-foreground">Disponible en V2</span>
               </h3>
-              <p className="text-sm text-muted-foreground mb-6">
-                Synchronisez Knowy avec votre CRM pour enrichir automatiquement vos données relationnelles.
-              </p>
-
-              <div className="space-y-4">
-                {crmConnections.map((crm, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl hover:bg-muted/50 transition-colors">
+              <p className="text-sm text-muted-foreground mb-6">L'intégration CRM arrivera dans la prochaine version de Knowy.</p>
+              <div className="space-y-3">
+                {CRM_LIST.map((crm) => (
+                  <div key={crm.name} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
                     <div className="flex items-center gap-4">
-                      <div className="size-12 bg-card rounded-xl flex items-center justify-center text-2xl">
-                        {crm.logo}
+                      <div className="size-12 bg-card rounded-xl flex items-center justify-center border border-border/50 overflow-hidden">
+                        <img
+                          src={crm.logo} alt={crm.name} className="size-8 object-contain"
+                          onError={(e) => {
+                            const t = e.currentTarget as HTMLImageElement;
+                            t.style.display = 'none';
+                            (t.nextElementSibling as HTMLElement | null)?.style.setProperty('display', 'flex');
+                          }}
+                        />
+                        <div className="size-8 hidden items-center justify-center rounded-lg text-white text-xs font-bold" style={{ backgroundColor: crm.color }}>
+                          {crm.name[0]}
+                        </div>
                       </div>
                       <div>
                         <p className="font-medium">{crm.name}</p>
                         <p className="text-sm text-muted-foreground">{crm.description}</p>
                       </div>
                     </div>
-
-                    <button className="px-4 py-2 bg-primary hover:bg-accent text-white rounded-xl transition-colors text-sm">
-                      Connecter
-                    </button>
+                    <button disabled className="px-4 py-2 bg-muted text-muted-foreground rounded-xl text-sm cursor-not-allowed">Bientôt</button>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Sync settings */}
-            <div className="bg-card rounded-2xl p-8 border border-border">
-              <h3 className="text-lg font-semibold mb-6">Paramètres de synchronisation</h3>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <Calendar className="size-5 text-primary" />
-                    <div>
-                      <p className="font-medium">Synchronisation calendrier</p>
-                      <p className="text-sm text-muted-foreground">Auto-détection des réunions</p>
+            <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
+              <h3 className="text-lg font-semibold mb-2">Paramètres de synchronisation</h3>
+              <p className="text-xs text-muted-foreground mb-6">Préférences persistées en base de données.</p>
+              <div className="space-y-3">
+                {[
+                  { key: 'calendar'   as const, icon: Calendar, label: 'Synchronisation calendrier', sub: 'Auto-détection des réunions' },
+                  { key: 'email'      as const, icon: Mail,     label: 'Analyse des emails',          sub: 'Contexte relationnel' },
+                  { key: 'enrichment' as const, icon: Network,  label: 'Enrichissement automatique',  sub: 'Données publiques LinkedIn, etc.' },
+                ].map(({ key, icon: Icon, label, sub }) => (
+                  <div key={key} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <Icon className="size-5 text-primary" />
+                      <div>
+                        <p className="font-medium">{label}</p>
+                        <p className="text-sm text-muted-foreground">{sub}</p>
+                      </div>
                     </div>
+                    <IOSToggle checked={syncSettings[key]} onChange={() => toggleSync(key)} />
                   </div>
-                  <div className="size-12 bg-primary rounded-xl flex items-center justify-center cursor-pointer">
-                    <div className="size-6 bg-white rounded-full" style={{ marginLeft: '10px' }} />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <Mail className="size-5 text-primary" />
-                    <div>
-                      <p className="font-medium">Analyse des emails</p>
-                      <p className="text-sm text-muted-foreground">Contexte relationnel</p>
-                    </div>
-                  </div>
-                  <div className="size-12 bg-primary rounded-xl flex items-center justify-center cursor-pointer">
-                    <div className="size-6 bg-white rounded-full" style={{ marginLeft: '10px' }} />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <Network className="size-5 text-primary" />
-                    <div>
-                      <p className="font-medium">Enrichissement automatique</p>
-                      <p className="text-sm text-muted-foreground">Données publiques LinkedIn, etc.</p>
-                    </div>
-                  </div>
-                  <div className="size-12 bg-primary rounded-xl flex items-center justify-center cursor-pointer">
-                    <div className="size-6 bg-white rounded-full" style={{ marginLeft: '10px' }} />
-                  </div>
-                </div>
+                ))}
               </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── Security Tab ────────────────────────────────────────────── */}
+        {activeTab === 'security' && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-6">
+
+            <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
+              <h2 className="text-xl font-semibold mb-1 flex items-center gap-2">
+                <Lock className="size-5 text-primary" />Mot de passe
+              </h2>
+
+              {isOAuthUser ? (
+                <div className="mt-5 p-4 bg-muted/40 rounded-xl flex items-start gap-3">
+                  <div className="mt-0.5 flex-shrink-0">
+                    {authProvider === 'google' ? <GoogleLogo /> : <LinkedInLogo />}
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Connexion via {authProvider === 'google' ? 'Google' : 'LinkedIn'}</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Votre mot de passe est géré par {authProvider === 'google' ? 'Google' : 'LinkedIn'}.
+                      Pour le modifier, rendez-vous directement sur leur site.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-5 space-y-4 max-w-sm">
+                  <p className="text-sm text-muted-foreground">
+                    Choisissez un nouveau mot de passe pour votre compte <strong>{user?.email}</strong>.
+                  </p>
+
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-2">Nouveau mot de passe</label>
+                    <div className="relative">
+                      <input
+                        type={showPwNew ? 'text' : 'password'}
+                        value={pwNew}
+                        onChange={(e) => setPwNew(e.target.value)}
+                        placeholder="Minimum 8 caractères"
+                        className="w-full px-4 py-3 pr-11 bg-input border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                      <button type="button" onClick={() => setShowPwNew(!showPwNew)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                        {showPwNew ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-2">Confirmer le mot de passe</label>
+                    <div className="relative">
+                      <input
+                        type={showPwConfirm ? 'text' : 'password'}
+                        value={pwConfirm}
+                        onChange={(e) => setPwConfirm(e.target.value)}
+                        placeholder="Répétez le mot de passe"
+                        className="w-full px-4 py-3 pr-11 bg-input border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                      <button type="button" onClick={() => setShowPwConfirm(!showPwConfirm)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                        {showPwConfirm ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Strength indicator */}
+                  {pwNew.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4].map((n) => (
+                          <div key={n} className={`h-1 flex-1 rounded-full transition-colors ${
+                            pwNew.length >= n * 3
+                              ? n <= 1 ? 'bg-destructive' : n <= 2 ? 'bg-warning' : n <= 3 ? 'bg-yellow-400' : 'bg-success'
+                              : 'bg-muted'
+                          }`} />
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {pwNew.length < 4 ? 'Trop court' : pwNew.length < 7 ? 'Faible' : pwNew.length < 10 ? 'Moyen' : 'Fort'}
+                      </p>
+                    </div>
+                  )}
+
+                  {pwError && <p className="text-sm text-destructive">{pwError}</p>}
+
+                  {pwDone && (
+                    <div className="flex items-center gap-3 p-3 bg-success/10 border border-success/20 rounded-xl text-success text-sm font-medium">
+                      <CheckCheck className="size-4" />Mot de passe mis à jour !
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleChangePassword}
+                    disabled={!pwNew || !pwConfirm || pwSaving}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl transition-colors text-sm font-medium disabled:opacity-60"
+                  >
+                    <Lock className="size-4" />
+                    {pwSaving ? 'Mise à jour…' : 'Changer le mot de passe'}
+                  </button>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
