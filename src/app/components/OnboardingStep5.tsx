@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Network, Users, Building2, Calendar, Mail, CheckCircle2, Sparkles, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { requireOnboardingContext, updateOnboardingContext } from '../../lib/onboarding';
+import { getActiveOrganizationId } from '../../lib/api/org';
 
 interface InitStep {
   id: string;
@@ -38,24 +39,41 @@ export default function OnboardingStep5() {
   }, [navigate]);
 
   async function completeOnboarding() {
-    if (!userId || !organizationId) return;
+    if (!userId || !organizationId || !supabase) return;
 
+    // 1. Mark onboarding complete
     await updateOnboardingContext(organizationId, userId, {
       current_step: 5,
       step5: true,
       completed_at: new Date().toISOString(),
     });
 
-    if (supabase) {
-      await (supabase as any).from('sync_jobs').insert({
-        organization_id: organizationId,
-        job_type: 'initial_onboarding_sync',
-        status: 'queued',
-        payload: {
-          source: 'onboarding',
-          requested_at: new Date().toISOString(),
-        },
-      });
+    // 2. Launch real syncs with the Google token (best-effort)
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const providerToken = session?.provider_token;
+      const accessToken = session?.access_token;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+      if (providerToken && accessToken && supabaseUrl) {
+        const headers = { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+
+        // Fire both syncs in parallel — don't wait (non-blocking)
+        Promise.allSettled([
+          fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ organizationId, providerToken }),
+          }),
+          fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ organizationId, providerToken, lookbackDays: 90 }),
+          }),
+        ]);
+      }
+    } catch {
+      // Sync is best-effort — onboarding completes regardless
     }
   }
 

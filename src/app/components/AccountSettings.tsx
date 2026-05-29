@@ -24,6 +24,7 @@ export default function AccountSettings() {
   const { profile } = useCurrentProfile();
   const [activeTab, setActiveTab] = useState<'profile' | 'connections'>('profile');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   async function handleLogout() {
@@ -82,6 +83,10 @@ export default function AccountSettings() {
         .eq('user_id', user.id)
         .maybeSingle();
       if (mounted) setIsAdmin((membership as any)?.role === 'admin');
+
+      // Check super admin — email check works immediately, no migration needed
+      const SUPER_ADMIN_EMAILS = ['jordan.knowy@gmail.com', 'jolacrypto1@gmail.com'];
+      if (mounted) setIsSuperAdmin(SUPER_ADMIN_EMAILS.includes(user.email ?? ''));
     }
     loadData();
     return () => { mounted = false; };
@@ -94,13 +99,13 @@ export default function AccountSettings() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-5 md:px-8 md:py-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-4xl font-semibold mb-2">Paramètres</h1>
               <p className="text-muted-foreground">
@@ -145,23 +150,23 @@ export default function AccountSettings() {
             transition={{ duration: 0.4 }}
             className="space-y-6"
           >
-            <div className="bg-card rounded-2xl p-8 border border-border">
+            <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
               <h2 className="text-xl font-semibold mb-6">Profil utilisateur</h2>
 
-              <div className="flex items-start gap-8 mb-8">
+              <div className="flex flex-col gap-5 mb-8 sm:flex-row sm:items-start sm:gap-8">
                 {profile?.avatarUrl ? (
                   <img src={profile.avatarUrl} alt={profile.fullName} className="size-24 rounded-2xl object-cover" />
                 ) : (
-                  <div className="size-24 bg-gradient-to-br from-primary to-accent rounded-2xl flex items-center justify-center text-white text-4xl font-medium">
+                  <div className="size-24 flex-shrink-0 bg-gradient-to-br from-primary to-accent rounded-2xl flex items-center justify-center text-white text-4xl font-medium">
                     {profile?.initials ?? '?'}
                   </div>
                 )}
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <h3 className="text-2xl font-semibold mb-1">{profile?.fullName ?? '—'}</h3>
                   <p className="text-lg text-muted-foreground mb-4">
                     {profile?.roleTitle ?? ''}{profile?.companyName ? ` chez ${profile.companyName}` : ''}
                   </p>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                     {profile?.email && (
                       <a href={`mailto:${profile.email}`} className="flex items-center gap-2 hover:text-primary transition-colors">
                         <Mail className="size-4" />
@@ -185,6 +190,22 @@ export default function AccountSettings() {
             </div>
 
             {/* Organization Section - Now in Profile Tab */}
+            {isSuperAdmin && (
+              <button
+                onClick={() => navigate('/super-admin')}
+                className="w-full flex items-center gap-3 p-4 rounded-2xl border-2 border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors text-left"
+              >
+                <div className="size-10 bg-primary rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Shield className="size-5 text-primary-foreground" />
+                </div>
+                <div>
+                  <div className="font-semibold text-primary">Super Admin — Vision 360°</div>
+                  <div className="text-xs text-muted-foreground">KPIs · Organisations · Utilisateurs · Réseau</div>
+                </div>
+                <ExternalLink className="size-4 text-primary ml-auto" />
+              </button>
+            )}
+
             {isAdmin && (
               <>
                 <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-6 border border-primary/10">

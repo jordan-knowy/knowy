@@ -134,17 +134,29 @@ export default function Dashboard() {
         return;
       }
       const orgId = await getActiveOrganizationId();
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-google-calendar`, {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+      // 1. Sync Calendar
+      const calRes = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ organizationId: orgId, providerToken }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erreur sync');
-      setSyncMsg({ type: 'success', text: `✓ ${data.stats?.created} nouvelles réunions, ${data.stats?.updated} mises à jour` });
+      const calData = await calRes.json();
+      if (!calRes.ok) throw new Error(calData.error || 'Erreur sync calendar');
+
+      // 2. Ingest Gmail metadata (best-effort — don't fail if token lacks gmail scope)
+      try {
+        await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ organizationId: orgId, providerToken, lookbackDays: 90 }),
+        });
+      } catch {
+        // Gmail ingestion is best-effort — calendar sync success is enough
+      }
+
+      setSyncMsg({ type: 'success', text: `✓ ${calData.stats?.created ?? 0} nouvelles réunions · Emails synchronisés` });
       reloadMeetings?.();
     } catch (e: any) {
       setSyncMsg({ type: 'error', text: e.message });
@@ -316,16 +328,16 @@ export default function Dashboard() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-5 md:px-8 md:py-8">
 
         {/* Plugin Banner */}
         {showPluginBanner && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-6 bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-2xl p-4 flex items-center justify-between"
+            className="mb-6 bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-2xl p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
               <div className="size-10 bg-primary/20 rounded-xl flex items-center justify-center">
                 <Sparkles className="size-5 text-primary" />
               </div>
@@ -348,14 +360,14 @@ export default function Dashboard() {
 
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="mb-8">
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-5xl font-black mb-2">
+              <h1 className="text-3xl font-black mb-2 sm:text-4xl md:text-5xl">
                 Bonjour{firstName ? ` ${firstName}` : ''} <span className="inline-block animate-wave">👋</span>
               </h1>
               <p className="text-lg text-muted-foreground">Votre vue d'ensemble</p>
             </div>
-            <div className="flex flex-col items-end gap-2 mt-1">
+            <div className="flex flex-col gap-2 sm:mt-1 sm:items-end">
               <button
                 onClick={handleCalendarSync}
                 disabled={syncing}
@@ -381,7 +393,7 @@ export default function Dashboard() {
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1 }}
-          className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 mb-8"
+          className="grid grid-cols-1 gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr]"
         >
           <KnowyCard className="p-6 bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
             <div className="flex items-center gap-2 mb-4">
@@ -390,7 +402,7 @@ export default function Dashboard() {
             </div>
             {impact ? (
               <>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <div>
                     <p className="text-3xl font-black mb-1">{impact.profilesEnriched}</p>
                     <p className="text-xs text-muted-foreground">Profils enrichis</p>
@@ -445,13 +457,13 @@ export default function Dashboard() {
         </motion.div>
 
         {/* Main 60/40 grid */}
-        <div className="grid grid-cols-[60%_40%] gap-6 mb-8 items-start">
+        <div className="grid grid-cols-1 gap-6 mb-8 items-start lg:grid-cols-[60%_40%]">
 
           {/* LEFT — Meetings */}
           <div className="flex flex-col gap-6">
             {/* Today */}
             <div>
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between gap-3 mb-4">
                 <div>
                   <h2 className="text-2xl font-black mb-1">Aujourd'hui</h2>
                   <p className="text-sm font-mono text-muted-foreground uppercase tracking-wider">

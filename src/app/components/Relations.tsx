@@ -222,7 +222,7 @@ export default function Relations() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-7xl mx-auto px-6 py-6">
+      <div className="max-w-7xl mx-auto px-4 py-5 sm:px-6 sm:py-6">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -230,7 +230,7 @@ export default function Relations() {
           transition={{ duration: 0.6 }}
           className="mb-6"
         >
-          <div className="flex items-start justify-between mb-4">
+          <div className="flex flex-col gap-4 mb-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <h1 className="mb-2">Mémoire Relationnelle</h1>
               <p className="text-muted-foreground">
@@ -238,8 +238,8 @@ export default function Relations() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="text-right">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="text-left sm:text-right">
                 <div className="flex items-center gap-2 mb-1">
                   <Database className="size-4 text-muted-foreground" />
                   <p className="text-sm font-medium">Synchronisation CRM</p>
@@ -367,7 +367,7 @@ export default function Relations() {
                   onClick={() => navigate(`/relation/${contact.id}`)}
                   className="p-4 cursor-pointer"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
                     {/* Column 1 - Identity */}
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       <div className={`size-10 rounded-lg ${phaseConfig.bgColor} ${phaseConfig.color} flex items-center justify-center font-bold text-sm flex-shrink-0`}>
@@ -384,7 +384,7 @@ export default function Relations() {
                     </div>
 
                     {/* Column 2 - Engagement Score */}
-                    <div className="flex flex-col items-center gap-1 min-w-[100px]">
+                    <div className="flex flex-row items-center justify-between gap-3 rounded-xl bg-muted/20 p-3 lg:min-w-[100px] lg:flex-col lg:bg-transparent lg:p-0">
                       <div className="flex items-center gap-2">
                         <div className={`size-12 rounded-full ${getScoreBgColor(contact.engagementScore)} flex items-center justify-center`}>
                           <span className={`font-mono font-bold text-lg ${getScoreColor(contact.engagementScore)}`}>
@@ -410,7 +410,7 @@ export default function Relations() {
                     </div>
 
                     {/* Column 3 - Phase */}
-                    <div className="flex flex-col items-center gap-1 min-w-[130px]">
+                    <div className="flex flex-row items-center justify-between gap-3 rounded-xl bg-muted/20 p-3 lg:min-w-[130px] lg:flex-col lg:bg-transparent lg:p-0">
                       <KnowyBadge variant={phaseConfig.variant} size="sm" className="flex items-center gap-1">
                         <PhaseIcon className="size-3" />
                         {phaseConfig.label}
@@ -419,7 +419,7 @@ export default function Relations() {
                     </div>
 
                     {/* Column 4 - Last Contact */}
-                    <div className="flex flex-col items-center gap-1 min-w-[120px]">
+                    <div className="flex flex-row items-center justify-between gap-3 rounded-xl bg-muted/20 p-3 lg:min-w-[120px] lg:flex-col lg:bg-transparent lg:p-0">
                       <div className="flex items-center gap-1.5">
                         <ContactIcon className="size-3 text-muted-foreground" />
                         <span className="text-xs">{contact.lastContactDate}</span>
@@ -428,7 +428,7 @@ export default function Relations() {
                     </div>
 
                     {/* Column 5 - Alert */}
-                    <div className="min-w-[160px]">
+                    <div className="lg:min-w-[160px]">
                       {contact.alert && alertConfig && AlertIcon && (
                         <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${alertConfig.bgColor}`}>
                           <AlertIcon className={`size-3 ${alertConfig.color}`} />

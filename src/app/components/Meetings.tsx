@@ -81,10 +81,7 @@ export default function Meetings() {
 
       const res = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ organizationId: orgId, providerToken }),
       });
 
@@ -92,6 +89,12 @@ export default function Meetings() {
       if (!res.ok) {
         setSyncResult({ error: data.error || 'Erreur de synchronisation' });
       } else {
+        // Ingest Gmail metadata alongside calendar (best-effort)
+        fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ organizationId: orgId, providerToken, lookbackDays: 90 }),
+        }).catch(() => {});
         setSyncResult({ stats: data.stats });
         reload?.();
       }
@@ -351,7 +354,7 @@ export default function Meetings() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-5 md:px-8 md:py-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -359,7 +362,7 @@ export default function Meetings() {
           transition={{ duration: 0.6 }}
           className="mb-8"
         >
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="mb-2">Réunions</h1>
               <p className="text-muted-foreground">
@@ -368,7 +371,7 @@ export default function Meetings() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <KnowyButton
                 variant="secondary"
                 size="md"
@@ -442,7 +445,7 @@ export default function Meetings() {
           </div>
 
           {/* Filters */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <KnowyButton
               variant={showFilters ? 'primary' : 'secondary'}
               size="sm"
@@ -459,7 +462,7 @@ export default function Meetings() {
                 className="flex flex-wrap items-center gap-3"
               >
                 {/* Temps */}
-                <div className="flex items-center gap-2 bg-card border border-border rounded-xl p-1">
+                <div className="flex max-w-full items-center gap-2 overflow-x-auto bg-card border border-border rounded-xl p-1">
                   {[
                     { value: 'all', label: 'Toutes' },
                     { value: 'future', label: 'À venir' },
@@ -480,7 +483,7 @@ export default function Meetings() {
                 </div>
 
                 {/* Type */}
-                <div className="flex items-center gap-2 bg-card border border-border rounded-xl p-1">
+                <div className="flex max-w-full items-center gap-2 overflow-x-auto bg-card border border-border rounded-xl p-1">
                   {[
                     { value: 'all', label: 'Tous types' },
                     { value: 'external', label: 'Externes' },
@@ -501,7 +504,7 @@ export default function Meetings() {
                 </div>
 
                 {/* Brief Status */}
-                <div className="flex items-center gap-2 bg-card border border-border rounded-xl p-1">
+                <div className="flex max-w-full items-center gap-2 overflow-x-auto bg-card border border-border rounded-xl p-1">
                   {[
                     { value: 'all', label: 'Tous briefs' },
                     { value: 'ready', label: 'Prêts' },

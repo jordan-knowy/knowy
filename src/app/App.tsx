@@ -17,6 +17,7 @@ import Coaching from './components/Coaching';
 import Relations from './components/Relations';
 import RelationDetail from './components/RelationDetail';
 import AccountSettings from './components/AccountSettings';
+import SuperAdmin from './components/SuperAdmin';
 import Subscription from './components/Subscription';
 import CGU from './components/CGU';
 import Privacy from './components/Privacy';
@@ -142,6 +143,7 @@ export default function App() {
         <Route path="/contact/:id" element={<ContactRedirect />} />
         <Route path="/subscription" element={<ProtectedApp><Layout><Subscription /></Layout></ProtectedApp>} />
         <Route path="/account" element={<ProtectedApp><Layout><AccountSettings /></Layout></ProtectedApp>} />
+        <Route path="/super-admin" element={<ProtectedApp><Layout><SuperAdmin /></Layout></ProtectedApp>} />
       </Routes>
     </BrowserRouter>
   );
