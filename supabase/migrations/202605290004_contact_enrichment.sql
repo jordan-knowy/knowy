@@ -53,5 +53,5 @@ CREATE INDEX IF NOT EXISTS idx_score_history_contact
 
 ALTER TABLE public.contact_score_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "score_history_member_all" ON public.contact_score_history
-  FOR ALL USING (public.is_org_member(organization_id))
-  WITH CHECK (public.is_org_member(organization_id));
+  FOR ALL USING (private.is_org_member(organization_id))
+  WITH CHECK (private.is_org_member(organization_id));

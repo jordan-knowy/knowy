@@ -59,11 +59,17 @@ const LinkedInLogo = () => (
   </svg>
 );
 
+// CRM logos — SVG inline pour éviter les requêtes réseau bloquées en local
+const CrmLogoHubSpot  = () => <svg viewBox="0 0 32 32" width="28" height="28"><circle cx="16" cy="16" r="16" fill="#FF7A59"/><text x="16" y="21" textAnchor="middle" fontSize="14" fontWeight="800" fill="white" fontFamily="sans-serif">H</text></svg>;
+const CrmLogoSalesforce = () => <svg viewBox="0 0 32 32" width="28" height="28"><rect width="32" height="32" rx="6" fill="#00A1E0"/><text x="16" y="21" textAnchor="middle" fontSize="11" fontWeight="700" fill="white" fontFamily="sans-serif">SF</text></svg>;
+const CrmLogoPipedrive  = () => <svg viewBox="0 0 32 32" width="28" height="28"><rect width="32" height="32" rx="6" fill="#25292E"/><text x="16" y="21" textAnchor="middle" fontSize="14" fontWeight="800" fill="#0EAD69" fontFamily="sans-serif">P</text></svg>;
+const CrmLogoAttio      = () => <svg viewBox="0 0 32 32" width="28" height="28"><rect width="32" height="32" rx="6" fill="#1C1C1C"/><text x="16" y="21" textAnchor="middle" fontSize="13" fontWeight="700" fill="white" fontFamily="sans-serif">at</text></svg>;
+
 const CRM_LIST = [
-  { name: 'HubSpot',    description: 'Sync contacts, deals et activités',         logo: 'https://logo.clearbit.com/hubspot.com',    color: '#FF7A59' },
-  { name: 'Salesforce', description: 'Sync accounts, opportunities et réunions',   logo: 'https://logo.clearbit.com/salesforce.com', color: '#00A1E0' },
-  { name: 'Pipedrive',  description: 'Sync pipeline et données contacts',          logo: 'https://logo.clearbit.com/pipedrive.com',  color: '#1A1A2E' },
-  { name: 'Attio',      description: 'CRM nouvelle génération',                    logo: 'https://logo.clearbit.com/attio.com',      color: '#1C1C1C' },
+  { name: 'HubSpot',    description: 'Sync contacts, deals et activités',        logo: <CrmLogoHubSpot />,    color: '#FF7A59' },
+  { name: 'Salesforce', description: 'Sync accounts, opportunities et réunions', logo: <CrmLogoSalesforce />, color: '#00A1E0' },
+  { name: 'Pipedrive',  description: 'Sync pipeline et données contacts',         logo: <CrmLogoPipedrive />,  color: '#25292E' },
+  { name: 'Attio',      description: 'CRM nouvelle génération',                   logo: <CrmLogoAttio />,      color: '#1C1C1C' },
 ];
 
 const AVAILABLE_CONNECTIONS = [
@@ -222,19 +228,21 @@ export default function AccountSettings() {
       const { data: { user: u } } = await supabase.auth.getUser();
       if (!u || !mounted) return;
 
-      const { data: profileRow } = await supabase
-        .from('profiles')
-        .select('sync_calendar, sync_email, sync_enrichment')
-        .eq('id', u.id)
-        .maybeSingle();
-
-      if (mounted && profileRow) {
-        setSyncSettings({
-          calendar:    (profileRow as any).sync_calendar    ?? true,
-          email:       (profileRow as any).sync_email       ?? true,
-          enrichment:  (profileRow as any).sync_enrichment  ?? false,
-        });
-      }
+      // Try to load sync prefs — graceful fallback if migration 202605290002 not yet applied
+      try {
+        const { data: profileRow, error: profileErr } = await supabase
+          .from('profiles')
+          .select('sync_calendar, sync_email, sync_enrichment')
+          .eq('id', u.id)
+          .maybeSingle();
+        if (!profileErr && mounted && profileRow) {
+          setSyncSettings({
+            calendar:   (profileRow as any).sync_calendar   ?? true,
+            email:      (profileRow as any).sync_email      ?? true,
+            enrichment: (profileRow as any).sync_enrichment ?? false,
+          });
+        }
+      } catch { /* columns not yet present — use defaults */ }
 
       const { data: membership } = await supabase
         .from('memberships').select('role').eq('user_id', u.id).maybeSingle();
@@ -259,20 +267,30 @@ export default function AccountSettings() {
       const orgId = await getActiveOrganizationId();
       if (!orgId) return;
 
-      // Stocke le token Google persistant — fonctionne quel que soit le mode de login
-      await (supabase.from('connectors') as any).upsert({
+      // Stocke le token Google persistant — tente d'abord avec metadata, fallback sans
+      const baseConnector = {
         organization_id: orgId,
         user_id: session.user.id,
         provider: 'google',
         status: 'connected',
+        updated_at: new Date().toISOString(),
+      };
+      const withMeta = {
+        ...baseConnector,
         metadata: {
           access_token:  session.provider_token,
           refresh_token: (session as any).provider_refresh_token ?? null,
           email:         session.user.email,
           stored_at:     new Date().toISOString(),
         },
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'organization_id,user_id,provider' });
+      };
+      const { error: connErr } = await (supabase.from('connectors') as any)
+        .upsert(withMeta, { onConflict: 'organization_id,user_id,provider' });
+      // Si metadata column absente (migration non appliquée) → upsert sans metadata
+      if (connErr) {
+        await (supabase.from('connectors') as any)
+          .upsert(baseConnector, { onConflict: 'organization_id,user_id,provider' });
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -284,7 +302,10 @@ export default function AccountSettings() {
     const { data: { user: u } } = await supabase.auth.getUser();
     if (!u) return;
     const col = { calendar: 'sync_calendar', email: 'sync_email', enrichment: 'sync_enrichment' }[key];
-    await supabase.from('profiles').upsert({ id: u.id, [col]: next } as any, { onConflict: 'id' });
+    // Silently ignore if migration not yet applied
+    try {
+      await supabase.from('profiles').upsert({ id: u.id, [col]: next } as any, { onConflict: 'id' });
+    } catch { /* migration 202605290002 not yet applied */ }
 
     // Quand l'enrichissement est activé → déclenche l'enrich sur tous les contacts en attente
     if (key === 'enrichment' && next) {
@@ -594,17 +615,7 @@ export default function AccountSettings() {
                   <div key={crm.name} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
                     <div className="flex items-center gap-4">
                       <div className="size-12 bg-card rounded-xl flex items-center justify-center border border-border/50 overflow-hidden">
-                        <img
-                          src={crm.logo} alt={crm.name} className="size-8 object-contain"
-                          onError={(e) => {
-                            const t = e.currentTarget as HTMLImageElement;
-                            t.style.display = 'none';
-                            (t.nextElementSibling as HTMLElement | null)?.style.setProperty('display', 'flex');
-                          }}
-                        />
-                        <div className="size-8 hidden items-center justify-center rounded-lg text-white text-xs font-bold" style={{ backgroundColor: crm.color }}>
-                          {crm.name[0]}
-                        </div>
+                        {crm.logo}
                       </div>
                       <div>
                         <p className="font-medium">{crm.name}</p>
