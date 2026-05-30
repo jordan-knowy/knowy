@@ -138,7 +138,8 @@ export default function App() {
         <Route path="/dashboard" element={<ProtectedApp><Layout><Dashboard /></Layout></ProtectedApp>} />
         <Route path="/meetings" element={<ProtectedApp><Layout><Meetings /></Layout></ProtectedApp>} />
         <Route path="/meeting/:id" element={<ProtectedApp><Layout><MeetingAnalysis /></Layout></ProtectedApp>} />
-        <Route path="/coaching" element={<ProtectedApp><Layout><Coaching /></Layout></ProtectedApp>} />
+        {/* Coaching — V2, accès désactivé → redirect dashboard */}
+        <Route path="/coaching" element={<Navigate to="/dashboard" replace />} />
         <Route path="/relations" element={<ProtectedApp><Layout><Relations /></Layout></ProtectedApp>} />
         <Route path="/relation/:id" element={<ProtectedApp><Layout><RelationDetail /></Layout></ProtectedApp>} />
         <Route path="/network" element={<Navigate to="/relations" replace />} />

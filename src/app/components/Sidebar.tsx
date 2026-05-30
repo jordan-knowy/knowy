@@ -15,9 +15,10 @@ import { supabase } from '../../lib/supabase';
 
 interface SidebarProps {
   isOpen?: boolean;
+  onNavigate?: () => void;
 }
 
-export default function Sidebar({ isOpen = true }: SidebarProps) {
+export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { profile } = useCurrentProfile();
@@ -49,8 +50,7 @@ export default function Sidebar({ isOpen = true }: SidebarProps) {
 
   const journeyItems = [
     { id: 'meetings', label: 'Réunions', icon: Calendar, path: '/meetings' },
-    { id: 'coaching', label: 'Coaching', icon: Zap, path: '/coaching' },
-    { id: 'relations', label: 'Relations', icon: Network, path: '/relations' }
+    { id: 'relations', label: 'Relations', icon: Network, path: '/relations' },
   ];
 
   const bottomItems = [
@@ -68,6 +68,11 @@ export default function Sidebar({ isOpen = true }: SidebarProps) {
     return location.pathname === path;
   };
 
+  const go = (path: string) => {
+    navigate(path);
+    onNavigate?.();
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -75,7 +80,7 @@ export default function Sidebar({ isOpen = true }: SidebarProps) {
       initial={{ x: -280 }}
       animate={{ x: 0 }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className="fixed left-0 top-0 h-screen w-[220px] bg-sidebar border-r border-sidebar-border flex flex-col z-20"
+      className="h-screen w-[220px] bg-sidebar border-r border-sidebar-border flex flex-col z-20 md:fixed md:left-0 md:top-0"
     >
       {/* Logo */}
       <div className="p-6 border-b border-sidebar-border">
@@ -96,7 +101,7 @@ export default function Sidebar({ isOpen = true }: SidebarProps) {
           {dashboardItems.map((item) => (
             <motion.button
               key={item.id}
-              onClick={() => navigate(item.path)}
+              onClick={() => go(item.path)}
               whileHover={{ x: 2 }}
               whileTap={{ scale: 0.98 }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
@@ -117,7 +122,7 @@ export default function Sidebar({ isOpen = true }: SidebarProps) {
             {journeyItems.map((item) => (
               <motion.button
                 key={item.id}
-                onClick={() => navigate(item.path)}
+                onClick={() => go(item.path)}
                 whileHover={{ x: 2 }}
                 whileTap={{ scale: 0.98 }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
@@ -130,6 +135,15 @@ export default function Sidebar({ isOpen = true }: SidebarProps) {
                 <span className="flex-1 text-left text-sm font-semibold">{item.label}</span>
               </motion.button>
             ))}
+
+            {/* Coaching — V2, désactivé */}
+            <div className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg opacity-40 cursor-not-allowed select-none">
+              <Zap className="size-5 text-muted-foreground" />
+              <span className="flex-1 text-left text-sm font-semibold text-muted-foreground">Coaching</span>
+              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                Soon
+              </span>
+            </div>
           </nav>
         </div>
 
@@ -138,7 +152,7 @@ export default function Sidebar({ isOpen = true }: SidebarProps) {
             {bottomItems.map((item) => (
               <motion.button
                 key={item.id}
-                onClick={() => navigate(item.path)}
+                onClick={() => go(item.path)}
                 whileHover={{ x: 2 }}
                 whileTap={{ scale: 0.98 }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
@@ -158,7 +172,7 @@ export default function Sidebar({ isOpen = true }: SidebarProps) {
       {/* User account section */}
       <div className="p-4 border-t border-sidebar-border">
         <motion.button
-          onClick={() => navigate('/account')}
+          onClick={() => go('/account')}
           whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.98 }}
           className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-all"
