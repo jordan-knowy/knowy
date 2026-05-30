@@ -24,33 +24,52 @@ export async function listMeetings(): Promise<Meeting[]> {
   const organizationId = await getActiveOrganizationId();
 
   if (supabase && organizationId) {
-    const { data, error } = await supabase
-      .from('meetings')
-      .select('id, title, starts_at, ends_at, importance_score, brief_status, company, location, format, platform, is_external')
-      .eq('organization_id', organizationId)
-      .order('starts_at', { ascending: true });
+    const [{ data, error }, { data: parts }] = await Promise.all([
+      supabase
+        .from('meetings')
+        .select('id, title, starts_at, ends_at, importance_score, brief_status, company, location, format, platform, is_external, category')
+        .eq('organization_id', organizationId)
+        // Exclure les réunions personnelles
+        .not('company', 'eq', 'Personnel')
+        .order('starts_at', { ascending: false }),
+      supabase
+        .from('meeting_participants')
+        .select('meeting_id, contact_id, display_name, name, email, is_current_user')
+        .eq('organization_id', organizationId)
+        .eq('is_current_user', false),
+    ]);
 
     if (!error && data?.length) {
-      const { data: parts } = await supabase
-        .from('meeting_participants')
-        .select('meeting_id, contact_id')
-        .eq('organization_id', organizationId);
+      // Grouper les participants par meeting
+      const partsByMeeting = new Map<string, any[]>();
+      for (const p of parts ?? []) {
+        if (!partsByMeeting.has(p.meeting_id)) partsByMeeting.set(p.meeting_id, []);
+        partsByMeeting.get(p.meeting_id)!.push(p);
+      }
 
-      return data.map((row: any) => ({
-        id: row.id,
-        title: row.title,
-        company: row.company ?? '',
-        startsAt: row.starts_at ?? new Date().toISOString(),
-        endsAt: row.ends_at ?? null,
-        location: row.location ?? null,
-        format: row.format ?? row.platform ?? 'video',
-        isExternal: row.is_external ?? true,
-        participantContactIds: (parts ?? [])
-          .filter((p: any) => p.meeting_id === row.id && p.contact_id)
-          .map((p: any) => p.contact_id),
-        importanceScore: row.importance_score,
-        briefStatus: row.brief_status,
-      }));
+      return data.map((row: any) => {
+        const meetingParts = partsByMeeting.get(row.id) ?? [];
+        return {
+          id: row.id,
+          title: row.title,
+          company: row.company ?? '',
+          category: row.category ?? 'Réunion',
+          startsAt: row.starts_at ?? new Date().toISOString(),
+          endsAt: row.ends_at ?? null,
+          location: row.location ?? null,
+          format: row.format ?? row.platform ?? 'video',
+          isExternal: row.is_external ?? true,
+          participantContactIds: meetingParts
+            .filter((p: any) => p.contact_id)
+            .map((p: any) => p.contact_id),
+          // Noms affichables des participants (même sans contact_id)
+          participantNames: meetingParts.slice(0, 5).map((p: any) =>
+            p.display_name || p.name || (p.email ? p.email.split('@')[0] : 'Participant')
+          ),
+          importanceScore: row.importance_score,
+          briefStatus: row.brief_status,
+        };
+      });
     }
   }
 

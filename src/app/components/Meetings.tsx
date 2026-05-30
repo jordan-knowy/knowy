@@ -36,15 +36,15 @@ interface Meeting {
   participants: { name: string; role?: string }[];
   date: string;
   time: string;
+  durationMin: number | null;
   format: 'video' | 'physical';
   location?: string;
   category: string;
-  relationScore: number; // Moyenne des scores relationnels
+  relationScore: number;
   briefStatus: 'ready' | 'generating' | 'to_generate' | 'insufficient' | 'consulted';
   hasDecisionMaker: boolean;
   isExternal: boolean;
   crmSynced: boolean;
-  crmUrl?: string;
   isPast: boolean;
 }
 
@@ -109,25 +109,31 @@ export default function Meetings() {
 
   // Map domain meetings → display Meeting
   const allMeetings: Meeting[] = useMemo(() =>
-    domainMeetings.map(m => ({
-      id: m.id,
-      title: m.title,
-      company: m.company,
-      logo: m.company ? m.company[0].toUpperCase() : '📅',
-      participants: [],
-      date: m.startsAt.slice(0, 10),
-      time: new Date(m.startsAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      format: 'video' as const,
-      location: undefined,
-      category: (m as any).category ?? 'Réunion',
-      relationScore: 0,
-      briefStatus: ((m.briefStatus as Meeting['briefStatus']) ?? 'to_generate'),
-      hasDecisionMaker: (m as any).has_decision_maker ?? false,
-      isExternal: (m as any).is_external ?? true,
-      crmSynced: (m as any).crm_synced ?? false,
-      crmUrl: (m as any).crm_external_url ?? undefined,
-      isPast: m.startsAt.slice(0, 10) < today,
-    })),
+    domainMeetings.map(m => {
+      const names: string[] = (m as any).participantNames ?? [];
+      const durationMin = m.endsAt
+        ? Math.round((new Date(m.endsAt).getTime() - new Date(m.startsAt).getTime()) / 60000)
+        : null;
+      return {
+        id: m.id,
+        title: m.title,
+        company: m.company || '—',
+        logo: m.company ? m.company[0].toUpperCase() : '?',
+        participants: names.map(n => ({ name: n })),
+        date: m.startsAt.slice(0, 10),
+        time: new Date(m.startsAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        durationMin,
+        format: (m.format === 'physical' ? 'physical' : 'video') as 'video' | 'physical',
+        location: m.location ?? undefined,
+        category: (m as any).category ?? 'Réunion',
+        relationScore: 0,
+        briefStatus: ((m.briefStatus as Meeting['briefStatus']) ?? 'to_generate'),
+        hasDecisionMaker: (m as any).has_decision_maker ?? false,
+        isExternal: (m as any).is_external ?? true,
+        crmSynced: false,
+        isPast: m.startsAt.slice(0, 10) < today,
+      };
+    }),
   [domainMeetings, today]);
 
   // Filtrage
@@ -235,60 +241,70 @@ export default function Meetings() {
           {/* Content */}
           <div className="flex-1 min-w-0">
             {/* Header */}
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start gap-3 flex-1">
-                <div className="text-4xl">{meeting.logo}</div>
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <div className="flex items-start gap-3 flex-1 min-w-0">
+                {/* Logo entreprise */}
+                <div className="size-10 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-white text-base"
+                  style={{ background: meeting.company === 'Optee' ? '#6E50C8' : meeting.company === 'Limayrac' ? '#0B8878' : '#9082B8' }}>
+                  {meeting.logo}
+                </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-xl font-bold mb-1 truncate">{meeting.title}</h3>
-                  <p className="text-muted-foreground">{meeting.company}</p>
+                  <h3 className="text-base font-bold leading-tight truncate mb-0.5">{meeting.title}</h3>
+                  <p className="text-sm text-muted-foreground font-medium">{meeting.company}</p>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                <div className={`flex items-center justify-center size-12 rounded-full ${getRelationScoreBg(meeting.relationScore)}`}>
-                  <span className={`font-mono font-bold text-lg ${getRelationScoreColor(meeting.relationScore)}`}>
-                    {meeting.relationScore}
-                  </span>
-                </div>
-              </div>
+              {/* Catégorie */}
+              <KnowyBadge variant={meeting.isExternal ? 'violet' : 'muted'} size="sm">
+                {meeting.category}
+              </KnowyBadge>
             </div>
 
-            {/* Info Row */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm mb-4">
-              <div className="flex items-center gap-2">
-                {meeting.format === 'video' ? (
-                  <Video className="size-4 text-muted-foreground" />
-                ) : (
-                  <MapPin className="size-4 text-muted-foreground" />
+            {/* Participants en chips */}
+            {meeting.participants.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {meeting.participants.slice(0, 4).map((p, i) => (
+                  <div key={i} className="flex items-center gap-1.5 px-2 py-1 bg-muted/50 rounded-lg border border-border">
+                    <div className="size-5 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[9px] font-bold flex-shrink-0">
+                      {p.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+                    <span className="text-xs font-medium text-foreground truncate max-w-[100px]">{p.name}</span>
+                  </div>
+                ))}
+                {meeting.participants.length > 4 && (
+                  <div className="flex items-center px-2 py-1 bg-muted/30 rounded-lg border border-border">
+                    <span className="text-xs text-muted-foreground">+{meeting.participants.length - 4}</span>
+                  </div>
                 )}
-                <span className="text-muted-foreground">{meeting.location}</span>
+              </div>
+            )}
+
+            {/* Info Row */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground mb-3">
+              <div className="flex items-center gap-1.5">
+                {meeting.format === 'video' ? (
+                  <Video className="size-3.5" />
+                ) : (
+                  <MapPin className="size-3.5" />
+                )}
+                <span>{meeting.format === 'video' ? 'Visio' : (meeting.location ?? 'Présentiel')}</span>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Users className="size-4 text-muted-foreground" />
-                <div className="flex items-center gap-1">
-                  {meeting.participants.slice(0, 2).map((p, idx) => (
-                    <span key={idx} className="text-muted-foreground">
-                      {p.name}
-                      {idx < Math.min(meeting.participants.length - 1, 1) ? ', ' : ''}
-                    </span>
-                  ))}
-                  {meeting.participants.length > 2 && (
-                    <span className="text-muted-foreground">{meeting.participants[2].name}</span>
-                  )}
-                </div>
-              </div>
-
-              {meeting.hasDecisionMaker && (
-                <div className="flex items-center gap-1 text-primary">
-                  <Star className="size-4 fill-primary" />
-                  <span className="font-semibold">Décideur</span>
+              {meeting.durationMin && meeting.durationMin > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <Clock className="size-3.5" />
+                  <span>{meeting.durationMin >= 60
+                    ? `${Math.floor(meeting.durationMin / 60)}h${meeting.durationMin % 60 > 0 ? String(meeting.durationMin % 60).padStart(2, '0') : ''}`
+                    : `${meeting.durationMin} min`
+                  }</span>
                 </div>
               )}
 
-              <KnowyBadge variant={meeting.isExternal ? 'violet' : 'muted'} size="sm">
-                {meeting.isExternal ? 'Externe' : 'Interne'}
-              </KnowyBadge>
+              {meeting.hasDecisionMaker && (
+                <div className="flex items-center gap-1 text-primary font-semibold">
+                  <Star className="size-3.5 fill-primary" />
+                  <span>Décideur présent</span>
+                </div>
+              )}
 
               <KnowyBadge variant="blue" size="sm">
                 {meeting.category}
