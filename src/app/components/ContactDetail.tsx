@@ -411,149 +411,242 @@ export default function ContactDetail() {
   const lastContact = allDates[0];
   const sources = ['Gmail', 'Calendar'].filter((s, i) => i === 0 ? messages.length > 0 : meetings.length > 0);
 
+  const scoreColor = score == null ? '#9082B8' : score >= 70 ? '#2EA86A' : score >= 40 ? '#6E50C8' : '#D94F63';
+  const phaseLabel = phase === 'growth' ? 'Développement' : phase === 'decline' ? 'Déclin' : 'Stable';
+  const phaseColor = phase === 'growth' ? '#2EA86A' : phase === 'decline' ? '#D94F63' : 'rgba(255,255,255,0.4)';
+
+  // Brief express — 4 clés extraites du profil cognitif
+  const briefExpress = profile ? [
+    {
+      label: '🎯 Insight clef',
+      text: profile.executive_summary ?? '—',
+    },
+    {
+      label: '⚡ Action prioritaire',
+      text: profile.jtbd_data?.functional_job?.pitch_angle
+        ?? (profile.behavioral_analysis_data?.[0] as any)?.inference
+        ?? '—',
+    },
+    {
+      label: '⚠️ Risque principal',
+      text: profile.theory_of_mind_data?.likely_skepticism
+        ?? profile.theory_of_mind_data?.credibility_gaps
+        ?? '—',
+    },
+    {
+      label: '❓ Question d\'ouverture',
+      text: profile.jtbd_data?.qualify_question ?? '—',
+    },
+  ] : null;
+
   const tabs = [
-    { id: 'profil',   label: 'Profil Cognitif',        icon: Brain },
-    { id: 'memoire',  label: 'Mémoire Relationnelle',   icon: TrendingUp },
-    { id: 'echanges', label: 'Échanges',                icon: MessageSquare },
+    { id: 'profil',   label: 'Profil Cognitif',       icon: Brain },
+    { id: 'memoire',  label: 'Mémoire Relationnelle',  icon: TrendingUp },
+    { id: 'echanges', label: 'Échanges',               icon: MessageSquare },
   ] as const;
 
   return (
-    <div className="size-full bg-background overflow-auto">
-      <div className="max-w-4xl mx-auto px-4 py-6 md:px-8">
+    <div className="size-full overflow-auto" style={{ background: '#F0F2F7' }}>
+      <div className="max-w-5xl mx-auto px-4 py-6 md:px-8">
 
         {/* ── Back ──────────────────────────────────────────────────────────── */}
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-6"
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-5"
         >
-          <ArrowLeft className="size-4" /> Retour aux contacts
+          <ArrowLeft className="size-4" /> Retour
         </button>
 
-        {/* ── Hero card ─────────────────────────────────────────────────────── */}
+        {/* ══ DARK HEADER CARD ══════════════════════════════════════════════ */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-card rounded-2xl border border-border overflow-hidden mb-6"
+          className="rounded-2xl overflow-hidden mb-4"
+          style={{ background: '#13111E' }}
         >
-          {/* Gradient top bar */}
-          <div className="h-1.5 bg-gradient-to-r from-primary via-accent to-primary/40" />
-
-          <div className="p-6 flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-8">
+          <div className="p-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
             {/* Avatar */}
             {contact.avatar_url ? (
-              <img src={contact.avatar_url} alt={contact.full_name} className="size-20 rounded-2xl object-cover flex-shrink-0 shadow-md" />
+              <img src={contact.avatar_url} alt={contact.full_name}
+                className="size-14 rounded-xl object-cover flex-shrink-0" />
             ) : (
-              <div className="size-20 flex-shrink-0 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-2xl font-bold shadow-md">
+              <div className="size-14 flex-shrink-0 rounded-xl flex items-center justify-center text-white text-xl font-bold"
+                style={{ background: 'linear-gradient(135deg, #6E50C8, #9747FF)' }}>
                 {initials(contact.full_name)}
               </div>
             )}
 
-            {/* Info */}
+            {/* Name + role */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div>
-                  <h1 className="text-2xl font-bold leading-tight">{contact.full_name}</h1>
-                  <p className="text-muted-foreground">
-                    {contact.role_title && <span>{contact.role_title}</span>}
-                    {contact.role_title && companyName && <span className="mx-1.5 text-border">·</span>}
-                    {companyName && (
-                      <span className="flex items-center gap-1 inline-flex">
-                        <Building2 className="size-3.5 inline" /> {companyName}
-                      </span>
-                    )}
-                  </p>
-                </div>
-                {score != null && (
-                  <ScoreRing score={score} phase={phase ?? 'stagnant'} delta={profile?.score_delta} />
-                )}
-              </div>
-
-              {/* Meta row */}
-              <div className="flex flex-wrap items-center gap-3 mt-3 text-sm text-muted-foreground">
+              <h1 className="text-xl font-bold leading-tight" style={{ color: '#fff' }}>
+                {contact.full_name}
+              </h1>
+              <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                {[contact.role_title, companyName].filter(Boolean).join(' · ')}
+              </p>
+              <div className="flex flex-wrap items-center gap-3 mt-2.5">
                 {contact.email && (
-                  <a href={`mailto:${contact.email}`} className="flex items-center gap-1.5 hover:text-primary transition-colors">
-                    <Mail className="size-3.5" /> {contact.email}
+                  <a href={`mailto:${contact.email}`}
+                    className="flex items-center gap-1.5 text-xs transition-colors"
+                    style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    <Mail className="size-3" /> {contact.email}
                   </a>
-                )}
-                {lastContact && (
-                  <span className="flex items-center gap-1.5">
-                    <Clock className="size-3.5" /> {relDate(lastContact)}
-                  </span>
                 )}
                 {contact.linkedin_url && (
                   <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 hover:text-primary transition-colors">
-                    <ExternalLink className="size-3.5" /> LinkedIn
+                    className="flex items-center gap-1.5 text-xs"
+                    style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    <ExternalLink className="size-3" /> LinkedIn
                   </a>
                 )}
-              </div>
-
-              {/* Source pills + enrichment actions */}
-              <div className="flex items-center gap-2 mt-3 flex-wrap">
-                {sources.map(s => (
-                  <span key={s} className="px-2 py-0.5 text-xs font-semibold bg-success/10 text-success border border-success/20 rounded-full">{s}</span>
-                ))}
-                {contact.web_bio && (
-                  <span className="px-2 py-0.5 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 rounded-full">Perplexity ✓</span>
-                )}
-                {profile && (
-                  <span className="px-2 py-0.5 text-xs font-semibold bg-primary/10 text-primary border border-primary/20 rounded-full">
-                    Conf. {profile.global_confidence}%
+                {lastContact && (
+                  <span className="flex items-center gap-1.5 text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    <Clock className="size-3" /> {relDate(lastContact)}
                   </span>
                 )}
-                {contact.last_enriched_at && (
-                  <span className="text-[11px] text-muted-foreground ml-auto">
-                    Enrichi {relDate(contact.last_enriched_at)}
-                  </span>
-                )}
-                <button
-                  onClick={() => orgId && triggerEnrichment(id!, orgId, true)}
-                  disabled={enriching}
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors ml-1 disabled:opacity-40"
-                >
-                  <RefreshCw className={`size-3.5 ${enriching ? 'animate-spin' : ''}`} />
-                  {enriching ? 'Analyse…' : 'Rafraîchir'}
-                </button>
               </div>
             </div>
+
+            {/* Score + Phase */}
+            <div className="flex items-center gap-5 flex-shrink-0">
+              {score != null && (
+                <>
+                  <div className="text-center">
+                    <p className="text-[9px] font-bold uppercase tracking-widest mb-1"
+                      style={{ color: 'rgba(255,255,255,0.3)' }}>Score</p>
+                    <p className="text-5xl font-black leading-none" style={{ color: scoreColor }}>{score}</p>
+                    <p className="text-[10px] font-mono mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>/100</p>
+                  </div>
+                  <div className="w-px h-12" style={{ background: 'rgba(255,255,255,0.08)' }} />
+                  <div className="text-center">
+                    <p className="text-[9px] font-bold uppercase tracking-widest mb-1"
+                      style={{ color: 'rgba(255,255,255,0.3)' }}>Phase · 30j</p>
+                    <div className="flex items-center gap-1.5">
+                      {phase === 'growth' ? <TrendingUp className="size-4" style={{ color: phaseColor }} />
+                        : phase === 'decline' ? <TrendingDown className="size-4" style={{ color: phaseColor }} />
+                        : <Minus className="size-4" style={{ color: phaseColor }} />}
+                      <span className="text-sm font-semibold" style={{ color: phaseColor }}>{phaseLabel}</span>
+                    </div>
+                    {profile?.score_delta != null && profile.score_delta !== 0 && (
+                      <p className="text-[10px] font-mono mt-1" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                        {profile.score_delta > 0 ? '+' : ''}{profile.score_delta} pts
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Sources + actions bar */}
+          <div className="px-6 pb-4 flex items-center gap-3 flex-wrap">
+            {sources.map(s => (
+              <span key={s} className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(46,168,106,0.15)', color: '#2EA86A', border: '1px solid rgba(46,168,106,0.3)' }}>
+                {s} ✓
+              </span>
+            ))}
+            {contact.web_bio && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(251,191,36,0.12)', color: '#F59E0B', border: '1px solid rgba(251,191,36,0.25)' }}>
+                Perplexity ✓
+              </span>
+            )}
+            {profile && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(110,80,200,0.2)', color: '#B39DDB', border: '1px solid rgba(110,80,200,0.3)' }}>
+                Conf. {profile.global_confidence}%
+              </span>
+            )}
+            <button
+              onClick={() => orgId && triggerEnrichment(id!, orgId, true)}
+              disabled={enriching}
+              className="flex items-center gap-1.5 text-[11px] transition-colors disabled:opacity-40 ml-auto"
+              style={{ color: 'rgba(255,255,255,0.3)' }}
+            >
+              <RefreshCw className={`size-3.5 ${enriching ? 'animate-spin' : ''}`} />
+              {enriching ? 'Analyse…' : 'Ré-enrichir'}
+            </button>
           </div>
         </motion.div>
 
-        {/* ── Deploy banner ─────────────────────────────────────────────────── */}
-        {enrichError === 'deploy' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6">
-            <p className="text-sm font-semibold text-amber-800 mb-1">⚠️ Edge Functions non déployées</p>
-            <p className="text-xs text-amber-700 mb-3">
-              Les fonctions d'enrichissement IA ne sont pas encore déployées sur Supabase. Lance ces commandes dans ton terminal :
-            </p>
-            <pre className="bg-amber-100 rounded-xl px-4 py-3 text-xs font-mono text-amber-900 overflow-x-auto whitespace-pre">{`supabase login\nsupabase link --project-ref bgmtzwfafcgjklgygvtx\nsupabase db push\nsupabase functions deploy enrich-contact\nsupabase functions deploy ingest-communication`}</pre>
+        {/* ══ BRIEF EXPRESS ═════════════════════════════════════════════════ */}
+        {briefExpress && !enriching && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="rounded-2xl overflow-hidden mb-4 relative"
+            style={{ background: '#13111E' }}
+          >
+            {/* subtle gradient */}
+            <div className="absolute inset-0 pointer-events-none"
+              style={{ background: 'linear-gradient(135deg, transparent 60%, rgba(110,80,200,0.06))' }} />
+            <div className="relative px-6 pt-5 pb-1">
+              <div className="flex items-center gap-3 mb-5">
+                <span className="text-[10px] font-bold uppercase tracking-widest"
+                  style={{ color: 'rgba(255,255,255,0.3)' }}>Brief express · 30 secondes</span>
+                <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                {(profile?.interaction_modes_data ?? []).slice(0, 2).map(m => (
+                  <span key={m} className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: 'rgba(110,80,200,0.25)', color: '#B39DDB', border: '1px solid rgba(110,80,200,0.4)' }}>
+                    {m}
+                  </span>
+                ))}
+                {profile?.cognitive_mode && profile.cognitive_mode !== 'unavailable' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: 'rgba(110,80,200,0.25)', color: '#B39DDB', border: '1px solid rgba(110,80,200,0.4)' }}>
+                    {profile.cognitive_mode === 's1_dominant' ? 'S1' : profile.cognitive_mode === 's2_dominant' ? 'S2' : 'Contextuel'}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 pb-5">
+                {briefExpress.map((item, i) => (
+                  <div key={i}>
+                    <p className="text-[10px] font-bold uppercase tracking-widest mb-2"
+                      style={{ color: 'rgba(255,255,255,0.3)' }}>{item.label}</p>
+                    <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)', fontStyle: 'italic' }}>
+                      {item.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </motion.div>
         )}
 
         {/* ── Enriching overlay ─────────────────────────────────────────────── */}
         <AnimatePresence>
           {enriching && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="bg-card rounded-2xl border border-primary/20 mb-6"
-            >
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="bg-card rounded-2xl border border-primary/20 mb-4">
               <EnrichingState name={contact.full_name} />
             </motion.div>
           )}
         </AnimatePresence>
 
+        {/* ── Deploy banner ─────────────────────────────────────────────────── */}
+        {enrichError === 'deploy' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+            <p className="text-sm font-semibold text-amber-800 mb-1">⚠️ Edge Functions non déployées</p>
+            <p className="text-xs text-amber-700 mb-3">Lance ces commandes :</p>
+            <pre className="bg-amber-100 rounded-xl px-4 py-3 text-xs font-mono text-amber-900 overflow-x-auto">{`supabase functions deploy enrich-contact\nsupabase functions deploy ingest-communication`}</pre>
+          </motion.div>
+        )}
+
         {/* ── Tabs ──────────────────────────────────────────────────────────── */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+        <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl whitespace-nowrap transition-all text-sm font-medium ${
-                activeTab === tab.id ? 'bg-primary text-white shadow-sm' : 'bg-card border border-border hover:bg-muted/50'
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl whitespace-nowrap transition-all text-sm font-semibold ${
+                activeTab === tab.id
+                  ? 'text-white shadow-sm'
+                  : 'bg-card border border-border hover:bg-muted/50 text-muted-foreground'
               }`}
+              style={activeTab === tab.id ? { background: '#6E50C8' } : {}}
             >
               <tab.icon className="size-4" />
               {tab.label}
@@ -565,17 +658,16 @@ export default function ContactDetail() {
         {/* TAB: PROFIL COGNITIF                                                */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'profil' && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
 
             {!profile && !enriching && (
               <div className="bg-card rounded-2xl border border-border p-8 text-center space-y-3">
                 <Sparkles className="size-10 text-primary mx-auto opacity-40" />
-                <p className="text-muted-foreground text-sm">
-                  Le profil cognitif n'a pas encore été généré.
-                </p>
+                <p className="text-muted-foreground text-sm">Le profil cognitif n'a pas encore été généré.</p>
                 <button
                   onClick={() => orgId && triggerEnrichment(id!, orgId)}
-                  className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
+                  className="px-5 py-2.5 text-white rounded-xl text-sm font-semibold transition-colors"
+                  style={{ background: '#6E50C8' }}
                 >
                   Lancer l'analyse IA
                 </button>
@@ -584,67 +676,38 @@ export default function ContactDetail() {
 
             {profile && (
               <>
-                {/* Executive summary */}
-                {profile.executive_summary && (
-                  <div className="bg-primary/5 rounded-2xl border border-primary/15 p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Sparkles className="size-4 text-primary" />
-                      <span className="text-sm font-semibold text-primary">Synthèse IA</span>
-                      <span className="ml-auto text-[11px] text-muted-foreground">Conf. {profile.global_confidence}%</span>
-                    </div>
-                    <p className="text-sm leading-relaxed text-foreground">{profile.executive_summary}</p>
-                  </div>
-                )}
-
-                {/* Web bio from Perplexity */}
-                {contact.web_bio && (
-                  <div className="bg-amber-50 rounded-2xl border border-amber-100 p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Globe className="size-4 text-amber-600" />
-                      <span className="text-sm font-semibold text-amber-700">Recherche web — Perplexity</span>
-                    </div>
-                    <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">{contact.web_bio}</p>
-                  </div>
-                )}
-
-                {/* Interaction modes + cognitive mode */}
+                {/* Modes + cognitif */}
                 <div className="bg-card rounded-2xl border border-border p-5">
-                  <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                    <Zap className="size-4 text-primary" /> Modes d'interaction
-                  </h3>
-                  <div className="flex flex-wrap gap-2 mb-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Zap className="size-4 text-primary" />
+                    <span className="text-sm font-semibold">Modes d'interaction</span>
+                    {profile.cognitive_mode && profile.cognitive_mode !== 'unavailable' && (
+                      <span className="ml-auto text-[11px] font-mono text-muted-foreground">
+                        {profile.cognitive_mode === 's1_dominant' ? 'S1 · décide vite, intuitif'
+                          : profile.cognitive_mode === 's2_dominant' ? 'S2 · analyse avant de décider'
+                          : 'Contextuel'}
+                        {profile.cognitive_mode_confidence != null && ` · ${Math.round((profile.cognitive_mode_confidence ?? 0) * 100)}%`}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     {(profile.interaction_modes_data ?? []).map((mode, i) => (
-                      <span key={mode} className={`px-3 py-1.5 rounded-xl text-sm font-semibold border ${MODE_COLORS[mode] ?? 'bg-muted text-muted-foreground border-border'} ${i === 0 ? 'text-sm' : 'text-xs'}`}>
+                      <span key={mode} className={`px-3 py-1.5 rounded-xl text-sm font-semibold border ${
+                        MODE_COLORS[mode] ?? 'bg-muted text-muted-foreground border-border'
+                      } ${i === 0 ? '' : 'opacity-70'}`}>
                         {mode}
                       </span>
                     ))}
                   </div>
-                  {profile.cognitive_mode && profile.cognitive_mode !== 'unavailable' && (
-                    <div className="flex items-center gap-3 pt-3 border-t border-border">
-                      <Brain className="size-4 text-muted-foreground" />
-                      <div>
-                        <span className="text-xs text-muted-foreground">Mode cognitif détecté · </span>
-                        <span className="text-xs font-semibold capitalize">
-                          {profile.cognitive_mode === 's1_dominant' ? 'S1 dominant — décision rapide, intuitive'
-                            : profile.cognitive_mode === 's2_dominant' ? 'S2 dominant — décision lente, analytique'
-                            : 'Contextuel'}
-                        </span>
-                      </div>
-                      {profile.cognitive_mode_confidence != null && (
-                        <span className="ml-auto text-[11px] font-mono text-muted-foreground">
-                          {Math.round((profile.cognitive_mode_confidence ?? 0) * 100)}%
-                        </span>
-                      )}
-                    </div>
-                  )}
                 </div>
 
-                {/* Interaction axes */}
+                {/* Axes interactionnels */}
                 {axes.length > 0 && (
                   <div className="bg-card rounded-2xl border border-border p-5">
-                    <h3 className="text-sm font-semibold mb-5 flex items-center gap-2">
-                      <Target className="size-4 text-primary" /> Axes interactionnels
-                    </h3>
+                    <div className="flex items-center gap-2 mb-5">
+                      <Target className="size-4 text-primary" />
+                      <span className="text-sm font-semibold">Axes interactionnels</span>
+                    </div>
                     <div className="space-y-5">
                       {axes.map(a => <AxisBar key={a.axis} {...a} />)}
                     </div>
@@ -654,43 +717,45 @@ export default function ContactDetail() {
                 {/* JTBD */}
                 {profile.jtbd_data && Object.keys(profile.jtbd_data).length > 0 && (
                   <div className="bg-card rounded-2xl border border-border p-5">
-                    <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                      <Target className="size-4 text-primary" /> Jobs-to-be-Done
-                    </h3>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Target className="size-4 text-primary" />
+                      <span className="text-sm font-semibold">Jobs-to-be-Done</span>
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <JTBDCard type="functional" data={profile.jtbd_data.functional_job} />
                       <JTBDCard type="social"     data={profile.jtbd_data.social_job} />
                       <JTBDCard type="emotional"  data={profile.jtbd_data.emotional_job} />
                     </div>
                     {profile.jtbd_data.qualify_question && (
-                      <div className="mt-3 p-3 bg-accent/30 rounded-xl border border-border">
+                      <div className="mt-3 p-3 rounded-xl border" style={{ background: 'rgba(110,80,200,0.05)', borderColor: 'rgba(110,80,200,0.2)' }}>
                         <span className="text-xs text-muted-foreground font-semibold">Question de qualification · </span>
-                        <span className="text-sm italic">"{profile.jtbd_data.qualify_question}"</span>
+                        <span className="text-sm italic text-foreground">"{profile.jtbd_data.qualify_question}"</span>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Behavioral signals */}
+                {/* Signaux comportementaux */}
                 {(profile.behavioral_analysis_data ?? []).length > 0 && (
-                  <div className="bg-card rounded-2xl border border-border p-5">
-                    <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                      <Brain className="size-4 text-primary" /> Signaux comportementaux
-                    </h3>
-                    <div className="space-y-3">
+                  <div className="bg-card rounded-2xl border border-border overflow-hidden">
+                    <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+                      <Brain className="size-4 text-primary" />
+                      <span className="text-sm font-semibold">Signaux comportementaux</span>
+                    </div>
+                    <div className="divide-y divide-border">
                       {(profile.behavioral_analysis_data ?? []).map((sig: any, i: number) => {
                         const lvl = LEVEL_CONFIG[sig.inference_level as keyof typeof LEVEL_CONFIG] ?? LEVEL_CONFIG.unavailable;
                         return (
-                          <div key={i} className="flex gap-3 p-3 bg-muted/30 rounded-xl">
-                            <div className="mt-0.5 flex-shrink-0">
-                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${lvl.color}`}>{lvl.label}</span>
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-foreground">{sig.text}</p>
+                          <div key={i} className="flex gap-3 px-5 py-4">
+                            <span className={`mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 self-start ${lvl.color}`}>
+                              {lvl.label}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">{sig.text}</p>
                               {sig.inference && <p className="text-xs text-muted-foreground mt-0.5 italic">{sig.inference}</p>}
                             </div>
                             {sig.confidence > 0 && (
-                              <span className="ml-auto text-[11px] font-mono text-muted-foreground flex-shrink-0">{sig.confidence}%</span>
+                              <span className="text-[11px] font-mono text-muted-foreground flex-shrink-0">{sig.confidence}%</span>
                             )}
                           </div>
                         );
@@ -699,24 +764,43 @@ export default function ContactDetail() {
                   </div>
                 )}
 
-                {/* Theory of mind */}
+                {/* Théorie de l'esprit */}
                 {profile.theory_of_mind_data && Object.keys(profile.theory_of_mind_data).length > 0 && (
                   <div className="bg-card rounded-2xl border border-border p-5">
-                    <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                      <Users className="size-4 text-primary" /> Théorie de l'esprit
-                    </h3>
-                    <div className="space-y-3">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Users className="size-4 text-primary" />
+                      <span className="text-sm font-semibold">Théorie de l'esprit</span>
+                      {profile.theory_of_mind_data.confidence != null && (
+                        <span className="ml-auto text-[11px] font-mono text-muted-foreground">
+                          Conf. {Math.round((profile.theory_of_mind_data.confidence ?? 0) * 100)}%
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-4">
                       {[
-                        { key: 'perceived_positioning', label: 'Comment il·elle nous perçoit' },
-                        { key: 'likely_skepticism',     label: 'Zone de scepticisme probable' },
-                        { key: 'credibility_gaps',      label: 'Lacunes de crédibilité' },
-                      ].map(({ key, label }) => profile.theory_of_mind_data?.[key] && (
-                        <div key={key}>
-                          <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground mb-1">{label}</p>
-                          <p className="text-sm text-foreground">{profile.theory_of_mind_data[key]}</p>
+                        { key: 'perceived_positioning', label: 'Comment il·elle nous perçoit', icon: '👁' },
+                        { key: 'likely_skepticism',     label: 'Zone de scepticisme probable', icon: '⚠️' },
+                        { key: 'credibility_gaps',      label: 'Lacunes de crédibilité',        icon: '🔍' },
+                      ].map(({ key, label, icon }) => profile.theory_of_mind_data?.[key] && (
+                        <div key={key} className="p-3 rounded-xl bg-muted/30 border border-border">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5">
+                            {icon} {label}
+                          </p>
+                          <p className="text-sm text-foreground leading-relaxed">{profile.theory_of_mind_data[key]}</p>
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Web bio Perplexity */}
+                {contact.web_bio && (
+                  <div className="rounded-2xl border p-5" style={{ background: '#FFFBEB', borderColor: '#FDE68A' }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Globe className="size-4" style={{ color: '#D97706' }} />
+                      <span className="text-sm font-semibold" style={{ color: '#92400E' }}>Données web enrichies — Perplexity</span>
+                    </div>
+                    <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">{contact.web_bio}</p>
                   </div>
                 )}
               </>
@@ -728,100 +812,125 @@ export default function ContactDetail() {
         {/* TAB: MÉMOIRE RELATIONNELLE                                          */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'memoire' && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
 
-            {/* Score header */}
+            {/* ── Score + 3 dimensions + chart ─────────────────────────────── */}
             {profile && score != null && (
               <div className="bg-card rounded-2xl border border-border overflow-hidden">
-                <div className="h-1 bg-gradient-to-r from-primary to-accent" />
-                <div className="p-5 flex items-center gap-8 flex-wrap">
-                  <div className="text-center">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Score engagement</p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-5xl font-black" style={{ color: score >= 70 ? '#2EA86A' : score >= 45 ? '#6E50C8' : '#D94F63' }}>{score}</span>
-                      <span className="text-muted-foreground text-lg">/100</span>
-                    </div>
+                {/* Header dark */}
+                <div className="p-5 flex items-center gap-6 flex-wrap" style={{ background: '#13111E' }}>
+                  <div className="size-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg, #6E50C8, #9747FF)' }}>
+                    <TrendingUp className="size-4 text-white" />
                   </div>
-                  <div className="w-px h-12 bg-border" />
-                  <div className="flex flex-col gap-1">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Phase · 30j</p>
-                    <div className={`flex items-center gap-1.5 font-semibold ${phase === 'growth' ? 'text-success' : phase === 'decline' ? 'text-destructive' : 'text-muted-foreground'}`}>
-                      {phase === 'growth' ? <TrendingUp className="size-5" /> : phase === 'decline' ? <TrendingDown className="size-5" /> : <Minus className="size-5" />}
-                      <span className="text-lg capitalize">{phase === 'growth' ? 'Développement' : phase === 'decline' ? 'Déclin' : 'Stable'}</span>
-                      {profile.score_delta != null && profile.score_delta !== 0 && (
-                        <span className="text-sm">({profile.score_delta > 0 ? '+' : ''}{profile.score_delta} pts)</span>
-                      )}
+                  <p className="text-[10px] font-bold uppercase tracking-widest flex-1"
+                    style={{ color: 'rgba(255,255,255,0.35)' }}>Mémoire Relationnelle</p>
+                  <div className="flex items-center gap-5">
+                    <div className="text-right">
+                      <p className="text-[9px] font-bold uppercase tracking-widest mb-1"
+                        style={{ color: 'rgba(255,255,255,0.3)' }}>Score engagement</p>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-4xl font-black leading-none" style={{ color: scoreColor }}>{score}</span>
+                        <span className="text-sm font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>
+                          {phaseLabel}
+                        </span>
+                        {profile.score_delta != null && profile.score_delta !== 0 && (
+                          <span className="text-[11px] font-mono" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                            {profile.score_delta > 0 ? '+' : ''}{profile.score_delta} · 30j
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* Score evolution chart */}
-            {scoreHistory.length > 1 && (
-              <div className="bg-card rounded-2xl border border-border p-5">
-                <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                  <TrendingUp className="size-4 text-primary" /> Évolution du score
-                </h3>
-                <ResponsiveContainer width="100%" height={160}>
-                  <AreaChart data={scoreHistory} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                    <defs>
-                      <linearGradient id="scoreGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#6E50C8" stopOpacity={0.25} />
-                        <stop offset="100%" stopColor="#6E50C8" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#9082B8' }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9082B8' }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Area type="monotone" dataKey="score" stroke="#6E50C8" strokeWidth={2.5}
-                      fill="url(#scoreGrad)" dot={{ fill: '#6E50C8', r: 3 }} activeDot={{ r: 5 }} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {/* 3 dimensions */}
-            {profile && (
-              <div className="bg-card rounded-2xl border border-border p-5">
-                <h3 className="text-sm font-semibold mb-5 flex items-center gap-2">
-                  <Sparkles className="size-4 text-primary" /> 3 Dimensions (doc 08 — Granovetter)
-                </h3>
-                <div className="space-y-5">
-                  {[
-                    { key: 'score_intensite',   label: 'Intensité',   weight: '40%', color: '#1D4ED8', sub: 'Fréquence et richesse des échanges' },
-                    { key: 'score_reciprocite',  label: 'Réciprocité',  weight: '35%', color: '#6E50C8', sub: "Équilibre d'initiation et taux de réponse" },
-                    { key: 'score_longevite',    label: 'Longévité',   weight: '25%', color: '#2EA86A', sub: 'Ancienneté, régularité et continuité' },
-                  ].map(({ key, label, weight, color, sub }) => {
-                    const val = profile[key as keyof CognitiveProfile] as number ?? 0;
-                    return (
-                      <div key={key} className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-sm font-semibold">{label}</span>
-                            <span className="text-xs text-muted-foreground ml-2">· Poids {weight}</span>
+                {/* 3 dimensions left + chart right */}
+                <div className="grid grid-cols-1 md:grid-cols-[280px_1fr]">
+                  {/* Left — 3 dims */}
+                  <div className="p-5 border-b md:border-b-0 md:border-r border-border space-y-4">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      3 Dimensions · Granovetter
+                    </p>
+                    {[
+                      { key: 'score_intensite',  label: 'Intensité',   weight: '40%', color: '#6E50C8',
+                        note: 'Fréquence et richesse des échanges' },
+                      { key: 'score_reciprocite', label: 'Réciprocité', weight: '35%', color: '#F59E0B',
+                        note: "Équilibre d'initiation et taux de réponse" },
+                      { key: 'score_longevite',   label: 'Longévité',  weight: '25%', color: '#2EA86A',
+                        note: 'Ancienneté, régularité et continuité' },
+                    ].map(({ key, label, weight, color, note }) => {
+                      const val = profile[key as keyof CognitiveProfile] as number ?? 0;
+                      return (
+                        <div key={key}>
+                          <div className="flex items-baseline justify-between mb-1">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</span>
+                              <span className="text-[9px] text-muted-foreground ml-1.5 font-mono">{weight}</span>
+                            </div>
+                            <span className="text-sm font-mono font-bold" style={{ color }}>{val}/100</span>
                           </div>
-                          <span className="text-sm font-mono font-bold" style={{ color }}>{val}/100</span>
+                          <div className="h-1.5 rounded-full overflow-hidden mb-1" style={{ background: '#E8EBF0' }}>
+                            <motion.div
+                              initial={{ width: 0 }} animate={{ width: `${val}%` }}
+                              transition={{ duration: 0.9, ease: 'easeOut' }}
+                              className="h-full rounded-full"
+                              style={{ background: color }}
+                            />
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">{note}</p>
                         </div>
-                        <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }} animate={{ width: `${val}%` }}
-                            transition={{ duration: 0.9, ease: 'easeOut' }}
-                            className="h-full rounded-full"
-                            style={{ background: `linear-gradient(90deg, ${color}80, ${color})` }}
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">{sub}</p>
+                      );
+                    })}
+                  </div>
+
+                  {/* Right — chart */}
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                        Évolution du score
+                      </p>
+                      {messages.length > 0 && (
+                        <span className="text-[11px] text-muted-foreground font-mono">{messages.length} échanges</span>
+                      )}
+                    </div>
+                    {scoreHistory.length > 1 ? (
+                      <ResponsiveContainer width="100%" height={160}>
+                        <AreaChart data={scoreHistory} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                          <defs>
+                            <linearGradient id="scoreGrad2" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#6E50C8" stopOpacity={0.2} />
+                              <stop offset="100%" stopColor="#6E50C8" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#9082B8' }} axisLine={false} tickLine={false} />
+                          <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9082B8' }} axisLine={false} tickLine={false} />
+                          <Tooltip content={<ChartTooltip />} />
+                          <Area type="monotone" dataKey="score" stroke="#6E50C8" strokeWidth={2.5}
+                            fill="url(#scoreGrad2)" dot={{ fill: '#6E50C8', r: 3 }} activeDot={{ r: 5 }} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-40 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                        <TrendingUp className="size-8 opacity-20" />
+                        <p className="text-xs">Le graphe s'enrichira après plusieurs enrichissements</p>
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
                 </div>
               </div>
             )}
 
             {!profile && !enriching && (
               <div className="bg-card rounded-2xl border border-border p-8 text-center">
-                <p className="text-muted-foreground text-sm">Aucune donnée de mémoire relationnelle disponible.</p>
+                <p className="text-muted-foreground text-sm mb-3">Aucune donnée de mémoire relationnelle disponible.</p>
+                <button
+                  onClick={() => orgId && triggerEnrichment(id!, orgId)}
+                  className="px-5 py-2.5 text-white rounded-xl text-sm font-semibold"
+                  style={{ background: '#6E50C8' }}
+                >
+                  Générer le profil
+                </button>
               </div>
             )}
           </motion.div>
@@ -833,18 +942,20 @@ export default function ContactDetail() {
         {activeTab === 'echanges' && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
 
-            {/* Stats */}
-            <div className="grid grid-cols-4 gap-3">
+            {/* Stats 4 cartes */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { label: 'Emails', value: messages.length, icon: Mail, color: 'text-blue-600' },
-                { label: 'Réunions', value: meetings.length, icon: Calendar, color: 'text-violet-600' },
-                { label: 'Notes', value: notes.length, icon: MessageSquare, color: 'text-teal-600' },
-                { label: 'Dernier contact', value: lastContact ? relDate(lastContact) : '—', icon: Clock, color: 'text-primary' },
-              ].map(({ label, value, icon: Icon, color }) => (
-                <div key={label} className="bg-card rounded-2xl border border-border p-4 text-center">
-                  <Icon className={`size-4 ${color} mx-auto mb-2`} />
-                  <p className="text-xl font-bold">{value}</p>
-                  <p className="text-xs text-muted-foreground">{label}</p>
+                { label: 'Emails', value: messages.length, icon: Mail, color: '#6E50C8', bg: 'rgba(110,80,200,0.08)' },
+                { label: 'Réunions', value: meetings.length, icon: Calendar, color: '#0B8878', bg: 'rgba(11,136,120,0.08)' },
+                { label: 'Notes', value: notes.length, icon: MessageSquare, color: '#C47B00', bg: 'rgba(196,123,0,0.08)' },
+                { label: 'Dernier contact', value: lastContact ? relDate(lastContact) : '—', icon: Clock, color: '#1D4ED8', bg: 'rgba(29,78,216,0.08)' },
+              ].map(({ label, value, icon: Icon, color, bg }) => (
+                <div key={label} className="bg-card rounded-2xl border border-border p-4">
+                  <div className="size-8 rounded-lg flex items-center justify-center mb-2" style={{ background: bg }}>
+                    <Icon className="size-4" style={{ color }} />
+                  </div>
+                  <p className="text-xl font-black leading-none mb-0.5" style={{ color }}>{value}</p>
+                  <p className="text-[11px] text-muted-foreground">{label}</p>
                 </div>
               ))}
             </div>
@@ -852,15 +963,14 @@ export default function ContactDetail() {
             {/* Notes */}
             {notes.length > 0 && (
               <div className="bg-card rounded-2xl border border-border overflow-hidden">
-                <div className="px-5 py-4 border-b border-border">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <MessageSquare className="size-4 text-teal-600" /> Notes ({notes.length})
-                  </h3>
+                <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+                  <MessageSquare className="size-4" style={{ color: '#0B8878' }} />
+                  <span className="text-sm font-semibold">Notes ({notes.length})</span>
                 </div>
                 <div className="divide-y divide-border">
                   {notes.map(note => (
                     <div key={note.id} className="px-5 py-4">
-                      <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{note.body}</p>
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{note.body}</p>
                       <p className="text-xs text-muted-foreground mt-2">{relDate(note.created_at)}</p>
                     </div>
                   ))}
@@ -868,17 +978,17 @@ export default function ContactDetail() {
               </div>
             )}
 
-            {/* Timeline — emails + réunions */}
+            {/* Timeline emails + réunions */}
             <div className="bg-card rounded-2xl border border-border overflow-hidden">
               <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <Clock className="size-4 text-primary" /> Historique des échanges
-                </h3>
+                <div className="flex items-center gap-2">
+                  <Clock className="size-4 text-primary" />
+                  <span className="text-sm font-semibold">Historique des échanges</span>
+                </div>
                 {messages.length === 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    Synchronisez Gmail dans{' '}
-                    <button onClick={() => navigate('/account')} className="text-primary underline">Paramètres → Connexions</button>
-                  </span>
+                  <button onClick={() => navigate('/account')} className="text-xs text-primary underline">
+                    Synchroniser Gmail →
+                  </button>
                 )}
               </div>
               <div className="divide-y divide-border">
@@ -890,15 +1000,19 @@ export default function ContactDetail() {
                   .slice(0, 50)
                   .map(item => (
                     <div key={item.id} className="flex items-center gap-4 px-5 py-3 hover:bg-muted/30 transition-colors">
-                      <div className={`size-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        item.type === 'email' ? 'bg-blue-50 text-blue-600' : 'bg-violet-50 text-violet-600'
-                      }`}>
+                      <div className="size-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{
+                          background: item.type === 'email' ? 'rgba(110,80,200,0.08)' : 'rgba(11,136,120,0.08)',
+                          color: item.type === 'email' ? '#6E50C8' : '#0B8878',
+                        }}>
                         {item.type === 'email' ? <Mail className="size-3.5" /> : <Calendar className="size-3.5" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{item.title}</p>
                         {item.type === 'email' && 'direction' in item && (
-                          <p className="text-xs text-muted-foreground">{item.direction === 'outbound' ? '↑ Envoyé' : '↓ Reçu'}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.direction === 'outbound' ? '↑ Envoyé' : '↓ Reçu'}
+                          </p>
                         )}
                       </div>
                       <span className="text-xs text-muted-foreground flex-shrink-0">{relDate(item.date)}</span>
@@ -910,9 +1024,8 @@ export default function ContactDetail() {
                   <Mail className="size-8 text-muted-foreground/30 mx-auto" />
                   <p className="text-sm text-muted-foreground">Aucun échange enregistré.</p>
                   <p className="text-xs text-muted-foreground">
-                    Pour synchroniser vos emails :{' '}
                     <button onClick={() => navigate('/account')} className="text-primary font-medium underline">
-                      Paramètres → Connexions → bouton "1 000 emails"
+                      Paramètres → Connexions → Sync 1 000 emails
                     </button>
                   </p>
                 </div>
