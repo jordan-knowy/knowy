@@ -391,19 +391,35 @@ export default function ContactDetail() {
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
+      // Tente d'abord un refresh de session pour avoir un token frais
       const { data: { session } } = await supabase.auth.getSession();
+      const providerToken = session?.provider_token ?? null;
+
       const { data, error } = await supabase.functions.invoke('analyze-email-exchanges', {
-        body: {
-          contactId: id,
-          organizationId: orgId,
-          providerToken: session?.provider_token ?? null,
-        },
+        body: { contactId: id, organizationId: orgId, providerToken },
       });
+
       if (error) {
-        const msg = (error as any)?.message ?? String(error);
-        setAnalyzeError(msg.includes('TOKEN_MISSING') ? 'Token Google expiré. Reconnectez Gmail dans Paramètres.' : msg);
+        // Supabase renvoie un message générique — on tente d'extraire le corps réel
+        let realMsg: string | null = null;
+        try {
+          const body = await (error as any)?.context?.json?.();
+          realMsg = body?.error ?? null;
+          if (body?.code === 'NO_MESSAGES') {
+            realMsg = 'Aucun email synchronisé pour ce contact. Lancez d\'abord une sync Gmail dans Paramètres → Connexions.';
+          } else if (body?.code === 'BODY_READ_FAILED') {
+            realMsg = 'Impossible de lire les emails (token expiré ?). Relancez une sync Gmail dans Paramètres pour rafraîchir le token, puis réessayez.';
+          } else if (body?.code === 'TOKEN_MISSING') {
+            realMsg = 'Token Google expiré. Relancez une sync Gmail dans Paramètres → Connexions.';
+          } else if (body?.code === 'AI_FAILED') {
+            realMsg = 'Analyse IA échouée. Vérifiez que OPENROUTER_API_KEY est configurée dans les secrets Supabase.';
+          }
+        } catch { /* ignore parse error */ }
+        setAnalyzeError(realMsg ?? (error as any)?.message ?? 'Erreur inconnue');
       } else if (data?.analysis) {
         setEmailAnalysis(data.analysis);
+      } else {
+        setAnalyzeError('Réponse inattendue de l\'analyse IA.');
       }
     } catch (e: any) {
       setAnalyzeError(e?.message ?? 'Erreur inconnue');
