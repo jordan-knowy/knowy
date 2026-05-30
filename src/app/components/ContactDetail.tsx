@@ -255,6 +255,9 @@ export default function ContactDetail() {
   const [orgId, setOrgId] = useState<string | null>(null);
   const [mergeCandidates, setMergeCandidates] = useState<MergeCandidate[]>([]);
   const [merging, setMerging] = useState(false);
+  const [emailAnalysis, setEmailAnalysis] = useState<any | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
   // ── Load all data ────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -276,13 +279,16 @@ export default function ContactDetail() {
       return;
     }
 
-    // ── 2. Colonnes enrichissement (optionnelles — migration 202605290004) ───
+    // ── 2. Colonnes enrichissement + email_analysis (optionnelles) ───────────
     let enrichmentData: any = {};
     try {
       const { data: ed } = await supabase.from('contacts')
-        .select('enrichment_status, last_enriched_at, web_bio')
+        .select('enrichment_status, last_enriched_at, web_bio, email_analysis')
         .eq('id', id).maybeSingle();
-      if (ed) enrichmentData = ed;
+      if (ed) {
+        enrichmentData = ed;
+        if ((ed as any).email_analysis) setEmailAnalysis((ed as any).email_analysis);
+      }
     } catch { /* migration pas encore appliquée */ }
 
     const fullContact: ContactRow = {
@@ -376,6 +382,33 @@ export default function ContactDetail() {
       }
     } finally {
       setMerging(false);
+    }
+  };
+
+  // ── Analyse IA des échanges email ────────────────────────────────────────────
+  const handleAnalyzeEmails = async () => {
+    if (!supabase || !id || !orgId || analyzing) return;
+    setAnalyzing(true);
+    setAnalyzeError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke('analyze-email-exchanges', {
+        body: {
+          contactId: id,
+          organizationId: orgId,
+          providerToken: session?.provider_token ?? null,
+        },
+      });
+      if (error) {
+        const msg = (error as any)?.message ?? String(error);
+        setAnalyzeError(msg.includes('TOKEN_MISSING') ? 'Token Google expiré. Reconnectez Gmail dans Paramètres.' : msg);
+      } else if (data?.analysis) {
+        setEmailAnalysis(data.analysis);
+      }
+    } catch (e: any) {
+      setAnalyzeError(e?.message ?? 'Erreur inconnue');
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -1010,6 +1043,127 @@ export default function ContactDetail() {
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'echanges' && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+
+            {/* Synthèse IA des échanges */}
+            {emailAnalysis ? (
+              <div className="bg-card rounded-2xl border border-border overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="size-4 text-primary" />
+                    <span className="text-sm font-semibold">Synthèse IA des échanges</span>
+                    {emailAnalysis.emails_analyzed && (
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                        {emailAnalysis.emails_analyzed} emails analysés
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleAnalyzeEmails}
+                    disabled={analyzing || messages.length === 0}
+                    className="text-xs text-primary hover:text-accent transition-colors disabled:opacity-40 flex items-center gap-1"
+                  >
+                    {analyzing ? <><span className="size-3 border border-primary border-t-transparent rounded-full animate-spin inline-block" /> Analyse…</> : '↻ Relancer'}
+                  </button>
+                </div>
+                <div className="p-5 space-y-4">
+                  {/* Résumé */}
+                  {emailAnalysis.relationship_summary && (
+                    <p className="text-sm leading-relaxed italic text-foreground/90 bg-primary/5 rounded-xl px-4 py-3">
+                      "{emailAnalysis.relationship_summary}"
+                    </p>
+                  )}
+                  {/* Indicateurs clés */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      { label: 'Ton', value: emailAnalysis.relationship_tone },
+                      { label: 'Engagement', value: emailAnalysis.engagement_level },
+                      { label: 'Style', value: emailAnalysis.communication_style },
+                      { label: 'Formalité', value: emailAnalysis.formality },
+                    ].filter(i => i.value).map(({ label, value }) => (
+                      <div key={label} className="bg-muted/30 rounded-xl px-3 py-2.5">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
+                        <p className="text-sm font-medium capitalize">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Thèmes + Signaux */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {(emailAnalysis.key_topics ?? []).length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground mb-2">THÈMES</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {emailAnalysis.key_topics.map((t: string, i: number) => (
+                            <span key={i} className="px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">{t}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {(emailAnalysis.behavioral_signals ?? []).length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground mb-2">SIGNAUX COMPORTEMENTAUX</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {emailAnalysis.behavioral_signals.map((s: string, i: number) => (
+                            <span key={i} className="px-2.5 py-1 bg-muted/50 rounded-full text-xs">{s}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Red flags + Opportunités */}
+                  {(emailAnalysis.red_flags ?? []).length > 0 && (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800">
+                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1.5">⚠ Signaux d'alerte</p>
+                      {emailAnalysis.red_flags.map((f: string, i: number) => (
+                        <p key={i} className="text-xs text-amber-800 dark:text-amber-300">• {f}</p>
+                      ))}
+                    </div>
+                  )}
+                  {(emailAnalysis.opportunities ?? []).length > 0 && (
+                    <div className="p-3 bg-success/5 rounded-xl border border-success/20">
+                      <p className="text-xs font-semibold text-success mb-1.5">✦ Opportunités</p>
+                      {emailAnalysis.opportunities.map((o: string, i: number) => (
+                        <p key={i} className="text-xs text-success/80">• {o}</p>
+                      ))}
+                    </div>
+                  )}
+                  {emailAnalysis.analyzed_at && (
+                    <p className="text-[10px] text-muted-foreground text-right">
+                      Analysé {relDate(emailAnalysis.analyzed_at)} · {emailAnalysis.model ?? 'Gemini'}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-card rounded-2xl border border-border p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <Sparkles className="size-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">Synthèse IA des échanges</p>
+                      <p className="text-xs text-muted-foreground">
+                        {messages.length > 0
+                          ? `${messages.length} email${messages.length > 1 ? 's' : ''} prêt${messages.length > 1 ? 's' : ''} à analyser`
+                          : 'Synchronisez Gmail pour activer l\'analyse'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleAnalyzeEmails}
+                    disabled={analyzing || messages.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-accent transition-colors disabled:opacity-40"
+                  >
+                    {analyzing
+                      ? <><span className="size-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Analyse…</>
+                      : <><Sparkles className="size-3.5" /> Analyser</>}
+                  </button>
+                </div>
+                {analyzeError && (
+                  <p className="mt-3 text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-lg">{analyzeError}</p>
+                )}
+              </div>
+            )}
 
             {/* Stats 4 cartes */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
