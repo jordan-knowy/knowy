@@ -264,7 +264,7 @@ export default function ContactDetail() {
     // On ne requête PAS les nouvelles colonnes (enrichment_status, web_bio) ici
     // pour être résilient si la migration 202605290004 n'a pas encore été appliquée
     const { data: c, error: contactError } = await supabase.from('contacts')
-      .select('id, full_name, email, role_title, company_name, avatar_url, linkedin_url, companies(name, domain)')
+      .select('id, full_name, email, role_title, avatar_url, linkedin_url, companies(name, domain)')
       .eq('id', id).eq('organization_id', oid).maybeSingle();
 
     if (contactError || !c) {
@@ -399,7 +399,7 @@ export default function ContactDetail() {
     );
   }
 
-  const companyName = (contact.companies as any)?.name ?? contact.company_name ?? '';
+  const companyName = (contact.companies as any)?.name ?? '';
   const score = profile?.engagement_score ?? null;
   const phase = profile?.score_phase as 'growth' | 'stagnant' | 'decline' | undefined;
   const allDates = [...messages.map(m => m.sent_at), ...meetings.map(m => m.starts_at)].filter(Boolean).sort().reverse();

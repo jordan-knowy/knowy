@@ -14,7 +14,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
-const MODEL = 'google/gemini-2.5-flash-preview-05-20';
+const MODEL = 'google/gemini-2.5-flash-lite';
 
 // Perplexity — cheapest online model with real web search
 const PERPLEXITY_API = 'https://api.perplexity.ai/chat/completions';
@@ -329,16 +329,16 @@ Deno.serve(async (req) => {
   if (!contactId || !organizationId) return jsonResponse({ error: 'contactId and organizationId required' }, 400);
 
   // ── 1. Load contact ────────────────────────────────────────────────────────
-  const { data: contact } = await supabase
+  const { data: contact, error: contactErr } = await supabase
     .from('contacts')
-    .select('id, full_name, email, role_title, company_name, created_at, enrichment_status, last_enriched_at, companies(name, domain)')
+    .select('id, full_name, email, role_title, created_at, enrichment_status, last_enriched_at, companies(name, domain)')
     .eq('id', contactId)
     .eq('organization_id', organizationId)
     .maybeSingle();
 
-  if (!contact) return jsonResponse({ error: 'Contact not found' }, 404);
+  if (contactErr || !contact) return jsonResponse({ error: 'Contact not found', detail: contactErr?.message }, 404);
 
-  const companyName = (contact.companies as any)?.name ?? contact.company_name ?? null;
+  const companyName = (contact.companies as any)?.name ?? null;
   const contactWithCompany = { ...contact, company_name: companyName };
 
   // Skip if recently enriched (< 7 days) and not forced
@@ -431,7 +431,7 @@ Instructions spécifiques :
         'Authorization': `Bearer ${Deno.env.get('OPENROUTER_API_KEY')}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://knowy.ai',
-        'X-Title': 'Knowy — Contact Enrichment',
+        'X-Title': 'Knowy Contact Enrichment',
       },
       body: JSON.stringify({
         model: MODEL,
@@ -493,6 +493,7 @@ Instructions spécifiques :
       .maybeSingle();
 
     const profileId = savedProfile?.id;
+    const signals: any[] = profile.behavioral_signals ?? [];
 
     if (profileId) {
       // ── 7. Save interaction axes ─────────────────────────────────────────
@@ -552,8 +553,6 @@ Instructions spécifiques :
         );
       }
     }
-
-    const signals: any[] = profile.behavioral_signals ?? [];
 
     // ── 10. Save score history ───────────────────────────────────────────────
     const today = new Date().toISOString().split('T')[0];

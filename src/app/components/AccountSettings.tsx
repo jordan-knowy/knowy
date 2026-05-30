@@ -183,10 +183,31 @@ export default function AccountSettings() {
       const orgId = await getActiveOrganizationId();
       if (!orgId) { setSyncError('Organisation introuvable.'); return; }
 
-      // Pas de providerToken depuis le frontend — l'edge function le lit depuis connectors.metadata
-      // Fonctionne quel que soit le mode de connexion (email / LinkedIn / Google)
+      // Récupère le token Google de la session courante (dispo si connecté via Google)
+      // et le passe à la fonction + le stocke pour les syncs futures.
+      const { data: { session } } = await supabase.auth.getSession();
+      const sessionToken = session?.provider_token ?? null;
+
+      // Si on a un token frais, on le persiste dans connectors.metadata pour les prochaines fois
+      if (sessionToken && session?.user) {
+        await (supabase.from('connectors') as any).upsert({
+          organization_id: orgId,
+          user_id: session.user.id,
+          provider: 'google',
+          status: 'connected',
+          metadata: {
+            access_token: sessionToken,
+            refresh_token: (session as any).provider_refresh_token ?? null,
+            email: session.user.email,
+            stored_at: new Date().toISOString(),
+          },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'organization_id,user_id,provider' });
+      }
+
+      // L'edge function utilise le token du body s'il est fourni, sinon celui stocké en BDD
       const { data, error } = await supabase.functions.invoke('ingest-communication', {
-        body: { organizationId: orgId, lookbackDays: 365, maxMessagesPerContact: 1000 },
+        body: { organizationId: orgId, providerToken: sessionToken, lookbackDays: 365, maxMessagesPerContact: 1000 },
       });
 
       if (error) {

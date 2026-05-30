@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
-const MODEL = 'google/gemini-2.5-flash-preview-05-20';
+const MODEL = 'google/gemini-2.5-flash-lite';
 
 // ── System prompt (doc 06 v3) ────────────────────────────────────────────────
 const SYSTEM_PROMPT = `Tu es le moteur d'intelligence interactionnelle de Knowy.
