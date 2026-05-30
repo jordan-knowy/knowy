@@ -239,7 +239,20 @@ export default function MeetingAnalysis() {
     isExternal: true,
   };
 
-  const confidenceScore = realMeeting?.importanceScore ?? 0;
+  // Score relationnel = moyenne live des engagement_score des participants enrichis
+  const participantScores = loadedParticipants
+    .map(p => fullProfiles[p.id]?.engagement_score ?? p.relationContext?.engagementScore ?? 0)
+    .filter(s => s > 0);
+  const relationScore = participantScores.length > 0
+    ? Math.round(participantScores.reduce((a, b) => a + b, 0) / participantScores.length)
+    : (realMeeting?.importanceScore ?? 0);
+
+  // Confiance = part des participants ayant un profil cognitif généré
+  const enrichedCount = loadedParticipants.filter(p => fullProfiles[p.id]).length;
+  const confidenceScore = loadedParticipants.length > 0
+    ? Math.round((enrichedCount / loadedParticipants.length) * 100)
+    : 0;
+
   const sources = loadedSources.length > 0 ? loadedSources : [
     { name: 'Gmail', icon: Mail, connected: false },
     { name: 'Slack', icon: Slack, connected: false, gain: 20 },
@@ -436,12 +449,32 @@ export default function MeetingAnalysis() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
           {/* Sidebar */}
           <div className="self-start space-y-4 lg:sticky lg:top-28">
+            {/* Score relationnel moyen */}
+            {relationScore > 0 && (
+              <KnowyCard className="p-6 text-center">
+                <p className="text-xs font-bold text-muted-foreground mb-2 uppercase tracking-wide">Score relationnel</p>
+                <div className="text-5xl font-black mb-1"
+                  style={{ color: relationScore >= 70 ? '#2EA86A' : relationScore >= 40 ? '#6E50C8' : '#D94F63' }}>
+                  {relationScore}
+                </div>
+                <p className="text-[11px] text-muted-foreground mb-3">moyenne des {participantScores.length} participant{participantScores.length > 1 ? 's' : ''} enrichi{participantScores.length > 1 ? 's' : ''}</p>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full rounded-full"
+                    style={{
+                      width: `${relationScore}%`,
+                      background: relationScore >= 70 ? '#2EA86A' : relationScore >= 40 ? '#6E50C8' : '#D94F63',
+                    }}
+                  />
+                </div>
+              </KnowyCard>
+            )}
+
             <KnowyCard className="p-6">
               <div className="text-center mb-4">
                 <div className={`text-5xl font-black mb-2 ${confidenceScore >= 60 ? 'text-sage' : 'text-amber'}`}>
                   {confidenceScore}%
                 </div>
-                <p className="text-xs text-muted-foreground">Score de confiance</p>
+                <p className="text-xs text-muted-foreground">Profils enrichis ({enrichedCount}/{loadedParticipants.length})</p>
               </div>
 
               <div className="h-2 bg-muted rounded-full overflow-hidden mb-4">

@@ -822,6 +822,36 @@ Instructions spécifiques :
       enrichment_error: null,
     }).eq('id', contactId);
 
+    // Recalcule le score relationnel (importance_score) des réunions de ce contact
+    try {
+      const { data: contactMeetings } = await supabase
+        .from('meeting_participants')
+        .select('meeting_id')
+        .eq('organization_id', organizationId)
+        .eq('contact_id', contactId);
+      const meetingIds = [...new Set((contactMeetings ?? []).map((r: any) => r.meeting_id))];
+      for (const mid of meetingIds) {
+        const { data: mparts } = await supabase
+          .from('meeting_participants')
+          .select('contact_id')
+          .eq('meeting_id', mid)
+          .eq('is_current_user', false)
+          .not('contact_id', 'is', null);
+        const partContactIds = [...new Set((mparts ?? []).map((r: any) => r.contact_id).filter(Boolean))];
+        if (partContactIds.length === 0) continue;
+        const { data: profs } = await supabase
+          .from('cognitive_profiles')
+          .select('engagement_score')
+          .in('contact_id', partContactIds)
+          .gt('engagement_score', 0);
+        const scores = (profs ?? []).map((p: any) => p.engagement_score);
+        if (scores.length > 0) {
+          const avg = Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length);
+          await supabase.from('meetings').update({ importance_score: avg }).eq('id', mid);
+        }
+      }
+    } catch (_) { /* best-effort */ }
+
     // Activity event
     const sources = [orgInfo && 'org', linkedinData && 'linkedin', personBio && 'person'].filter(Boolean);
     const webLabel = webBio ? ` · Perplexity ✓ (${sources.join('+')})` : '';

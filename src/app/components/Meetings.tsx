@@ -126,7 +126,7 @@ export default function Meetings() {
         format: (m.format === 'physical' ? 'physical' : 'video') as 'video' | 'physical',
         location: m.location ?? undefined,
         category: (m as any).category ?? 'Réunion',
-        relationScore: 0,
+        relationScore: m.importanceScore ?? 0,
         briefStatus: ((m.briefStatus as Meeting['briefStatus']) ?? 'to_generate'),
         hasDecisionMaker: (m as any).has_decision_maker ?? false,
         isExternal: (m as any).is_external ?? true,
@@ -253,10 +253,22 @@ export default function Meetings() {
                   <p className="text-sm text-muted-foreground font-medium">{meeting.company}</p>
                 </div>
               </div>
-              {/* Catégorie */}
-              <KnowyBadge variant={meeting.isExternal ? 'violet' : 'muted'} size="sm">
-                {meeting.category}
-              </KnowyBadge>
+              {/* Score relationnel + Catégorie */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {meeting.relationScore > 0 && (
+                  <div className="flex flex-col items-center" title="Score relationnel moyen des participants">
+                    <div className={`flex items-center justify-center size-10 rounded-full ${getRelationScoreBg(meeting.relationScore)}`}>
+                      <span className={`font-mono font-bold text-sm ${getRelationScoreColor(meeting.relationScore)}`}>
+                        {meeting.relationScore}
+                      </span>
+                    </div>
+                    <span className="text-[9px] text-muted-foreground mt-0.5">Score</span>
+                  </div>
+                )}
+                <KnowyBadge variant={meeting.isExternal ? 'violet' : 'muted'} size="sm">
+                  {meeting.category}
+                </KnowyBadge>
+              </div>
             </div>
 
             {/* Participants en chips */}

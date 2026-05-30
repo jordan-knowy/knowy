@@ -51,7 +51,13 @@ export interface Meeting {
   title: string;
   company: string;
   startsAt: ISODate;
+  endsAt?: ISODate | null;
+  location?: string | null;
+  format?: string | null;
+  isExternal?: boolean;
+  category?: string;
   participantContactIds: ID[];
+  participantNames?: string[];
   importanceScore: Score;
   briefStatus: 'to_generate' | 'queued' | 'generating' | 'ready' | 'failed' | 'insufficient_data' | 'consulted';
 }
