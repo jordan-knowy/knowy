@@ -34,6 +34,7 @@ interface Contact {
   email: string | null;
   initials: string;
   engagementScore: number;
+  emailCount: number;
   meetingsCount: number;
   lastContactDays: number | null;
   isDecisionMaker: boolean;
@@ -400,10 +401,14 @@ export default function Contacts() {
       const orgId = resolvedOrgId;
       setOrgId(orgId);
 
-      // Load contacts from contacts table
+      // Load contacts from contacts table with email counts and scores
       const { data: dbContacts } = await supabase
         .from('contacts')
-        .select('id, full_name, role_title, email, source_summary, updated_at')
+        .select(`
+          id, full_name, role_title, email, source_summary, updated_at,
+          communication_messages(id),
+          cognitive_profiles(engagement_score)
+        `)
         .eq('organization_id', orgId)
         .order('updated_at', { ascending: false });
 
@@ -427,6 +432,12 @@ export default function Contacts() {
         const key = c.email?.toLowerCase() || c.id;
         if (seen.has(key)) continue;
         seen.add(key);
+        const emailCount = Array.isArray((c as any).communication_messages)
+          ? (c as any).communication_messages.length
+          : 0;
+        const profiles = (c as any).cognitive_profiles;
+        const topProfile = Array.isArray(profiles) ? profiles[0] : null;
+        const engagementScore = topProfile?.engagement_score || 0;
         built.push({
           id: c.id,
           name: c.full_name || c.email || 'Contact',
@@ -434,7 +445,8 @@ export default function Contacts() {
           company: (c.source_summary as any)?.company || '',
           email: c.email,
           initials: initials(c.full_name || c.email || '?'),
-          engagementScore: (c.source_summary as any)?.engagement_score || 50,
+          engagementScore,
+          emailCount,
           meetingsCount: 0,
           lastContactDays: daysSince(c.updated_at),
           isDecisionMaker: false,
@@ -467,6 +479,7 @@ export default function Contacts() {
               email: p.email,
               initials: initials(displayName),
               engagementScore: 0,
+              emailCount: 0,
               meetingsCount: 1,
               lastContactDays: null,
               isDecisionMaker: false,
@@ -547,7 +560,7 @@ export default function Contacts() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-[1600px] mx-auto px-8 py-8">
+      <div className="max-w-[1600px] mx-auto px-4 py-5 md:px-8 md:py-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -555,10 +568,10 @@ export default function Contacts() {
           transition={{ duration: 0.6 }}
           className="mb-8"
         >
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h1 className="text-4xl font-semibold mb-2">Intelligence Relationnelle</h1>
-              <p className="text-muted-foreground flex items-center gap-4">
+              <p className="text-muted-foreground flex flex-wrap items-center gap-2 sm:gap-4">
                 {loading ? (
                   <span className="flex items-center gap-2"><Loader2 className="size-3 animate-spin" /> Chargement…</span>
                 ) : (
@@ -579,7 +592,7 @@ export default function Contacts() {
                 )}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <button
                 onClick={loadContacts}
                 className="px-4 py-2 bg-muted hover:bg-muted/70 rounded-xl flex items-center gap-2 text-sm transition-colors"
@@ -598,8 +611,8 @@ export default function Contacts() {
           </div>
 
           {/* View Toggle + Search */}
-          <div className="flex items-center justify-between">
-            <div className="flex gap-2">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setViewType('people')}
                 className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-sm ${
@@ -618,7 +631,7 @@ export default function Contacts() {
               </button>
             </div>
 
-            <div className="relative w-96">
+            <div className="relative w-full lg:w-96">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <input
                 type="text"
@@ -669,7 +682,7 @@ export default function Contacts() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className="mb-6 flex items-center gap-3"
+              className="mb-6 flex flex-wrap items-center gap-3"
             >
               <Filter className="size-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">Tri :</span>
@@ -691,13 +704,14 @@ export default function Contacts() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="bg-card rounded-2xl border border-border overflow-hidden"
+              className="overflow-x-auto rounded-2xl border border-border bg-card"
             >
-              <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-muted/30 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                <div className="col-span-4">Contact</div>
+              <div className="grid min-w-[760px] grid-cols-12 gap-4 px-6 py-4 bg-muted/30 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                <div className="col-span-3">Contact</div>
                 <div className="col-span-3">Entreprise</div>
-                <div className="col-span-2 text-center">Réunions</div>
-                <div className="col-span-2 text-center">Dernier contact</div>
+                <div className="col-span-2 text-center">Emails</div>
+                <div className="col-span-2 text-center">Score</div>
+                <div className="col-span-1 text-center">Dernier contact</div>
                 <div className="col-span-1" />
               </div>
 
@@ -708,11 +722,11 @@ export default function Contacts() {
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.3, delay: i * 0.015 }}
-                    className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-muted/20 transition-colors cursor-pointer group items-center"
+                    className="grid min-w-[760px] grid-cols-12 gap-4 px-6 py-4 hover:bg-muted/20 transition-colors cursor-pointer group items-center"
                     onClick={() => navigate(`/contact/${contact.id}`)}
                   >
                     {/* Contact */}
-                    <div className="col-span-4 flex items-center gap-3">
+                    <div className="col-span-3 flex items-center gap-3">
                       <div className="size-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
                         {contact.initials}
                       </div>
@@ -743,15 +757,32 @@ export default function Contacts() {
                       )}
                     </div>
 
-                    {/* Meetings */}
+                    {/* Emails */}
                     <div className="col-span-2 flex items-center justify-center gap-1">
-                      <Calendar className="size-3 text-muted-foreground" />
-                      <span className="text-sm font-medium">{contact.meetingsCount}</span>
+                      <Mail className="size-3 text-muted-foreground" />
+                      <span className={`text-sm font-medium ${contact.emailCount > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
+                        {contact.emailCount}
+                      </span>
+                    </div>
+
+                    {/* Score */}
+                    <div className="col-span-2 flex items-center justify-center">
+                      {contact.engagementScore > 0 ? (
+                        <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${
+                          contact.engagementScore >= 70 ? 'bg-success/10 text-success' :
+                          contact.engagementScore >= 40 ? 'bg-primary/10 text-primary' :
+                          'bg-destructive/10 text-destructive'
+                        }`}>
+                          {contact.engagementScore}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </div>
 
                     {/* Last contact */}
-                    <div className="col-span-2 flex items-center justify-center">
-                      <span className={`text-sm font-medium ${
+                    <div className="col-span-1 flex items-center justify-center">
+                      <span className={`text-xs font-medium ${
                         contact.lastContactDays === null ? 'text-muted-foreground' :
                         contact.lastContactDays > 14 ? 'text-destructive' :
                         contact.lastContactDays > 7 ? 'text-warning' :

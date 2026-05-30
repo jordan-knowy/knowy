@@ -95,6 +95,8 @@ export default function RelationDetail() {
   const [rawContact, setRawContact] = useState<any>(null);
   const [snapshot, setSnapshot] = useState<any>(null);
   const [cogProfile, setCogProfile] = useState<CognitiveProfile | null>(null);
+  const [cogScore, setCogScore] = useState<any>(null);
+  const [emailCount, setEmailCount] = useState<number>(0);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [topicsData, setTopicsData] = useState<any[]>([]);
   const [objectionsData, setObjectionsData] = useState<any[]>([]);
@@ -119,11 +121,13 @@ export default function RelationDetail() {
       }
 
       // 1. Load contact with company join
-      const { data: rc } = await supabase
+      const rcRes = await supabase
         .from('contacts')
-        .select('*, companies(name, sector)')
+        .select('*, companies(name, industry)')
         .eq('id', id)
         .maybeSingle();
+      if (rcRes.error) console.error('Contact fetch error:', rcRes.error.message);
+      const rc = rcRes.data;
       if (mounted && rc) setRawContact(rc);
 
       const orgId = await getActiveOrganizationId();
@@ -209,6 +213,25 @@ export default function RelationDetail() {
       const cog = await getCognitiveProfile(id);
       if (mounted) setCogProfile(cog);
 
+      // 6. Score réel + count emails depuis les tables de scoring
+      const [cpRes, emailRes] = await Promise.all([
+        supabase
+          .from('cognitive_profiles')
+          .select('engagement_score, score_intensite, score_reciprocite, score_longevite, score_phase, score_delta')
+          .eq('contact_id', id!)
+          .order('profile_version', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('communication_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('contact_id', id!),
+      ]);
+      if (mounted) {
+        if (!cpRes.error && cpRes.data) setCogScore(cpRes.data);
+        if (!emailRes.error) setEmailCount(emailRes.count ?? 0);
+      }
+
       if (mounted) setLoading(false);
     }
 
@@ -225,7 +248,7 @@ export default function RelationDetail() {
         titleConfirmed: rawContact.title_confirmed ?? false,
         company: rawContact.companies?.name ?? rawContact.company_name ?? '—',
         companyLogo: '🏢',
-        sector: rawContact.companies?.sector ?? '—',
+        sector: rawContact.companies?.industry ?? '—',
         location: '—',
         avatar: (rawContact.full_name ?? '?')
           .split(/\s+/)
@@ -237,7 +260,7 @@ export default function RelationDetail() {
         phaseDuration: snapshot?.phase_since_weeks
           ? `${snapshot.phase_since_weeks} semaines`
           : '—',
-        engagementScore: snapshot?.engagement_score ?? 0,
+        engagementScore: cogScore?.engagement_score ?? snapshot?.engagement_score ?? 0,
         lastContact: {
           date: relDate(snapshot?.last_contact_date),
           type: snapshot?.last_contact_type ?? '—',
@@ -262,32 +285,28 @@ export default function RelationDetail() {
     date: relDate(a.created_at),
   }));
 
-  const stats = snapshot
-    ? [
-        { label: 'Emails échangés', value: String(snapshot.emails_exchanged ?? 0), source: 'Gmail' },
-        { label: 'Réunions tenues', value: String(snapshot.meetings_count ?? 0), source: 'Calendar' },
-        {
-          label: 'Durée moyenne',
-          value: snapshot.avg_meeting_duration_minutes
-            ? `${snapshot.avg_meeting_duration_minutes} min`
-            : '—',
-          source: 'Calendar',
-        },
-        { label: 'Dernier contact', value: relDate(snapshot.last_contact_date), source: 'Gmail' },
-        {
-          label: 'Taux de réponse',
-          value: snapshot.response_rate_hours
-            ? `< ${Math.round(snapshot.response_rate_hours)}h`
-            : '—',
-          source: 'Gmail',
-        },
-        {
-          label: 'Réunions manquées',
-          value: `${snapshot.missed_meetings ?? 0} / ${snapshot.meetings_count ?? 0}`,
-          source: 'Calendar',
-        },
-      ]
-    : [];
+  const stats = [
+    { label: 'Emails échangés', value: String(emailCount > 0 ? emailCount : (snapshot?.emails_exchanged ?? 0)), source: 'Gmail' },
+    { label: 'Réunions tenues', value: String(meetingsHistory.length > 0 ? meetingsHistory.length : (snapshot?.meetings_count ?? 0)), source: 'Calendar' },
+    {
+      label: 'Score intensité',
+      value: cogScore ? `${cogScore.score_intensite}/100` : '—',
+      source: 'Knowy',
+    },
+    {
+      label: 'Score réciprocité',
+      value: cogScore ? `${cogScore.score_reciprocite}/100` : '—',
+      source: 'Knowy',
+    },
+    {
+      label: 'Taux de réponse',
+      value: snapshot?.response_rate_hours
+        ? `< ${Math.round(snapshot.response_rate_hours)}h`
+        : '—',
+      source: 'Gmail',
+    },
+    { label: 'Dernier contact', value: relDate(snapshot?.last_contact_date), source: 'Gmail' },
+  ];
 
   const interactionProfile = cogProfile
     ? {
@@ -420,7 +439,7 @@ export default function RelationDetail() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-6xl mx-auto px-6 py-6">
+      <div className="max-w-6xl mx-auto px-4 py-5 sm:px-6 sm:py-6">
         {/* Navigation */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -449,7 +468,7 @@ export default function RelationDetail() {
           transition={{ duration: 0.4, delay: 0.1 }}
         >
           <KnowyCard className={`p-6 mb-4 border-l-4 ${phaseConfig.borderColor}`}>
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
               {/* Left - Identity */}
               <div>
                 <div className="flex items-start gap-4 mb-4">
@@ -486,7 +505,7 @@ export default function RelationDetail() {
               </div>
 
               {/* Center - Engagement */}
-              <div className="flex flex-col items-center justify-center border-x border-border px-6">
+              <div className="flex flex-col items-center justify-center border-y border-border px-0 py-6 md:border-x md:border-y-0 md:px-6 md:py-0">
                 <div className="relative size-28 mb-3">
                   <svg className="size-full -rotate-90">
                     <circle cx="56" cy="56" r="48" fill="none" stroke="currentColor" strokeWidth="6" className="text-muted/20" />
@@ -635,7 +654,7 @@ export default function RelationDetail() {
         </motion.div>
 
         {/* 2-Column Layout */}
-        <div className="grid grid-cols-[1fr_400px] gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_400px]">
           {/* LEFT COLUMN */}
           <div className="space-y-4">
 
@@ -677,7 +696,7 @@ export default function RelationDetail() {
               >
                 <KnowyCard className="p-4">
                   <h2 className="text-lg font-bold mb-4">Statistiques relationnelles</h2>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     {stats.map((stat, i) => (
                       <div key={i} className="text-center p-3 bg-muted/20 rounded-lg">
                         <p className="text-2xl font-black mb-1">{stat.value}</p>

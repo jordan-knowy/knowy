@@ -255,9 +255,10 @@ export default function ContactDetail() {
 
   // ── Load all data ────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
-    if (!supabase || !id) return;
+    if (!supabase || !id) { setLoading(false); return; }
+    try {
     const oid = orgId ?? await getActiveOrganizationId();
-    if (!oid) return;
+    if (!oid) { setLoading(false); return; }
     if (!orgId) setOrgId(oid);
 
     // ── 1. Contact de base — colonnes qui existent depuis l'origine ──────────
@@ -346,6 +347,10 @@ export default function ContactDetail() {
     // Déclenche l'enrichissement IA si le profil est en attente
     if (fullContact.enrichment_status === 'pending' || fullContact.enrichment_status === 'failed') {
       triggerEnrichment(id, oid);
+    }
+    } catch (e) {
+      console.error('ContactDetail load error:', e);
+      setLoading(false);
     }
   }, [id, orgId]);
 

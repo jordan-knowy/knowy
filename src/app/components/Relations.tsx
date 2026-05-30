@@ -47,29 +47,53 @@ export default function Relations() {
       const baseContacts = await listContacts();
       if (!mounted) return;
 
-      // 2. Try to enrich with relationship_snapshots
+      // 2. Enrich avec cognitive_profiles (score réel) + relationship_snapshots (fallback) + dernier email
       let snapshots: Record<string, any> = {};
+      let cogScores: Record<string, any> = {};
+      let lastEmails: Record<string, string> = {};
       let alerts: Record<string, any> = {};
+
       if (supabase) {
         const orgId = await getActiveOrganizationId();
-        if (orgId) {
-          const { data: snaps } = await supabase
-            .from('relationship_snapshots')
-            .select('contact_id, engagement_score, score_evolution, phase, phase_started_at, last_contact_at, last_contact_type, crm_synced')
-            .eq('organization_id', orgId)
-            .order('snapshot_date', { ascending: false });
-          // Keep only latest per contact
-          (snaps ?? []).forEach((s: any) => {
+        if (orgId && baseContacts.length > 0) {
+          const contactIds = baseContacts.map(c => c.id);
+
+          const [snapsRes, cogRes, emailRes, alertRes] = await Promise.all([
+            supabase
+              .from('relationship_snapshots')
+              .select('contact_id, engagement_score, score_evolution, phase, phase_started_at, last_contact_at, last_contact_type, crm_synced')
+              .eq('organization_id', orgId)
+              .order('snapshot_date', { ascending: false }),
+            supabase
+              .from('cognitive_profiles')
+              .select('contact_id, engagement_score, score_phase')
+              .eq('organization_id', orgId)
+              .in('contact_id', contactIds)
+              .order('profile_version', { ascending: false }),
+            supabase
+              .from('communication_messages')
+              .select('contact_id, sent_at')
+              .eq('organization_id', orgId)
+              .in('contact_id', contactIds)
+              .order('sent_at', { ascending: false }),
+            supabase
+              .from('contact_alerts')
+              .select('contact_id, alert_type, message')
+              .eq('organization_id', orgId)
+              .eq('is_read', false)
+              .order('created_at', { ascending: false }),
+          ]);
+
+          (snapsRes.data ?? []).forEach((s: any) => {
             if (!snapshots[s.contact_id]) snapshots[s.contact_id] = s;
           });
-
-          const { data: alertRows } = await supabase
-            .from('contact_alerts')
-            .select('contact_id, alert_type, message')
-            .eq('organization_id', orgId)
-            .eq('is_read', false)
-            .order('created_at', { ascending: false });
-          (alertRows ?? []).forEach((a: any) => {
+          (cogRes.data ?? []).forEach((p: any) => {
+            if (!cogScores[p.contact_id]) cogScores[p.contact_id] = p;
+          });
+          (emailRes.data ?? []).forEach((m: any) => {
+            if (!lastEmails[m.contact_id]) lastEmails[m.contact_id] = m.sent_at;
+          });
+          (alertRes.data ?? []).forEach((a: any) => {
             if (!alerts[a.contact_id]) alerts[a.contact_id] = a;
           });
         }
@@ -79,27 +103,37 @@ export default function Relations() {
 
       const mapped: Contact[] = baseContacts.map(c => {
         const snap = snapshots[c.id];
+        const cog = cogScores[c.id];
         const alert = alerts[c.id];
-        const phaseStarted = snap?.phase_started_at ? new Date(snap.phase_started_at) : null;
-        const phaseDurationLabel = phaseStarted
-          ? `depuis ${Math.round((Date.now() - phaseStarted.getTime()) / (1000 * 60 * 60 * 24 * 7))} semaines`
-          : '';
-        const lastContact = snap?.last_contact_at ? new Date(snap.last_contact_at) : null;
+
+        // Score : cognitive_profiles en priorité (enrichissement IA), sinon relationship_snapshot
+        const engagementScore = cog?.engagement_score ?? snap?.engagement_score ?? 0;
+        const phase = (cog?.score_phase ?? snap?.phase ?? 'stagnant') as Phase;
+
+        // Dernier contact : dernier email réel ou snapshot
+        const lastContactAt = lastEmails[c.id] ?? snap?.last_contact_at ?? null;
+        const lastContact = lastContactAt ? new Date(lastContactAt) : null;
         const daysAgo = lastContact
           ? Math.round((Date.now() - lastContact.getTime()) / (1000 * 60 * 60 * 24))
           : null;
         const lastContactLabel = daysAgo != null
           ? daysAgo === 0 ? "Aujourd'hui" : daysAgo === 1 ? 'Hier' : `Il y a ${daysAgo} jours`
           : '—';
+
+        const phaseStarted = snap?.phase_started_at ? new Date(snap.phase_started_at) : null;
+        const phaseDurationLabel = phaseStarted
+          ? `depuis ${Math.round((Date.now() - phaseStarted.getTime()) / (1000 * 60 * 60 * 24 * 7))} semaines`
+          : '';
+
         return {
           id: c.id,
           name: c.name,
           title: c.title ?? '',
           company: c.company ?? '',
           companyLogo: c.company ? c.company[0].toUpperCase() : '🏢',
-          engagementScore: snap?.engagement_score ?? 0,
+          engagementScore,
           scoreEvolution: snap?.score_evolution ?? 0,
-          phase: (snap?.phase as Phase) ?? 'stagnant',
+          phase,
           phaseDuration: phaseDurationLabel,
           lastContactDate: lastContactLabel,
           lastContactType: (snap?.last_contact_type as Contact['lastContactType']) ?? 'email',

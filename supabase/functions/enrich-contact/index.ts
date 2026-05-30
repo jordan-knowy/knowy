@@ -1,74 +1,309 @@
 /**
- * enrich-contact
- * Orchestrates full contact enrichment:
- *   1. Calls Perplexity `sonar` (web search) for public professional bio
- *   2. Loads all behavioral data (emails + meetings) — in parallel with step 1
- *   3. Runs the 3-dimension scoring algorithm (doc 08)
- *   4. Calls Gemini 2.5 Flash via OpenRouter — with behavioral + web context
- *   5. Saves everything to DB
- *   6. Updates contact.enrichment_status = 'done'
+ * enrich-contact v2 — Pipeline 2-phases avec désambiguïsation homonymes
  *
- * RGPD-safe: only metadata — never email content.
+ * Phase 1 (parallèle DB) : Recherche l'organisation via le domaine email
+ * Phase 2 (séquentielle)  : Recherche la personne avec ancre domaine + anti-homonymes
+ * LLM Gemini              : Profil cognitif enrichi du contexte web
+ *
+ * RGPD-safe: métadonnées uniquement, jamais le contenu des emails.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 const MODEL = 'google/gemini-2.5-flash-lite';
-
-// Perplexity — cheapest online model with real web search
 const PERPLEXITY_API = 'https://api.perplexity.ai/chat/completions';
-const PERPLEXITY_MODEL = 'sonar'; // $1/M tokens — cheapest with web search
+const PERPLEXITY_MODEL = 'sonar';
 
-// ── Perplexity web research ──────────────────────────────────────────────────
-async function searchPersonWeb(name: string, role: string, company: string): Promise<string | null> {
+// ── Name parsing ──────────────────────────────────────────────────────────────
+
+const FR_PARTICLES = new Set(['de','du','des','le','la','les','van','von','au','aux','el','al','da','di','dos','das']);
+
+function capitalizeToken(w: string, isFirst: boolean): string {
+  const l = w.toLowerCase();
+  if (!isFirst && FR_PARTICLES.has(l)) return l;
+  return l.charAt(0).toUpperCase() + l.slice(1);
+}
+
+/** "liam.desousatoudret" → "Liam De Sousa Toudret" */
+function parseHumanName(raw: string): string {
+  if (raw.includes(' ')) return raw;
+  const tokens = raw.split(/[._-]+/).filter(Boolean);
+  if (tokens.length === 1) return raw.charAt(0).toUpperCase() + raw.slice(1);
+  return tokens.map((t, i) => capitalizeToken(t, i === 0)).join(' ');
+}
+
+// ── Domain analysis ───────────────────────────────────────────────────────────
+
+const PERSONAL_DOMAINS = new Set([
+  'gmail.com','hotmail.com','outlook.com','yahoo.com','yahoo.fr',
+  'icloud.com','me.com','live.com','live.fr','laposte.net',
+  'orange.fr','free.fr','sfr.fr','wanadoo.fr','protonmail.com','pm.me',
+]);
+
+const DOMAIN_TLDS = new Set(['com','fr','org','net','edu','io','co','uk','de','es','it','be','ch','ca','au','app','ai']);
+
+const EDU_PATTERNS = [
+  'lycee','ecole','univ','iut','ens','sup','college','academie',
+  'institut','school','edu','campus','formation','limayrac','cesi',
+  'epita','epitech','efrei','insa','isep','hec','polytechnique',
+];
+
+type DomainType = 'personal' | 'edu' | 'startup' | 'company_fr' | 'company_intl';
+
+interface DomainAnalysis {
+  domain: string;
+  username: string;
+  orgName: string;
+  domainType: DomainType;
+  isEdu: boolean;
+}
+
+function analyzeDomain(email: string): DomainAnalysis {
+  const atIdx = email.indexOf('@');
+  const username = atIdx > 0 ? email.slice(0, atIdx) : email;
+  const domain = atIdx > 0 ? email.slice(atIdx + 1).toLowerCase() : '';
+
+  if (!domain || PERSONAL_DOMAINS.has(domain)) {
+    return { domain, username, orgName: '', domainType: 'personal', isEdu: false };
+  }
+
+  const parts = domain.split('.');
+  const tld = parts[parts.length - 1] ?? '';
+  const significant = parts.filter(p => !DOMAIN_TLDS.has(p));
+  const orgName = significant.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+
+  const isEdu = tld === 'edu' || parts.some(p => EDU_PATTERNS.some(kw => p.includes(kw)));
+  if (isEdu) return { domain, username, orgName, domainType: 'edu', isEdu: true };
+
+  if (['io','ai','app'].includes(tld)) return { domain, username, orgName, domainType: 'startup', isEdu: false };
+  if (tld === 'fr') return { domain, username, orgName, domainType: 'company_fr', isEdu: false };
+  return { domain, username, orgName, domainType: 'company_intl', isEdu: false };
+}
+
+interface SearchCtx {
+  displayName: string;
+  organization: string;
+  analysis: DomainAnalysis;
+}
+
+function buildSearchCtx(rawName: string, email: string, companyName: string | null): SearchCtx {
+  const displayName = parseHumanName(rawName);
+  const analysis = analyzeDomain(email);
+  const organization = companyName || analysis.orgName;
+  return { displayName, organization, analysis };
+}
+
+// ── Perplexity helper ─────────────────────────────────────────────────────────
+
+async function perplexityCall(userContent: string, maxTokens: number): Promise<string | null> {
   const key = Deno.env.get('PERPLEXITY_API_KEY');
   if (!key) return null;
-
-  const query = [name, role, company].filter(Boolean).join(', ');
-
   try {
     const res = await fetch(PERPLEXITY_API, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${key}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: PERPLEXITY_MODEL,
         messages: [
           {
             role: 'system',
-            content: 'Research assistant. Return ONLY factual, verifiable professional info. No speculation. Plain text, no markdown.',
+            content: 'Tu es un expert en recherche professionnelle. Retourne UNIQUEMENT des informations factuelles et vérifiables avec leurs sources. Aucune spéculation ni hallucination. Texte brut sans markdown.',
           },
-          {
-            role: 'user',
-            content: `Find professional information about: ${query}.
-Return exactly:
-1. Bio (2-3 sentences): professional background and expertise.
-2. Expertise: 3-5 key skills or domains.
-3. Recent (optional): any notable news, publication or achievement from the past 12 months.
-If not found, write "Not found." for that section.`,
-          },
+          { role: 'user', content: userContent },
         ],
-        max_tokens: 400,
+        max_tokens: maxTokens,
         temperature: 0.1,
       }),
     });
-
     if (!res.ok) return null;
     const data = await res.json();
     const content: string = data.choices?.[0]?.message?.content ?? '';
     if (!content || content.trim().length < 40) return null;
-    // Discard if Perplexity found nothing meaningful
-    if (content.toLowerCase().includes('not found') && content.length < 120) return null;
     return content.trim();
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-// ── Scoring constants (doc 08) ───────────────────────────────────────────────
+// ── Phase 1a : Organisation research (parallel with DB queries) ───────────────
+
+async function researchOrganization(analysis: DomainAnalysis): Promise<string | null> {
+  if (analysis.domainType === 'personal' || !analysis.orgName) return null;
+
+  let registryHint: string;
+  if (analysis.domainType === 'company_fr') {
+    registryHint = `Recherche OBLIGATOIREMENT sur pappers.fr et societe.com :
+- Forme juridique (SAS, SARL, SA…), numéro SIREN
+- Dirigeants officiels inscrits (noms et rôles)
+- Date de création, siège social
+- Objet social / secteur d'activité
+Cherche aussi sur LinkedIn et le site ${analysis.domain}.`;
+  } else if (analysis.domainType === 'startup') {
+    registryHint = `Recherche sur crunchbase.com, wellfound.com, linkedin.com et ${analysis.domain} :
+- Produit/service, secteur, stade de développement
+- Fondateurs et équipe dirigeante (noms et rôles)
+- Levées de fonds, investisseurs si applicable`;
+  } else if (analysis.domainType === 'edu') {
+    registryHint = `Recherche sur ${analysis.domain} et Wikipedia :
+- Type d'établissement (lycée, université, grande école…)
+- Localisation, spécialité, accréditations, programmes`;
+  } else {
+    registryHint = `Recherche sur LinkedIn, ${analysis.domain}, et les registres d'entreprise locaux :
+- Secteur d'activité, produit/service principal
+- Dirigeants et taille de l'entreprise`;
+  }
+
+  return perplexityCall(`Recherche des informations sur l'organisation "${analysis.orgName}" (domaine : ${analysis.domain}).
+
+${registryHint}
+
+Retourne :
+1. Nom officiel complet
+2. Type (entreprise / startup / école / association)
+3. Secteur et activité principale
+4. Localisation (ville, pays)
+5. Fondateurs / dirigeants principaux (noms et rôles exacts)
+6. Taille (effectifs, stade)
+7. Source(s) (URLs)
+
+Si non trouvé pour une section : "Non trouvé."`, 400);
+}
+
+// ── Phase 1b : LinkedIn deep dive (parallel with org research + DB queries) ───
+
+async function researchLinkedIn(ctx: SearchCtx, role: string, email: string): Promise<string | null> {
+  const { displayName, organization, analysis } = ctx;
+
+  // Email personnel → pas de LinkedIn pro ciblé
+  if (analysis.domainType === 'personal' && !organization) return null;
+
+  const orgAnchor = organization
+    ? `affilié(e) à "${organization}" (domaine : ${analysis.domain})`
+    : '';
+
+  const disambiguationRule = organization
+    ? `⚠️ DÉSAMBIGUÏSATION : S'il existe plusieurs "${displayName}" sur LinkedIn, retiens UNIQUEMENT celui lié à "${organization}" / ${analysis.domain}. Ignore tous les homonymes.`
+    : '';
+
+  return perplexityCall(`Trouve et analyse en profondeur le profil LinkedIn de "${displayName}" ${orgAnchor}.
+${role ? `Rôle connu : ${role}.` : ''}
+Email professionnel (ancre d'identification) : ${email}
+
+${disambiguationRule}
+
+ÉTAPES DE RECHERCHE :
+1. Cherche : "linkedin.com/in/" + variantes du nom ("${displayName}", "${displayName.split(' ').slice(0, 2).join(' ')}", "${displayName.split(' ').reverse().join(' ')}")
+2. Cherche : "${displayName}" site:linkedin.com ${organization ? `"${organization}"` : ''}
+3. Lis l'intégralité du profil public visible
+4. Cherche les posts publics récents (12 derniers mois) de cette personne sur LinkedIn
+
+RETOURNE CE FORMAT STRUCTURÉ (conserve exactement ces labels) :
+
+LINKEDIN_URL: [URL complète linkedin.com/in/... ou "Non trouvé"]
+LINKEDIN_HEADLINE: [titre professionnel affiché sur le profil]
+POSTE_ACTUEL: [titre exact] | [entreprise] | depuis [mois/année si visible]
+PARCOURS_PRO:
+- [Titre de poste] | [Entreprise] | [date début] → [date fin ou "présent"] | [durée] | [description du rôle si visible]
+- [répéter pour chaque poste, du plus récent au plus ancien]
+FORMATION:
+- [Diplôme ou certification] | [École / Organisme] | [années]
+COMPÉTENCES: [liste des top compétences endorsées ou mentionnées]
+A_PROPOS: [contenu de la section "À propos" / "About" si visible — texte complet ou résumé]
+POSTS_RECENTS:
+- [Résumé du post / thème] — [ton : technique / inspirationnel / sectoriel / personnel / etc.] — [nb de likes si visible]
+- [répéter pour 3-5 posts récents]
+FREQUENCE_PUBLICATION: [quotidien / hebdo / mensuel / rare / aucun trouvé]
+CERTIFICATIONS: [certifications listées sur le profil, le cas échéant]
+RECOMMANDATIONS: [nb et thèmes si visibles]
+
+Si le profil LinkedIn n'est pas trouvé, commence par : LINKEDIN_URL: Non trouvé`, 700);
+}
+
+// ── Phase 2 : Person research with disambiguation ─────────────────────────────
+
+async function researchPerson(
+  ctx: SearchCtx,
+  role: string,
+  email: string,
+  orgInfo: string | null,
+): Promise<string | null> {
+  const { displayName, organization, analysis } = ctx;
+  const orgCtx = organization || 'leur organisation';
+  const orgInfoSection = orgInfo ? `\n\nINFOS ORGANISATION (déjà confirmées) :\n${orgInfo}` : '';
+
+  let prompt: string;
+
+  if (analysis.domainType === 'personal') {
+    prompt = `Recherche des informations professionnelles sur "${displayName}".
+${role ? `Rôle connu : ${role}.` : ''}
+Retourne : parcours professionnel, compétences, présence LinkedIn et en ligne.`;
+
+  } else if (analysis.domainType === 'edu') {
+    prompt = `RECHERCHE CIBLÉE — "${displayName}" à ${orgCtx} (${analysis.domain}).
+Email professionnel confirmé : ${email} → affiliation certaine à cette institution.${orgInfoSection}
+
+Recherche :
+- Sur ${analysis.domain} : annuaire, pages équipe, publications, mentions
+- Sur LinkedIn : profil liant ce nom à l'institution
+- Variantes du nom (chaque composante séparée : "${displayName.split(' ').join('", "')}"))
+
+RETOURNE :
+1. Identité : Nom complet exact trouvé en ligne
+2. Rôle : étudiant / enseignant / chercheur / personnel (département, filière, niveau)
+3. Parcours : formation ou expérience antérieure si trouvée
+4. Présence en ligne : LinkedIn, publications, portfolio
+5. Sources (URLs)`;
+
+  } else {
+    let registrySearch: string;
+    if (analysis.domainType === 'company_fr') {
+      registrySearch = `- Cherche "${displayName}" "${orgCtx}" sur pappers.fr (dirigeant, associé, président, co-gérant)
+- Cherche "${displayName}" "${orgCtx}" sur societe.com
+- Cherche "${displayName}" "${orgCtx}" sur LinkedIn avec filtre entreprise
+- Cherche des articles, interviews ou communiqués mentionnant "${displayName}" et "${orgCtx}"`;
+    } else if (analysis.domainType === 'startup') {
+      registrySearch = `- Cherche "${displayName}" "${orgCtx}" sur crunchbase.com et wellfound.com
+- Cherche sur ${analysis.domain}/about, ${analysis.domain}/team, ${analysis.domain}/founders
+- Cherche "${displayName}" "${orgCtx}" sur LinkedIn
+- Cherche des articles TechCrunch, Les Echos, Maddyness ou presse tech mentionnant "${displayName}"`;
+    } else {
+      registrySearch = `- Cherche "${displayName}" "${orgCtx}" sur LinkedIn
+- Cherche sur le site ${analysis.domain} (pages équipe, about)
+- Cherche des articles de presse mentionnant "${displayName}" et "${orgCtx}"`;
+    }
+
+    prompt = `TÂCHE DE DÉSAMBIGUÏSATION STRICTE
+
+Contexte : Je cherche "${displayName}" qui est affilié(e) à "${orgCtx}" (domaine : ${analysis.domain}).
+${role ? `Rôle connu : ${role}.` : ''}
+Email professionnel : ${email}${orgInfoSection}
+
+⚠️ RÈGLE ABSOLUE — HOMONYMES :
+Il peut exister plusieurs personnes nommées "${displayName}" sur internet.
+L'email ${email} PROUVE que LA BONNE PERSONNE est uniquement celle affiliée à ${analysis.domain}.
+Tu dois IGNORER COMPLÈTEMENT tous les homonymes non affiliés à ${orgCtx} / ${analysis.domain}.
+
+ÉTAPES DE RECHERCHE :
+${registrySearch}
+
+RETOURNE (uniquement pour la personne confirmée chez ${orgCtx}) :
+1. Identité confirmée : Nom complet + preuve concrète de l'affiliation à ${orgCtx}
+2. Rôle exact : Fondateur ? Co-fondateur ? CEO ? CTO ? Employé ? (avec date de prise de poste si trouvée)
+3. Parcours antérieur : Expériences pro avant ${orgCtx} (entreprises, postes, formations)
+4. Profil synthèse : 2-3 phrases actionnables sur qui est cette personne professionnellement
+5. Infos ${orgCtx} complémentaires : données confirmant le lien (page équipe, registre, article)
+6. Sources exactes : URLs (LinkedIn, pappers, crunchbase, article presse, etc.)
+
+Si aucun résultat confirmé pour "${displayName}" chez ${orgCtx}, écris exactement la ligne :
+AUCUN_RÉSULTAT_CONFIRMÉ : [raison brève]`;
+  }
+
+  const result = await perplexityCall(prompt, 700);
+  if (!result) return null;
+  if (result.startsWith('AUCUN_RÉSULTAT_CONFIRMÉ')) return null;
+  return result;
+}
+
+// ── Scoring constants ─────────────────────────────────────────────────────────
 const DIM_WEIGHTS = { intensite: 0.40, reciprocite: 0.35, longevite: 0.25 };
 const PHASE_DELTA = 8.0;
 const HONEYMOON_DAYS = 45;
@@ -139,10 +374,6 @@ function buildStats(msgs: any[], meets: any[], firstSeen: string | null): Stats 
   for (const m of msgs) { if (m.thread_id) threadMap.set(m.thread_id, (threadMap.get(m.thread_id) || 0) + 1); }
   const avgThreadDepth = threadMap.size ? Array.from(threadMap.values()).reduce((a, b) => a + b, 0) / threadMap.size : 1;
 
-  const hasEmail = msgs.length > 0;
-  const hasMeeting = meets.length > 0;
-  const channelCount = (hasEmail ? 1 : 0) + (hasMeeting ? 1 : 0);
-
   const ageInDays = firstSeen
     ? Math.round((now - new Date(firstSeen).getTime()) / 86400000)
     : msgs.length > 0 ? Math.round((now - new Date(msgs[msgs.length - 1].sent_at).getTime()) / 86400000) : 0;
@@ -168,7 +399,8 @@ function buildStats(msgs: any[], meets: any[], firstSeen: string | null): Stats 
   return {
     emailsLast30: msgs.filter(m => m.sent_at && new Date(m.sent_at).getTime() > cut30).length,
     meetingsLast90: meets.filter(m => m.starts_at && new Date(m.starts_at).getTime() > cut90).length,
-    avgThreadDepth, channelCount, initiationRatio, responseRate, responseTimeRatio,
+    avgThreadDepth, channelCount: (msgs.length > 0 ? 1 : 0) + (meets.length > 0 ? 1 : 0),
+    initiationRatio, responseRate, responseTimeRatio,
     ageInDays, daysSinceLast, monthlyExchangeCounts, quartersWithMeetings,
     totalInteractions: msgs.length + meets.length * 4,
     avgResponseHours,
@@ -194,7 +426,10 @@ function computeScore(s: Stats, prevScore?: number): {
     ? Math.min(raw, 0.45 + (s.ageInDays / HONEYMOON_DAYS) * 0.20)
     : raw;
   const depth = clamp(s.totalInteractions / 500);
-  const final = Math.round(clamp(smoothed * temporalDecay(s.daysSinceLast, depth)) * 100);
+  const decayed = clamp(smoothed * temporalDecay(s.daysSinceLast, depth));
+  // Floor : si des échanges ont eu lieu, le score ne peut pas tomber à 0
+  const floor = s.totalInteractions > 0 ? Math.round(raw * 0.05 * 100) : 0;
+  const final = Math.max(floor, Math.round(decayed * 100));
 
   const prev = prevScore ?? final;
   const delta = final - prev;
@@ -206,26 +441,26 @@ function computeScore(s: Stats, prevScore?: number): {
   return { score: final, phase, delta, si: Math.round(si * 100), sr: Math.round(sr * 100), sl: Math.round(sl * 100) };
 }
 
-// ── LLM system prompt (doc 06 v3 — adapted for enrichment) ──────────────────
+// ── LLM system prompt ─────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `Tu es le moteur d'intelligence cognitive de Knowy.
 À partir de données comportementales (métadonnées uniquement — RGPD-safe, jamais le contenu des emails),
 tu génères des profils cognitifs précis, actionnables et scientifiquement fondés.
 
 RÈGLES ABSOLUES :
 1. Zéro hallucination. Si une donnée n'est pas déductible → inference_level "unavailable" ou "hypothetical". Jamais inventé.
-2. Niveaux d'inférence : "observable" (déduit directement des données) > "inferred" (raisonnement logique fort) > "hypothetical" (possible mais non confirmé) > "unavailable"
-3. Les JTBD viennent du rôle + secteur + patterns comportementaux. Ne pas inventer de contexte business.
-4. Les axes interactionnels viennent des patterns de communication (temps de réponse, longueur, initiation, profondeur).
+2. Niveaux d'inférence : "observable" > "inferred" > "hypothetical" > "unavailable"
+3. Les JTBD viennent du rôle + secteur + patterns comportementaux.
+4. Les axes interactionnels viennent des patterns de communication.
 
 FRAMEWORKS :
-- Kahneman S1/S2 : temps de réponse rapide + emails courts + décision immédiate → S1 dominant
-- JTBD Christensen : fonctionnel (ce qu'ils doivent accomplir), social (ce qu'ils veulent paraître), émotionnel (ce qu'ils veulent ressentir)
+- Kahneman S1/S2 : temps de réponse rapide + emails courts → S1 dominant
+- JTBD Christensen : fonctionnel / social / émotionnel
 - Cialdini : signaux d'influence détectables depuis les patterns
 - Gilbert & Karahalios : force du lien = intensité + réciprocité + longévité
 
 RÉPONDS UNIQUEMENT EN JSON STRICT selon le schéma fourni. Aucun texte avant ou après.`;
 
-function buildLLMContext(contact: any, stats: Stats, scoring: ReturnType<typeof computeScore>, subjects: string[], webBio?: string): string {
+function buildLLMContext(contact: any, stats: Stats, scoring: ReturnType<typeof computeScore>, subjects: string[]): string {
   const channelLabel = stats.channelCount >= 2 ? 'Email + Réunions' : stats.channelCount === 1 ? 'Email seulement' : 'Aucun échange';
   const freqLabel = stats.emailsLast30 === 0 ? 'Aucun email récent'
     : stats.emailsLast30 <= 2 ? 'Faible fréquence (1-2/mois)'
@@ -241,11 +476,11 @@ function buildLLMContext(contact: any, stats: Stats, scoring: ReturnType<typeof 
     : stats.initiationRatio > 0.3 ? 'Initiation équilibrée'
     : 'Le contact initie massivement';
 
-  const payload: Record<string, unknown> = {
+  return JSON.stringify({
     contact: {
       nom: contact.full_name,
       role: contact.role_title ?? 'Rôle inconnu',
-      entreprise: contact.company_name ?? 'Entreprise inconnue',
+      entreprise: contact.company_name ?? 'Organisation inconnue',
       email: contact.email ?? null,
       anciennete_relation_jours: stats.ageInDays,
     },
@@ -253,10 +488,8 @@ function buildLLMContext(contact: any, stats: Stats, scoring: ReturnType<typeof 
       emails_last_30j: stats.emailsLast30,
       reunions_last_90j: stats.meetingsLast90,
       profondeur_thread_moy: Math.round(stats.avgThreadDepth * 10) / 10,
-      canaux: channelLabel,
-      frequence: freqLabel,
-      temps_reponse_moy: responseLabel,
-      initiation: initiationLabel,
+      canaux: channelLabel, frequence: freqLabel,
+      temps_reponse_moy: responseLabel, initiation: initiationLabel,
       taux_reponse_pct: Math.round(stats.responseRate * 100),
       jours_sans_contact: stats.daysSinceLast,
     },
@@ -269,12 +502,7 @@ function buildLLMContext(contact: any, stats: Stats, scoring: ReturnType<typeof 
       dimension_longevite: scoring.sl,
     },
     sujets_emails_observes: subjects.slice(0, 10),
-  };
-
-  // Inject web research if available — enriches JTBD and cognitive inference
-  if (webBio) payload.recherche_web = webBio;
-
-  return JSON.stringify(payload, null, 0);
+  }, null, 0);
 }
 
 const LLM_SCHEMA = `{
@@ -308,7 +536,7 @@ const LLM_SCHEMA = `{
   }
 }`;
 
-// ── Main handler ─────────────────────────────────────────────────────────────
+// ── Main handler ──────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
@@ -328,7 +556,7 @@ Deno.serve(async (req) => {
   const { contactId, organizationId, forceRefresh = false } = body;
   if (!contactId || !organizationId) return jsonResponse({ error: 'contactId and organizationId required' }, 400);
 
-  // ── 1. Load contact ────────────────────────────────────────────────────────
+  // ── 1. Load contact ───────────────────────────────────────────────────────
   const { data: contact, error: contactErr } = await supabase
     .from('contacts')
     .select('id, full_name, email, role_title, created_at, enrichment_status, last_enriched_at, companies(name, domain)')
@@ -339,7 +567,19 @@ Deno.serve(async (req) => {
   if (contactErr || !contact) return jsonResponse({ error: 'Contact not found', detail: contactErr?.message }, 404);
 
   const companyName = (contact.companies as any)?.name ?? null;
-  const contactWithCompany = { ...contact, company_name: companyName };
+
+  // Build search context (parse name, classify domain)
+  const searchCtx = buildSearchCtx(
+    contact.full_name ?? '',
+    contact.email ?? '',
+    companyName,
+  );
+
+  const contactWithCompany = {
+    ...contact,
+    company_name: searchCtx.organization || companyName,
+    full_name: searchCtx.displayName, // human-readable name for LLM
+  };
 
   // Skip if recently enriched (< 7 days) and not forced
   if (!forceRefresh && contact.enrichment_status === 'done' && contact.last_enriched_at) {
@@ -347,17 +587,19 @@ Deno.serve(async (req) => {
     if (age < 7 * 86400000) return jsonResponse({ status: 'cached', contactId });
   }
 
-  // ── 2. Mark as running ─────────────────────────────────────────────────────
+  // ── 2. Mark as running ────────────────────────────────────────────────────
   await supabase.from('contacts')
     .update({ enrichment_status: 'running', enrichment_error: null })
     .eq('id', contactId);
 
   try {
-    // ── 3. Load behavioral data + Perplexity web search IN PARALLEL ──────────
+    // ── 3. Phase 1a (org) + Phase 1b (LinkedIn) + DB queries — ALL IN PARALLEL ─
+    // Toutes les recherches Perplexity tournent pendant les requêtes DB → 0 latence supplémentaire
     const [
       { data: messages },
       { data: meetingParts },
-      webBio,
+      orgInfo,
+      linkedinData,
     ] = await Promise.all([
       supabase.from('communication_messages')
         .select('direction, sent_at, thread_id, metadata, subject')
@@ -369,25 +611,35 @@ Deno.serve(async (req) => {
         .select('meetings(id, starts_at, title, actual_duration_minutes)')
         .eq('organization_id', organizationId)
         .eq('contact_id', contactId),
-      // Perplexity search — runs while DB queries are in flight
-      searchPersonWeb(
-        contact.full_name,
-        contact.role_title ?? '',
-        companyName ?? '',
-      ),
+      // Phase 1a : organisation research
+      researchOrganization(searchCtx.analysis),
+      // Phase 1b : LinkedIn deep dive
+      researchLinkedIn(searchCtx, contact.role_title ?? '', contact.email ?? ''),
     ]);
 
     const msgs = messages ?? [];
     const meets = (meetingParts ?? []).map((p: any) => p.meetings).filter(Boolean).flat();
 
-    // Persist web bio immediately — it's useful even if LLM step fails
-    if (webBio) {
-      await supabase.from('contacts')
-        .update({ web_bio: webBio })
-        .eq('id', contactId);
-    }
+    // ── 4. Phase 2 : Person disambiguation with org + LinkedIn context ────────
+    // On passe orgInfo + linkedinData comme contexte pour la désambiguïsation
+    const orgAndLinkedinContext = [orgInfo, linkedinData].filter(Boolean).join('\n\n---\n\n') || null;
+    const personBio = await researchPerson(
+      searchCtx,
+      contact.role_title ?? '',
+      contact.email ?? '',
+      orgAndLinkedinContext,
+    );
 
-    // ── 4. Compute behavioral stats + scoring ────────────────────────────────
+    // Combine toutes les sources en un web_bio structuré
+    const webBio = [
+      orgInfo      ? `=== ORGANISATION ===\n${orgInfo}`            : null,
+      linkedinData ? `=== PROFIL LINKEDIN ===\n${linkedinData}`    : null,
+      personBio    ? `=== PROFIL PROFESSIONNEL ===\n${personBio}`  : null,
+    ].filter(Boolean).join('\n\n');
+
+    if (webBio) await supabase.from('contacts').update({ web_bio: webBio }).eq('id', contactId);
+
+    // ── 5. Compute behavioral stats + scoring ─────────────────────────────────
     const stats = buildStats(msgs, meets, contact.created_at);
 
     const { data: prevSnap } = await supabase
@@ -400,30 +652,38 @@ Deno.serve(async (req) => {
 
     const scoring = computeScore(stats, prevSnap?.score);
 
-    // Subject lines for LLM context (deduplicated, cleaned)
     const subjects = [...new Set(
       msgs.map(m => m.subject).filter(s => s && s.length > 3 && !s.startsWith('Re:') && !s.startsWith('Fwd:'))
     )].slice(0, 15) as string[];
 
-    // ── 5. Call Gemini — with behavioral data + Perplexity web research ──────
-    const webSection = webBio
-      ? `\n\nRecherche web Perplexity (données publiques) :\n${webBio}`
-      : '';
+    // ── 6. Call Gemini with full context ──────────────────────────────────────
+    const orgCtx = searchCtx.organization || companyName || '—';
 
-    const userMessage = `Voici les données comportementales du contact à analyser :
+    // Sections contexte web structurées pour le LLM
+    const webContextSection = webBio ? `
 
-${buildLLMContext(contactWithCompany, stats, scoring, subjects, webBio ?? undefined)}${webSection}
+=== DONNÉES WEB ENRICHIES (Perplexity — 3 sources croisées) ===
+${webBio}
+===` : '';
+
+    const userMessage = `Voici les données comportementales ET le profil public du contact à analyser :
+
+${buildLLMContext(contactWithCompany, stats, scoring, subjects)}${webContextSection}
 
 Génère le profil cognitif complet selon ce schéma JSON exact (réponds UNIQUEMENT en JSON, aucun texte autour) :
 
 ${LLM_SCHEMA}
 
 Instructions spécifiques :
-- behavioral_signals : 3 à 5 signaux, uniquement ce qui est déductible des données fournies
-- interaction_axes : valeurs entre 0 (pôle gauche) et 100 (pôle droit). relation_result: 0=Relation/100=Résultat. intuition_structure: 0=Intuition/100=Structure. caution_speed: 0=Prudence/100=Rapidité. consensus_control: 0=Consensus/100=Contrôle
-- jtbd : basé sur le rôle "${contactWithCompany.role_title}" dans l'entreprise "${companyName}"${webBio ? ' ET les données de recherche web ci-dessus' : ''}
-- si les données sont insuffisantes (peu d'échanges) → utilise "hypothetical" et confidence faible
-- executive_summary : intègre les infos web si disponibles pour enrichir le résumé`;
+- Nom du contact : "${searchCtx.displayName}" (utilise CE nom dans executive_summary)
+- Organisation : "${orgCtx}" — ${searchCtx.analysis.isEdu ? 'institution éducative' : searchCtx.analysis.domainType === 'startup' ? 'startup/scale-up' : 'entreprise'}
+- behavioral_signals : 3 à 5 signaux. Croise les données comportementales (emails) ET le profil LinkedIn si disponible
+- interaction_axes : 0 (pôle gauche) → 100 (pôle droit). Si le LinkedIn montre des posts techniques → structure élevée. Si posts inspirationnels → relation élevée
+- jtbd : utilise le PARCOURS LINKEDIN (PARCOURS_PRO) et la section A_PROPOS pour inférer des JTBD précis et contextualisés à leur rôle actuel
+- cognitive_mode : les POSTS_RECENTS LinkedIn révèlent S1 vs S2 (posts courts/réactifs → S1, threads analytiques → S2)
+- executive_summary : 2-3 phrases qui synthétisent QUI est la personne (rôle, expertise, personnalité pro) en intégrant le parcours LinkedIn et les échanges email
+- données insuffisantes → "hypothetical" + confidence faible
+- Si les données LinkedIn sont absentes ou "Non trouvé" : base-toi uniquement sur les emails et le contexte organisationnel`;
 
     const llmRes = await fetch(OPENROUTER_API, {
       method: 'POST',
@@ -450,14 +710,10 @@ Instructions spécifiques :
     const llmData = await llmRes.json();
     const rawContent = llmData.choices?.[0]?.message?.content ?? '{}';
     let profile: any = {};
-    try {
-      profile = JSON.parse(rawContent);
-    } catch {
-      const match = rawContent.match(/\{[\s\S]*\}/);
-      if (match) profile = JSON.parse(match[0]);
-    }
+    try { profile = JSON.parse(rawContent); }
+    catch { const m = rawContent.match(/\{[\s\S]*\}/); if (m) profile = JSON.parse(m[0]); }
 
-    // ── 6. Upsert cognitive_profile ──────────────────────────────────────────
+    // ── 7. Upsert cognitive_profile ───────────────────────────────────────────
     const globalConfidence = stats.totalInteractions > 50 ? 80
       : stats.totalInteractions > 20 ? 65
       : stats.totalInteractions > 5 ? 45
@@ -484,9 +740,7 @@ Instructions spécifiques :
         score_reciprocite: scoring.sr,
         score_longevite: scoring.sl,
         score_delta: scoring.delta,
-        updated_from: ['gmail', 'calendar'].filter(s =>
-          s === 'gmail' ? msgs.length > 0 : meets.length > 0
-        ),
+        updated_from: ['gmail', 'calendar'].filter(s => s === 'gmail' ? msgs.length > 0 : meets.length > 0),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'organization_id,contact_id,profile_version' })
       .select('id')
@@ -496,9 +750,8 @@ Instructions spécifiques :
     const signals: any[] = profile.behavioral_signals ?? [];
 
     if (profileId) {
-      // ── 7. Save interaction axes ─────────────────────────────────────────
-      const axes = profile.interaction_axes ?? {};
-      const axisRows = Object.entries(axes).map(([axis, data]: [string, any]) => ({
+      // Interaction axes
+      const axisRows = Object.entries(profile.interaction_axes ?? {}).map(([axis, data]: [string, any]) => ({
         organization_id: organizationId,
         profile_id: profileId,
         axis: axis as any,
@@ -507,13 +760,12 @@ Instructions spécifiques :
         inference_level: data.inference_level ?? 'unavailable',
         evidence_count: msgs.length + meets.length,
       }));
-
       if (axisRows.length > 0) {
         await supabase.from('interaction_axis_scores').delete().eq('profile_id', profileId);
         await supabase.from('interaction_axis_scores').insert(axisRows);
       }
 
-      // ── 8. Save interaction modes ────────────────────────────────────────
+      // Interaction modes
       const modes: string[] = profile.interaction_modes_primary ?? [];
       if (modes.length > 0) {
         await supabase.from('interaction_mode_scores').delete().eq('profile_id', profileId);
@@ -529,14 +781,9 @@ Instructions spécifiques :
         );
       }
 
-      // ── 9. Save behavioral signals ───────────────────────────────────────
+      // Behavioral signals
       if (signals.length > 0) {
-        // Remove old AI-generated signals for this contact
-        await supabase.from('behavioral_signals')
-          .delete()
-          .eq('contact_id', contactId)
-          .eq('source_type', 'ai_enrichment');
-
+        await supabase.from('behavioral_signals').delete().eq('contact_id', contactId).eq('source_type', 'ai_enrichment');
         await supabase.from('behavioral_signals').insert(
           signals.map(s => ({
             organization_id: organizationId,
@@ -554,7 +801,7 @@ Instructions spécifiques :
       }
     }
 
-    // ── 10. Save score history ───────────────────────────────────────────────
+    // Score history
     const today = new Date().toISOString().split('T')[0];
     await supabase.from('contact_score_history').upsert({
       organization_id: organizationId,
@@ -568,20 +815,21 @@ Instructions spécifiques :
       snapshot_date: today,
     }, { onConflict: 'organization_id,contact_id,user_id,snapshot_date' });
 
-    // ── 11. Update contact ───────────────────────────────────────────────────
+    // Update contact status
     await supabase.from('contacts').update({
       enrichment_status: 'done',
       last_enriched_at: new Date().toISOString(),
       enrichment_error: null,
     }).eq('id', contactId);
 
-    // ── 12. Activity event ───────────────────────────────────────────────────
-    const webLabel = webBio ? ' · Perplexity ✓' : '';
+    // Activity event
+    const sources = [orgInfo && 'org', linkedinData && 'linkedin', personBio && 'person'].filter(Boolean);
+    const webLabel = webBio ? ` · Perplexity ✓ (${sources.join('+')})` : '';
     await supabase.from('knowy_activity_events').insert({
       organization_id: organizationId,
       user_id: user.id,
       event_type: 'profile_enriched',
-      title: `Profil enrichi — ${contact.full_name}`,
+      title: `Profil enrichi — ${searchCtx.displayName}`,
       description: `Score ${scoring.score}/100 · ${scoring.phase === 'growth' ? '+' : ''}${scoring.delta} pts · ${signals.length} signaux cognitifs${webLabel}`,
       entity_link: `/contacts/${contactId}`,
     }).select().maybeSingle();
@@ -596,15 +844,15 @@ Instructions spécifiques :
       interactionModes: profile.interaction_modes_primary,
       globalConfidence,
       webEnriched: !!webBio,
+      orgResearched: !!orgInfo,
+      linkedinFound: !!linkedinData && !linkedinData.includes('LINKEDIN_URL: Non trouvé'),
     });
 
   } catch (err: any) {
-    // Mark as failed
     await supabase.from('contacts').update({
       enrichment_status: 'failed',
       enrichment_error: err?.message ?? 'Unknown error',
     }).eq('id', contactId);
-
     console.error('[enrich-contact] error:', err);
     return jsonResponse({ error: err?.message ?? 'Enrichment failed' }, 500);
   }
