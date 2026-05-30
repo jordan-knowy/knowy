@@ -79,6 +79,7 @@ export default function MeetingAnalysis() {
   const [loadedParticipants, setLoadedParticipants] = useState<Participant[]>([]);
   const [loadedSources, setLoadedSources] = useState<{ name: string; icon: any; connected: boolean; gain?: number }[]>([]);
   const [postSummary, setPostSummary] = useState<any>(null);
+  const [fullProfiles, setFullProfiles] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -147,6 +148,23 @@ export default function MeetingAnalysis() {
         });
         setLoadedParticipants(mapped);
         if (mapped.length > 0) setSelectedParticipant(mapped[0].id);
+
+        // Charger les profils cognitifs complets (jtbd, theory_of_mind, executive_summary, cognitive_mode)
+        if (supabase && parts.length > 0) {
+          const contactIds = parts.map(p => p.contact.id).filter(Boolean);
+          if (contactIds.length > 0) {
+            const { data: cps } = await supabase
+              .from('cognitive_profiles')
+              .select('contact_id, executive_summary, cognitive_mode, cognitive_mode_confidence, interaction_modes_data, jtbd_data, theory_of_mind_data, behavioral_analysis_data, engagement_score, score_phase')
+              .in('contact_id', contactIds)
+              .order('profile_version', { ascending: false });
+            const profileMap: Record<string, any> = {};
+            (cps ?? []).forEach((cp: any) => {
+              if (!profileMap[cp.contact_id]) profileMap[cp.contact_id] = cp;
+            });
+            if (mounted) setFullProfiles(profileMap);
+          }
+        }
       }
 
       // Load connector statuses for the sidebar
@@ -242,101 +260,41 @@ export default function MeetingAnalysis() {
   // Left as null for now; will be populated by future AI processing
   const companyContext = null;
 
-  const meddpicc = [
-    { letter: 'M', label: 'Metrics', status: 'unknown', detail: 'Non qualifié' },
-    { letter: 'E', label: 'Economic Buyer', status: 'complete', detail: 'Sarah Chen · VP Partnerships' },
-    { letter: 'D', label: 'Decision Criteria', status: 'partial', detail: 'ROI + Time-to-value confirmés' },
-    { letter: 'D', label: 'Decision Process', status: 'partial', detail: 'Timeline Q2 · Process non documenté' },
-    { letter: 'P', label: 'Paper Process', status: 'unknown', detail: 'Non qualifié' },
-    { letter: 'I', label: 'Identify Pain', status: 'complete', detail: 'Gap sales enablement' },
-    { letter: 'C', label: 'Champion', status: 'complete', detail: 'Sarah Chen confirmée' },
-    { letter: 'C', label: 'Competition', status: 'risk', detail: '2 compétiteurs actifs' }
-  ];
+  // ── Données dérivées des vrais profils cognitifs ──────────────────────────
 
-  const competition = {
-    qualified: false,
-    competitors: [
-      { name: 'Gong', status: 'probable', source: 'LinkedIn post Sarah' },
-      { name: 'Chorus.ai', status: 'confirmé', source: 'Email Marc' }
-    ],
-    questionsToAsk: [
-      'Quelles solutions évaluez-vous actuellement ?',
-      'Qui utilise quoi dans votre stack actuel ?',
-      'Qu\'est-ce qui vous bloque avec votre solution actuelle ?'
-    ]
+  // Participants avec score en alerte (relation froide ou en déclin)
+  const atRiskParticipants = participants.filter(p => {
+    const fp = fullProfiles[p.id];
+    return fp?.score_phase === 'decline' ||
+      (p.relationContext && p.relationContext.lastContactDays > (p.relationContext.avgFrequencyDays || 30) * 1.5);
+  });
+
+  // Questions d'ouverture depuis les JTBD
+  const openingQuestions = participants
+    .map(p => ({
+      participant: p,
+      question: fullProfiles[p.id]?.jtbd_data?.qualify_question ?? null,
+    }))
+    .filter(q => q.question);
+
+  // Recommandations d'adaptation communication basées sur le mode cognitif
+  const commAdaptations = participants.map(p => {
+    const fp = fullProfiles[p.id];
+    const mode = fp?.cognitive_mode;
+    const modes = fp?.interaction_modes_data ?? [];
+    let tip = '';
+    if (mode === 's1_dominant') tip = 'Sois direct et concis. Propose des décisions simples. Évite les longues présentations.';
+    else if (mode === 's2_dominant') tip = 'Fournis des données précises. Laisse du temps de réflexion. Structure ta présentation.';
+    else tip = 'Adapte selon le contexte. Sonde l\'état d\'esprit en début de réunion.';
+    return { participant: p, mode, modes, tip, fp };
+  });
+
+  // Signal clé de chaque participant
+  const getKeySignal = (participantId: string) => {
+    const fp = fullProfiles[participantId];
+    if (!fp?.behavioral_analysis_data?.length) return null;
+    return fp.behavioral_analysis_data[0];
   };
-
-  const selectionCriteria = [
-    { rank: 1, criterion: 'ROI démontrable', probability: 95, source: 'Email Marc' },
-    { rank: 2, criterion: 'Time-to-value < 30j', probability: 85, source: 'Call Sarah' },
-    { rank: 3, criterion: 'Intégration Salesforce', probability: 70, source: 'Mémoire Knowy' },
-    { rank: 4, criterion: 'Support en français', probability: 45, source: 'Hypothèse' }
-  ];
-
-  const inactionCost = {
-    currentProvider: 'Process manuel + Gong partiel',
-    inactionLevel: 'élevé',
-    window: 'se ferme',
-    insight: 'Leur VP Sales part en Q3. S\'ils n\'ont pas de solution avant, le projet sera gelé 6 mois.',
-    sources: ['LinkedIn', 'Gmail']
-  };
-
-  const objections = [
-    {
-      objection: '"On utilise déjà Gong, pourquoi changer ?"',
-      type: 'statu quo',
-      probability: 85,
-      response: 'Gong fait du coaching call. Knowy fait de l\'intelligence relationnelle — on se complète. Vous gardez Gong pour les calls, on ajoute le layer relationnel.',
-      source: 'LinkedIn · Sarah a mentionné Gong'
-    },
-    {
-      objection: '"C\'est quoi le ROI chiffré ?"',
-      type: 'ROI',
-      probability: 95,
-      response: '3 clients comparables : +22% win rate en 90j. Je peux vous montrer les chiffres exacts si vous signez un NDA.',
-      source: 'Profil Marc · analytique'
-    },
-    {
-      objection: '"On n\'a pas le temps de déployer ça maintenant"',
-      type: 'timing',
-      probability: 70,
-      response: 'Justement — pilote 30j, 3 AE seulement. Vous voyez les résultats avant de scaler. Pas de projet lourd.',
-      source: 'Agenda Sarah · cherche quick win'
-    }
-  ];
-
-  const recommendations = [
-    { num: 1, phase: 'Ouverture · min 0–5', action: 'Qualifier les metrics de succès', rationale: 'Marc attend des KPIs — sans ça, il bloquera. Poser la question avant de pitcher.' },
-    { num: 2, phase: 'Découverte · min 5–15', action: 'Ancrer sur le départ du VP Sales Q3', rationale: 'Fenêtre d\'opportunité courte — créer l\'urgence sans forcer.' },
-    { num: 3, phase: 'Démo · min 15–35', action: 'Montrer un pilote 30j au lieu d\'un déploiement 6 mois', rationale: 'Sarah cherche un quick win — lui proposer exactement ça.' },
-    { num: 4, phase: 'Clôture · min 35–45', action: 'Proposer 3 prochaines étapes avec deadlines', rationale: 'Marc est méthodique — lui donner une roadmap claire rassure.' }
-  ];
-
-  const risks = [
-    {
-      risk: 'Momentum en baisse',
-      level: 'high' as const,
-      description: 'Dernier contact il y a 23 jours',
-      consequence: 'Le deal peut refroidir si on ne réactive pas rapidement',
-      mitigation: 'Proposer un follow-up dans les 48h avec une deadline'
-    },
-    {
-      risk: 'Concurrence non qualifiée',
-      level: 'medium' as const,
-      description: '2 compétiteurs actifs mais process de sélection inconnu',
-      consequence: 'On peut perdre sans savoir pourquoi',
-      mitigation: 'Qualifier les critères et le process dès cette réunion'
-    }
-  ];
-
-  const nextSteps = [
-    { task: 'Qualifier metrics de succès avec Marc', timing: 'En meeting', priority: 1, assignee: 'Vous' },
-    { task: 'Envoyer benchmark ROI sous NDA', timing: 'J+1', priority: 1, assignee: 'Vous' },
-    { task: 'Proposer pilot 30j avec 3 AE', timing: 'J+1', priority: 1, assignee: 'Vous' },
-    { task: 'Qualifier concurrence et process', timing: 'En meeting', priority: 2, assignee: 'Vous' },
-    { task: 'Update HubSpot deal stage', timing: 'J+1', priority: 2, assignee: 'Vous' },
-    { task: 'Scheduler démo technique', timing: 'J+2 à J+7', priority: 2, assignee: 'Marc' }
-  ];
 
   const currentParticipant = participants.find(p => p.id === selectedParticipant) || participants[0];
 
@@ -370,7 +328,7 @@ export default function MeetingAnalysis() {
     <div className="size-full overflow-auto bg-background">
       {/* Header Sticky */}
       <div className="sticky top-0 z-50 bg-card border-b border-border">
-        <div className="max-w-7xl mx-auto px-8 py-4">
+        <div className="max-w-7xl mx-auto px-4 py-4 md:px-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <KnowyButton
@@ -434,7 +392,7 @@ export default function MeetingAnalysis() {
 
       {/* Pills Navigation - Outside sticky header */}
       <div className="bg-background border-b border-border">
-        <div className="max-w-7xl mx-auto px-8 py-4">
+        <div className="max-w-7xl mx-auto px-4 py-4 md:px-8">
           <div className="flex gap-2">
             {isPast && (
               <button
@@ -472,12 +430,12 @@ export default function MeetingAnalysis() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-5 md:px-8 md:py-8">
         {/* Tab: Préparation */}
         {activeTab === 'prep' && (
-        <div className="grid grid-cols-[280px_1fr] gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
           {/* Sidebar */}
-          <div className="sticky top-28 self-start space-y-4">
+          <div className="self-start space-y-4 lg:sticky lg:top-28">
             <KnowyCard className="p-6">
               <div className="text-center mb-4">
                 <div className={`text-5xl font-black mb-2 ${confidenceScore >= 60 ? 'text-sage' : 'text-amber'}`}>
@@ -825,268 +783,216 @@ export default function MeetingAnalysis() {
               </KnowyCard>
             </div>
 
-            {/* GROUPE 3 — DEAL */}
-            <div >
+            {/* GROUPE 3 — ALERTES & QUESTIONS */}
+            <div>
               <div className="flex items-center gap-2 mb-4">
-                <h2 className="text-2xl font-black">Deal</h2>
+                <h2 className="text-2xl font-black">Stratégie</h2>
               </div>
 
-              {/* Section F — MEDDPICC */}
-              <KnowyCard className="p-6 mb-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold text-muted-foreground">MEDDPICC</h3>
-                  <KnowyBadge variant="amber">3/8 qualifiés</KnowyBadge>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-muted-foreground">Progression</span>
-                    <span className="text-xs font-mono font-bold text-amber-600">37%</span>
+              {/* Section F — Alertes relationnelles */}
+              {atRiskParticipants.length > 0 && (
+                <KnowyCard className="p-6 mb-4 border-l-4 border-l-amber-500">
+                  <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
+                    <AlertTriangle className="size-4 text-amber-600" />
+                    <span className="text-amber-600">ALERTES RELATIONNELLES</span>
+                  </h3>
+                  <div className="space-y-3">
+                    {atRiskParticipants.map(p => {
+                      const fp = fullProfiles[p.id];
+                      const ctx = p.relationContext;
+                      return (
+                        <div key={p.id} className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                          <div className="flex items-start gap-3">
+                            <div className="size-9 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                              {p.name.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-sm text-amber-900">{p.name}</p>
+                              <p className="text-xs text-amber-700 mt-1">
+                                {fp?.score_phase === 'decline' && '📉 Relation en déclin. '}
+                                {ctx && ctx.lastContactDays > (ctx.avgFrequencyDays || 30) * 1.5 &&
+                                  `⏰ Dernier contact il y a ${ctx.lastContactDays}j (habituel : ${ctx.avgFrequencyDays}j). `}
+                              </p>
+                              {fp?.executive_summary && (
+                                <p className="text-xs text-amber-800 italic mt-1.5 border-t border-amber-200 pt-1.5">
+                                  \"{fp.executive_summary}\"
+                                </p>
+                              )}
+                            </div>
+                            <KnowyBadge variant="amber" size="sm">
+                              {fp?.engagement_score ?? ctx?.engagementScore ?? '?'}/100
+                            </KnowyBadge>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-amber-600" style={{ width: '37%' }} />
+                </KnowyCard>
+              )}
+
+              {/* Section G — Questions d'ouverture JTBD */}
+              {openingQuestions.length > 0 && (
+                <KnowyCard className="p-6 mb-4 border-l-4 border-l-primary">
+                  <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
+                    <Target className="size-4 text-primary" />
+                    <span className="text-muted-foreground">QUESTIONS D'OUVERTURE · JTBD</span>
+                  </h3>
+                  <div className="space-y-4">
+                    {openingQuestions.map(({ participant, question }) => {
+                      const fp = fullProfiles[participant.id];
+                      return (
+                        <div key={participant.id} className="flex gap-4">
+                          <div className="size-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
+                            {participant.name.charAt(0)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-muted-foreground mb-1">
+                              Pour {participant.name}
+                              {fp?.interaction_modes_data?.[0] && (
+                                <span className="ml-2 text-primary">· {fp.interaction_modes_data[0]}</span>
+                              )}
+                            </p>
+                            <p className="text-sm font-medium italic">❓ \"{question}\"</p>
+                            {fp?.jtbd_data?.functional_job?.pitch_angle && (
+                              <p className="text-xs text-muted-foreground mt-1">💡 {fp.jtbd_data.functional_job.pitch_angle}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    → Priorités cette réunion : <span className="font-semibold">M</span> (Metrics), <span className="font-semibold">D</span> (Decision Process), <span className="font-semibold">P</span> (Paper Process)
-                  </p>
-                </div>
+                </KnowyCard>
+              )}
 
-                <div className="grid grid-cols-4 gap-3 mb-4">
-                  {meddpicc.map((item, i) => (
-                    <div
-                      key={i}
-                      className={`p-4 rounded-xl border-2 ${
-                        item.status === 'complete' ? 'bg-sage/10 border-sage' :
-                        item.status === 'partial' ? 'bg-amber/10 border-amber' :
-                        item.status === 'risk' ? 'bg-coral/10 border-coral' :
-                        'bg-muted/50 border-muted'
-                      }`}
-                    >
-                      <p className="text-3xl font-black mb-1 text-primary">{item.letter}</p>
-                      <p className="text-[10px] font-bold mb-2 text-muted-foreground">{item.label}</p>
-                      <p className="text-xs">{item.detail}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="p-3 bg-amber/10 rounded-lg border border-amber/20">
-                  <p className="text-xs text-muted-foreground">
-                    ⚠️ 5 cases non qualifiées — priorité de cette réunion
-                  </p>
-                </div>
-              </KnowyCard>
-
-              {/* Section G — Concurrence */}
+              {/* Section H — Adapter sa communication */}
               <KnowyCard className="p-6 mb-4">
-                <h3 className="text-sm font-bold mb-4 text-muted-foreground">CONCURRENCE & STATU QUO</h3>
-
-                {!competition.qualified && (
-                  <div className="p-3 bg-amber/10 rounded-lg border border-amber/20 mb-4">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="size-4 text-amber" />
-                      <span className="text-xs font-bold text-amber">Concurrence non qualifiée</span>
-                    </div>
+                <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
+                  <Sparkles className="size-4 text-primary" />
+                  <span className="text-muted-foreground">ADAPTER SA COMMUNICATION · MODE COGNITIF</span>
+                </h3>
+                {commAdaptations.length > 0 ? (
+                  <div className="space-y-4">
+                    {commAdaptations.map(({ participant, mode, modes, tip, fp }) => (
+                      <div key={participant.id} className="p-4 bg-muted/30 rounded-xl border border-border">
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className="size-9 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                            {participant.name.charAt(0)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="font-bold text-sm">{participant.name}</span>
+                              {mode && mode !== 'unavailable' && (
+                                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                                  {mode === 's1_dominant' ? 'S1 · Décide vite' : mode === 's2_dominant' ? 'S2 · Analyse d\'abord' : 'Contextuel'}
+                                </span>
+                              )}
+                              {(modes ?? []).slice(0, 2).map((m: string) => (
+                                <span key={m} className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">{m}</span>
+                              ))}
+                            </div>
+                            <p className="text-xs text-foreground">→ {tip}</p>
+                          </div>
+                        </div>
+                        {(() => {
+                          const sig = getKeySignal(participant.id);
+                          return sig ? (
+                            <div className="text-xs text-muted-foreground bg-background rounded-lg px-3 py-2 border border-border">
+                              <span className="font-semibold text-primary">Signal : </span>{sig.text}
+                            </div>
+                          ) : null;
+                        })()}
+                        {fp?.theory_of_mind_data?.likely_skepticism && (
+                          <div className="mt-2 text-xs text-muted-foreground bg-amber-50 rounded-lg px-3 py-2 border border-amber-100">
+                            <span className="font-semibold text-amber-700">⚠️ Zone de scepticisme : </span>
+                            {fp.theory_of_mind_data.likely_skepticism}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Sparkles className="size-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">Enrichissez les contacts pour obtenir des recommandations personnalisées.</p>
                   </div>
                 )}
-
-                <div className="space-y-2 mb-4">
-                  {competition.competitors.map((comp, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                      <span className="text-sm font-bold">{comp.name}</span>
-                      <div className="flex items-center gap-2">
-                        <KnowyBadge variant={comp.status === 'confirmé' ? 'coral' : 'amber'} size="sm">
-                          {comp.status}
-                        </KnowyBadge>
-                        <span className="text-[10px] text-muted-foreground">{comp.source}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="p-4 bg-primary/5 rounded-xl">
-                  <p className="text-xs font-bold mb-2 text-primary">Questions à poser</p>
-                  <ul className="space-y-1">
-                    {competition.questionsToAsk.map((q, i) => (
-                      <li key={i} className="text-sm text-muted-foreground">• {q}</li>
-                    ))}
-                  </ul>
-                </div>
               </KnowyCard>
 
-              {/* Section H — Critères de Sélection */}
-              <KnowyCard className="p-6 mb-4">
-                <h3 className="text-sm font-bold mb-4 text-muted-foreground">CRITÈRES DE SÉLECTION</h3>
-
-                <div className="space-y-3">
-                  {selectionCriteria.map((item) => (
-                    <div key={item.rank}>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono text-muted-foreground">#{item.rank}</span>
-                          <span className="text-sm font-bold">{item.criterion}</span>
+              {/* Section I — JTBD complets */}
+              {participants.some(p => fullProfiles[p.id]?.jtbd_data) && (
+                <KnowyCard className="p-6">
+                  <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
+                    <CircleDot className="size-4 text-primary" />
+                    <span className="text-muted-foreground">JOBS-TO-BE-DONE · PAR PARTICIPANT</span>
+                  </h3>
+                  <div className="space-y-5">
+                    {participants.filter(p => fullProfiles[p.id]?.jtbd_data).map(p => {
+                      const jtbd = fullProfiles[p.id].jtbd_data;
+                      return (
+                        <div key={p.id}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="size-7 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">{p.name.charAt(0)}</div>
+                            <span className="font-semibold text-sm">{p.name}</span>
+                            <span className="text-xs text-muted-foreground">— {p.role || 'Rôle inconnu'}</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-9">
+                            {[
+                              { key: 'functional_job', label: '⚙️ Fonctionnel', color: 'bg-blue-50 border-blue-100' },
+                              { key: 'social_job', label: '👥 Social', color: 'bg-violet-50 border-violet-100' },
+                              { key: 'emotional_job', label: '💭 Émotionnel', color: 'bg-teal-50 border-teal-100' },
+                            ].map(({ key, label, color }) => jtbd[key] ? (
+                              <div key={key} className={`p-3 rounded-xl border ${color}`}>
+                                <p className="text-[10px] font-bold text-muted-foreground mb-1">{label}</p>
+                                <p className="text-xs leading-relaxed">{jtbd[key].text}</p>
+                                {jtbd[key].pitch_angle && (
+                                  <p className="text-[10px] text-primary italic mt-1.5 border-t border-current/10 pt-1.5">💡 {jtbd[key].pitch_angle}</p>
+                                )}
+                              </div>
+                            ) : null)}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono font-bold text-primary">{item.probability}%</span>
-                        </div>
-                      </div>
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-primary" style={{ width: `${item.probability}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </KnowyCard>
-
-              {/* Section I — Coût de l'Inaction */}
-              <KnowyCard className="p-6">
-                <h3 className="text-sm font-bold mb-4 text-muted-foreground">COÛT DE L'INACTION</h3>
-
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">Fournisseur actuel</p>
-                    <p className="text-sm font-bold">{inactionCost.currentProvider}</p>
+                      );
+                    })}
                   </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">Coût inaction</p>
-                    <p className={`text-sm font-bold ${
-                      inactionCost.inactionLevel === 'élevé' ? 'text-coral' :
-                      inactionCost.inactionLevel === 'moyen' ? 'text-amber' : 'text-sage'
-                    }`}>
-                      {inactionCost.inactionLevel}
-                    </p>
-                  </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">Fenêtre</p>
-                    <p className={`text-sm font-bold ${
-                      inactionCost.window === 'se ferme' ? 'text-coral' :
-                      inactionCost.window === 'ouverte' ? 'text-sage' : 'text-amber'
-                    }`}>
-                      {inactionCost.window}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-primary/5 rounded-lg mb-3">
-                  <p className="text-sm italic leading-relaxed">{inactionCost.insight}</p>
-                </div>
-              </KnowyCard>
+                </KnowyCard>
+              )}
             </div>
 
             {/* GROUPE 4 — ACTION */}
-            <div >
+            <div>
               <div className="flex items-center gap-2 mb-4">
                 <h2 className="text-2xl font-black">Action</h2>
               </div>
-
-              {/* Section J — Recommandations */}
-              <KnowyCard className="p-6 mb-4">
-                <h3 className="text-sm font-bold mb-4 text-muted-foreground">RECOMMANDATIONS MEETING</h3>
-
-                <div className="space-y-4">
-                  {recommendations.map((rec) => (
-                    <div key={rec.num} className="flex gap-4">
-                      <div className="flex-shrink-0">
-                        <div className="size-8 bg-sage/20 rounded-full flex items-center justify-center">
-                          <span className="font-black text-sage">{rec.num}</span>
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-xs text-muted-foreground mb-1">{rec.phase}</p>
-                        <p className="font-bold mb-1">{rec.action}</p>
-                        <p className="text-sm text-muted-foreground">→ {rec.rationale}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </KnowyCard>
-
-              {/* Section K — Objections */}
-              <KnowyCard className="p-6 mb-4 border-l-4 border-l-sage">
-                <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
-                  <Shield className="size-5 text-sage" />
-                  <span className="text-sage">OBJECTIONS PROBABLES</span>
-                </h3>
-
-                <div className="space-y-4">
-                  {objections.map((obj, i) => (
-                    <div key={i} className="p-4 bg-sage/10 rounded-xl border border-sage/20">
-                      <div className="flex items-start justify-between mb-3">
-                        <p className="text-sm font-bold italic flex-1">"{obj.objection}"</p>
-                        <div className="flex items-center gap-2">
-                          <KnowyBadge variant="sage" size="sm">{obj.type}</KnowyBadge>
-                          <span className="text-xs font-mono font-bold text-sage">{obj.probability}%</span>
-                        </div>
-                      </div>
-                      <div className="p-3 bg-card rounded-lg mb-2">
-                        <p className="text-xs font-bold mb-1 text-sage">Réponse préparée:</p>
-                        <p className="text-sm italic">{obj.response}</p>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">Source: {obj.source}</p>
-                    </div>
-                  ))}
-                </div>
-              </KnowyCard>
-
-              {/* Section L — Risques */}
-              <KnowyCard className="p-6 mb-4">
-                <h3 className="text-sm font-bold mb-4 text-muted-foreground">RISQUES IDENTIFIÉS</h3>
-
-                <div className="space-y-3">
-                  {risks.map((risk, i) => (
-                    <div
-                      key={i}
-                      className="p-4 rounded-xl border-l-4"
-                      style={{
-                        backgroundColor: risk.level === 'high' ? '#FEF2F2' :
-                                         risk.level === 'medium' ? '#FFFBEB' : '#ECFDF5',
-                        borderLeftColor: risk.level === 'high' ? '#DC2626' :
-                                          risk.level === 'medium' ? '#D97706' : '#059669'
-                      }}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="font-bold">{risk.risk}</p>
-                        <KnowyBadge variant={
-                          risk.level === 'high' ? 'coral' :
-                          risk.level === 'medium' ? 'amber' : 'sage'
-                        } size="sm">
-                          {risk.level === 'high' ? 'Élevé' : risk.level === 'medium' ? 'Moyen' : 'Faible'}
-                        </KnowyBadge>
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-2">{risk.description}</p>
-                      <p className="text-xs text-muted-foreground mb-2">
-                        <strong>Conséquence:</strong> {risk.consequence}
-                      </p>
-                      <p className="text-xs text-sage">
-                        <strong>Mitigation:</strong> {risk.mitigation}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </KnowyCard>
-
-              {/* Section M — Next Steps CRM */}
               <KnowyCard className="p-6">
-                <h3 className="text-sm font-bold mb-4 text-muted-foreground">NEXT STEPS CRM</h3>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {nextSteps.map((step, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
-                      <input type="checkbox" className="mt-1" />
-                      <div className="flex-1">
-                        <p className="text-sm font-bold mb-1">
-                          {step.task}
-                          {step.priority === 1 && (
-                            <KnowyBadge variant="coral" size="sm" className="ml-2">P1</KnowyBadge>
-                          )}
-                        </p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <KnowyBadge variant="blue" size="sm">{step.timing}</KnowyBadge>
-                          <span>· {step.assignee}</span>
+                <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
+                  <CheckCircle2 className="size-4 text-primary" />
+                  <span className="text-muted-foreground">PROCHAINES ÉTAPES</span>
+                </h3>
+                <div className="space-y-3">
+                  {participants.length > 0 ? participants.map((p, i) => {
+                    const fp = fullProfiles[p.id];
+                    const q = fp?.jtbd_data?.qualify_question;
+                    return (
+                      <div key={p.id} className="flex items-start gap-3 p-3 bg-muted/30 rounded-xl border border-border">
+                        <div className="size-5 rounded border-2 border-primary/40 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">
+                            {q ? `Poser à ${p.name} : \"${q}\"` : `Suivre la relation avec ${p.name}`}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {fp?.score_phase === 'decline' ? '⚠️ Priorité haute — relation en déclin' :
+                             fp?.score_phase === 'growth' ? '✓ Relation en croissance — maintenir le rythme' :
+                             'Relation stable — consolider'}
+                          </p>
                         </div>
+                        <KnowyBadge variant={i === 0 ? 'violet' : 'muted'} size="sm">P{i + 1}</KnowyBadge>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  }) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Aucun participant enrichi pour cette réunion.
+                    </p>
+                  )}
                 </div>
               </KnowyCard>
             </div>
@@ -1102,7 +1008,7 @@ export default function MeetingAnalysis() {
               <h2 className="text-2xl font-black mb-6">POINTS CLÉS</h2>
 
               {/* En un coup d'œil */}
-              <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-3">
                 <div className="p-4 bg-muted/20 rounded-xl">
                   <p className="text-sm text-muted-foreground mb-1">Durée réelle</p>
                   <p className="text-2xl font-bold">1h12</p>
