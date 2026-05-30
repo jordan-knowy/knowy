@@ -137,10 +137,10 @@ async function callGemini(prompt: string): Promise<any> {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': 'https://knowy.ai',
-      'X-Title': 'Knowy — Email Analysis',
+      'X-Title': 'Knowy Email Analysis',
     },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
+      model: 'google/gemini-2.5-flash-lite',
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
       temperature: 0.2,
@@ -172,6 +172,9 @@ Deno.serve(async (req) => {
 
   const auth = req.headers.get('Authorization');
   if (!auth) return jsonResponse({ error: 'Missing authorization header' }, 401);
+
+  // Filet de sécurité global — capture toute exception non gérée
+  try {
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
@@ -322,8 +325,12 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
 
   if (saveErr) {
     console.error('Save error:', saveErr.message);
-    // On renvoie quand même le résultat même si la sauvegarde échoue
   }
 
   return jsonResponse({ success: true, analysis: result });
+
+  } catch (e: any) {
+    console.error('Uncaught error:', e?.message ?? String(e), e?.stack ?? '');
+    return jsonResponse({ error: `Erreur interne : ${e?.message ?? String(e)}`, code: 'INTERNAL_ERROR' }, 500);
+  }
 });

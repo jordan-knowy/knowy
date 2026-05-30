@@ -412,7 +412,10 @@ export default function ContactDetail() {
           } else if (body?.code === 'TOKEN_MISSING') {
             realMsg = 'Token Google expiré. Relancez une sync Gmail dans Paramètres → Connexions.';
           } else if (body?.code === 'AI_FAILED') {
-            realMsg = 'Analyse IA échouée. Vérifiez que OPENROUTER_API_KEY est configurée dans les secrets Supabase.';
+            // Affiche le vrai message d'erreur de la fonction pour diagnostiquer
+            realMsg = body?.error ?? 'Analyse IA échouée — voir détails dans les logs Supabase.';
+          } else if (body?.code === 'INTERNAL_ERROR') {
+            realMsg = body?.error ?? 'Erreur interne dans la fonction.';
           }
         } catch { /* ignore parse error */ }
         setAnalyzeError(realMsg ?? (error as any)?.message ?? 'Erreur inconnue');
