@@ -89,7 +89,7 @@ function isOutbound(headers: Array<{ name: string; value: string }>, labelIds: s
 
 // ── Fetch all message IDs for a contact (paginated) ────────────────────────
 async function listMessageIds(
-  contactEmail: string,
+  contactEmails: string | string[],
   token: string,
   afterEpoch: number,
   maxMessages: number,
@@ -97,7 +97,10 @@ async function listMessageIds(
   const results: Array<{ id: string; threadId: string }> = [];
   let pageToken: string | undefined;
 
-  const q = encodeURIComponent(`(from:${contactEmail} OR to:${contactEmail}) after:${afterEpoch}`);
+  // Supporte plusieurs emails (email principal + alias secondaires d'un contact fusionné)
+  const emails = Array.isArray(contactEmails) ? contactEmails : [contactEmails];
+  const clause = emails.map(e => `from:${e} OR to:${e}`).join(' OR ');
+  const q = encodeURIComponent(`(${clause}) after:${afterEpoch}`);
 
   do {
     const url = `/users/me/messages?q=${q}&maxResults=100${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
@@ -143,10 +146,12 @@ async function processContact(
   supabase: any,
   afterEpoch: number,
   maxMessages: number,
+  secondaryEmails: string[] = [],
 ): Promise<{ messages: number; threads: number }> {
 
-  // 1. Get all message IDs (paginated)
-  const msgList = await listMessageIds(contactEmail, token, afterEpoch, maxMessages);
+  // 1. Get all message IDs (paginated) — inclut l'email principal + les alias
+  const allEmails = [contactEmail, ...secondaryEmails.filter(Boolean)];
+  const msgList = await listMessageIds(allEmails, token, afterEpoch, maxMessages);
   if (msgList.length === 0) return { messages: 0, threads: 0 };
 
   // 2. Fetch metadata in parallel batches of 10
@@ -333,20 +338,22 @@ Deno.serve(async (req) => {
   const afterEpoch = Math.floor((Date.now() - lookbackDays * 86400000) / 1000);
 
   // Resolve which contacts to ingest
-  let targetContacts: Array<{ id: string; email: string }> = [];
+  let targetContacts: Array<{ id: string; email: string; secondary_emails: string[] }> = [];
 
   if (contactEmails?.length > 0) {
     const { data } = await supabase
       .from('contacts')
-      .select('id, email')
+      .select('id, email, secondary_emails')
       .eq('organization_id', organizationId)
+      .is('merged_into_contact_id', null)
       .in('email', contactEmails);
     targetContacts = (data ?? []).filter((c: any) => c.email);
   } else {
     const { data } = await supabase
       .from('contacts')
-      .select('id, email')
+      .select('id, email, secondary_emails')
       .eq('organization_id', organizationId)
+      .is('merged_into_contact_id', null)
       .not('email', 'is', null)
       .limit(50); // cap per call
     targetContacts = (data ?? []).filter((c: any) => c.email);
@@ -372,6 +379,7 @@ Deno.serve(async (req) => {
         supabase,
         afterEpoch,
         maxMessagesPerContact,
+        contact.secondary_emails ?? [],
       );
       totalMessages += result.messages;
       totalThreads += result.threads;

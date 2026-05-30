@@ -24,6 +24,8 @@ export async function listContacts(): Promise<Contact[]> {
       .from('contacts')
       .select('id, full_name, email, role_title, linkedin_url, avatar_url, companies(name)')
       .eq('organization_id', organizationId)
+      // Exclure les contacts fusionnés dans un autre
+      .is('merged_into_contact_id', null)
       .order('updated_at', { ascending: false });
 
     if (!error && data?.length) {
@@ -32,6 +34,107 @@ export async function listContacts(): Promise<Contact[]> {
   }
 
   return contacts;
+}
+
+// ── Fusion de contacts (homonymes / multi-emails) ────────────────────────────
+
+/** Tokens normalisés d'un nom : minuscule, sans accents, mots de >1 lettre */
+function nameTokens(name: string): string[] {
+  return (name || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // retire accents
+    .toLowerCase()
+    .replace(/[._-]/g, ' ')              // sépare aussi les usernames type mia.perrotin.pro
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/).filter(t => t.length > 1);
+}
+
+// Mots à ignorer dans le matching (usernames d'email)
+const NAME_STOPWORDS = new Set(['pro', 'perso', 'contact', 'pro1', 'me', 'gmail']);
+
+/** Deux noms désignent probablement la même personne si le plus petit jeu de
+ *  tokens (hors stopwords) est inclus dans l'autre, avec ≥2 tokens en commun. */
+function sameName(a: string, b: string): boolean {
+  const ta = nameTokens(a).filter(t => !NAME_STOPWORDS.has(t));
+  const tb = nameTokens(b).filter(t => !NAME_STOPWORDS.has(t));
+  if (ta.length < 2 || tb.length < 2) return false;
+  const setA = new Set(ta), setB = new Set(tb);
+  const common = [...setA].filter(t => setB.has(t));
+  const smaller = Math.min(setA.size, setB.size);
+  return common.length >= 2 && common.length === smaller;
+}
+
+export interface MergeCandidate {
+  id: string;
+  name: string;
+  email: string | null;
+  enrichmentStatus: string;
+  emailCount: number;
+  meetingCount: number;
+}
+
+/** Trouve les contacts au nom identique mais email différent (doublons probables) */
+export async function findMergeCandidates(contactId: string): Promise<MergeCandidate[]> {
+  const organizationId = await getActiveOrganizationId();
+  if (!supabase || !organizationId) return [];
+
+  const { data: target } = await supabase
+    .from('contacts')
+    .select('id, full_name, email')
+    .eq('id', contactId)
+    .maybeSingle();
+  if (!target?.full_name) return [];
+
+  // Charge tous les contacts non-fusionnés de l'org
+  const { data: all } = await supabase
+    .from('contacts')
+    .select('id, full_name, email, enrichment_status')
+    .eq('organization_id', organizationId)
+    .is('merged_into_contact_id', null)
+    .neq('id', contactId);
+
+  const matches = (all ?? []).filter((c: any) =>
+    c.full_name &&
+    sameName(c.full_name, target.full_name) &&
+    (c.email ?? '').toLowerCase() !== (target.email ?? '').toLowerCase()
+  );
+  if (matches.length === 0) return [];
+
+  // Compte emails + réunions pour chaque candidat
+  const results: MergeCandidate[] = [];
+  for (const c of matches) {
+    const [{ count: emailCount }, { count: meetingCount }] = await Promise.all([
+      supabase.from('communication_messages').select('id', { count: 'exact', head: true }).eq('contact_id', c.id),
+      supabase.from('meeting_participants').select('id', { count: 'exact', head: true }).eq('contact_id', c.id),
+    ]);
+    results.push({
+      id: c.id,
+      name: c.full_name,
+      email: c.email,
+      enrichmentStatus: c.enrichment_status,
+      emailCount: emailCount ?? 0,
+      meetingCount: meetingCount ?? 0,
+    });
+  }
+  return results;
+}
+
+/** Fusionne le contact secondaire dans le primaire (re-pointe échanges + réunions) */
+export async function mergeContacts(primaryId: string, secondaryId: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.rpc('merge_contacts', {
+    primary_id: primaryId,
+    secondary_id: secondaryId,
+  });
+  if (error) { console.error('merge_contacts error:', error.message); return false; }
+  return true;
+}
+
+/** Annule une fusion */
+export async function unmergeContact(secondaryId: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.rpc('unmerge_contact', { secondary_id: secondaryId });
+  if (error) { console.error('unmerge_contact error:', error.message); return false; }
+  return true;
 }
 
 export async function getContact(contactId: string): Promise<Contact | null> {

@@ -5,11 +5,12 @@ import {
   ArrowLeft, Mail, Calendar, ExternalLink, RefreshCw,
   TrendingUp, Minus, TrendingDown, Sparkles, Clock,
   Brain, Target, Zap, Users, AlertTriangle, CheckCircle,
-  MessageSquare, Building2, Globe,
+  MessageSquare, Building2, Globe, Loader2,
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from '../../lib/supabase';
 import { getActiveOrganizationId } from '../../lib/api/org';
+import { findMergeCandidates, mergeContacts, type MergeCandidate } from '../../lib/api/contacts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ContactRow {
@@ -252,6 +253,8 @@ export default function ContactDetail() {
   const [enriching, setEnriching] = useState(false);
   const [enrichError, setEnrichError] = useState<string | null>(null);
   const [orgId, setOrgId] = useState<string | null>(null);
+  const [mergeCandidates, setMergeCandidates] = useState<MergeCandidate[]>([]);
+  const [merging, setMerging] = useState(false);
 
   // ── Load all data ────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -348,6 +351,9 @@ export default function ContactDetail() {
     if (fullContact.enrichment_status === 'pending' || fullContact.enrichment_status === 'failed') {
       triggerEnrichment(id, oid);
     }
+
+    // Recherche les homonymes (doublons potentiels) en arrière-plan
+    findMergeCandidates(id).then(c => setMergeCandidates(c)).catch(() => {});
     } catch (e) {
       console.error('ContactDetail load error:', e);
       setLoading(false);
@@ -355,6 +361,23 @@ export default function ContactDetail() {
   }, [id, orgId]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // ── Fusion d'un homonyme dans ce contact ─────────────────────────────────────
+  const handleMerge = async (secondaryId: string) => {
+    if (!id || merging) return;
+    setMerging(true);
+    try {
+      const ok = await mergeContacts(id, secondaryId);
+      if (ok) {
+        setMergeCandidates(prev => prev.filter(c => c.id !== secondaryId));
+        await loadData();
+        // Ré-enrichit avec les données fusionnées
+        if (orgId) triggerEnrichment(id, orgId, true);
+      }
+    } finally {
+      setMerging(false);
+    }
+  };
 
   // ── Enrichment trigger ───────────────────────────────────────────────────────
   const triggerEnrichment = async (contactId: string, oid: string, force = false) => {
@@ -569,6 +592,52 @@ export default function ContactDetail() {
             </button>
           </div>
         </motion.div>
+
+        {/* ══ SUGGESTION DE FUSION (homonymes) ══════════════════════════════ */}
+        {mergeCandidates.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border p-4 mb-4"
+            style={{ background: 'rgba(110,80,200,0.06)', borderColor: 'rgba(110,80,200,0.25)' }}
+          >
+            <div className="flex items-start gap-3">
+              <Users className="size-5 text-primary flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground mb-1">
+                  Même personne, autre adresse ?
+                </p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  {mergeCandidates.length === 1 ? 'Un contact porte' : `${mergeCandidates.length} contacts portent`} le même nom avec un email différent.
+                  Fusionner regroupe tous les échanges et réunions sur une seule fiche.
+                </p>
+                <div className="space-y-2">
+                  {mergeCandidates.map(c => (
+                    <div key={c.id} className="flex items-center gap-3 bg-card rounded-xl border border-border px-3 py-2">
+                      <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
+                        {initials(c.name)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{c.email || c.name}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {c.emailCount} email{c.emailCount > 1 ? 's' : ''} · {c.meetingCount} réunion{c.meetingCount > 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleMerge(c.id)}
+                        disabled={merging}
+                        className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                        style={{ background: '#6E50C8' }}
+                      >
+                        {merging ? <Loader2 className="size-3 animate-spin" /> : null}
+                        Fusionner
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* ══ BRIEF EXPRESS ═════════════════════════════════════════════════ */}
         {briefExpress && !enriching && (

@@ -410,6 +410,7 @@ export default function Contacts() {
           cognitive_profiles(engagement_score)
         `)
         .eq('organization_id', orgId)
+        .is('merged_into_contact_id', null)
         .order('updated_at', { ascending: false });
 
       // Load participants from meeting_participants (external people from synced meetings)
