@@ -376,7 +376,7 @@ export default function Relations() {
               >
                 <KnowyCard
                   hover
-                  onClick={() => navigate(`/relation/${contact.id}`)}
+                  onClick={() => navigate(`/contact/${contact.id}`)}
                   className="p-4 cursor-pointer"
                 >
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
@@ -459,10 +459,10 @@ export default function Relations() {
                         icon={<ArrowRight className="size-4" />}
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/relation/${contact.id}`);
+                          navigate(`/contact/${contact.id}`);
                         }}
                       >
-                        Voir profil
+                        Voir la fiche
                       </KnowyButton>
                     </div>
                   </div>

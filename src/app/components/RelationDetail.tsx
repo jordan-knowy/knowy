@@ -453,7 +453,16 @@ export default function RelationDetail() {
             <ArrowLeft className="size-4" />
             <span>Retour aux contacts</span>
           </button>
-          <div className="flex items-center gap-3" />
+          <div className="flex items-center gap-3">
+            <KnowyButton
+              variant="primary"
+              size="md"
+              icon={<Sparkles className="size-4" />}
+              onClick={() => id && navigate(`/contact/${id}`)}
+            >
+              Voir la fiche enrichie
+            </KnowyButton>
+          </div>
         </motion.div>
 
         {/* BLOC 1 — Identity & Current Status */}

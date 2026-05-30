@@ -670,7 +670,7 @@ export default function MeetingAnalysis() {
                             className="w-full mt-1"
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(`/relation/${p.id}`);
+                              navigate(`/contact/${p.id}`);
                             }}
                           >
                             Voir profil complet →
@@ -1396,7 +1396,7 @@ export default function MeetingAnalysis() {
                       <KnowyButton
                         variant="ghost"
                         size="sm"
-                        onClick={() => navigate(`/relation/${p.id}`)}
+                        onClick={() => navigate(`/contact/${p.id}`)}
                       >
                         Voir profil →
                       </KnowyButton>
