@@ -90,11 +90,11 @@ export default function MeetingAnalysis() {
       setLoading(true);
 
       // Load meeting
-      const mtg = await getMeeting(id);
+      const mtg = await getMeeting(id!);
       if (mounted && mtg) setRealMeeting(mtg);
 
       // Load participants with cognitive profiles
-      const parts = await getMeetingParticipants(id);
+      const parts = await getMeetingParticipants(id!);
       if (mounted && parts.length > 0) {
         // Load relationship snapshots for each participant
         const snapshots: Record<string, any> = {};
@@ -191,7 +191,7 @@ export default function MeetingAnalysis() {
         const { data: psum } = await supabase
           .from('meeting_post_summaries')
           .select('*')
-          .eq('meeting_id', id)
+          .eq('meeting_id', id!)
           .maybeSingle();
         if (mounted) setPostSummary(psum ?? null);
       }
@@ -349,7 +349,7 @@ export default function MeetingAnalysis() {
                 size="sm"
                 icon={<ArrowLeft className="size-4" />}
                 onClick={() => navigate('/meetings')}
-              />
+              >&nbsp;</KnowyButton>
               <div>
                 <div className="flex items-center gap-3 mb-1">
                   <h1 className="text-2xl font-black">{meeting.title}</h1>
@@ -397,7 +397,7 @@ export default function MeetingAnalysis() {
                   </p>
                 </div>
               )}
-              <KnowyButton variant="secondary" size="sm" icon={<Share2 className="size-4" />} />
+              <KnowyButton variant="secondary" size="sm" icon={<Share2 className="size-4" />}>&nbsp;</KnowyButton>
             </div>
           </div>
         </div>
@@ -1036,331 +1036,247 @@ export default function MeetingAnalysis() {
         {/* Tab: Résumé (Past meetings only) */}
         {activeTab === 'summary' && isPast && (
           <div className="space-y-6">
-            {/* BLOC 1 — POINTS CLÉS */}
+
+            {/* BLOC 1 — Compte-rendu IA */}
             <KnowyCard className="p-6 border-l-4 border-l-primary">
-              <h2 className="text-2xl font-black mb-6">POINTS CLÉS</h2>
-
-              {/* En un coup d'œil */}
-              <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-3">
-                <div className="p-4 bg-muted/20 rounded-xl">
-                  <p className="text-sm text-muted-foreground mb-1">Durée réelle</p>
-                  <p className="text-2xl font-bold">1h12</p>
-                  <p className="text-xs text-muted-foreground">vs 1h30 prévue</p>
-                </div>
-                <div className="p-4 bg-muted/20 rounded-xl">
-                  <p className="text-sm text-muted-foreground mb-1">Décisions prises</p>
-                  <p className="text-2xl font-bold text-success">3</p>
-                </div>
-                <div className="p-4 bg-muted/20 rounded-xl">
-                  <p className="text-sm text-muted-foreground mb-1">Actions assignées</p>
-                  <p className="text-2xl font-bold text-primary">5</p>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-black">COMPTE-RENDU</h2>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Calendar className="size-3" />
+                  {meeting.date}
+                  {durationMin && <span>· {durationMin}min</span>}
+                  {participants.length > 0 && <span>· {participants.length} participant{participants.length > 1 ? 's' : ''}</span>}
                 </div>
               </div>
 
-              {/* Décisions */}
-              <div className="mb-6">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <CheckCircle2 className="size-5 text-success" />
-                  Décisions
-                </h3>
-                <div className="grid grid-cols-1 gap-2">
-                  <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
-                    <p className="font-medium">Pilote 30j validé - démarrage 15 juin</p>
-                  </div>
-                  <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
-                    <p className="font-medium">Budget 150K€ confirmé</p>
-                  </div>
-                  <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
-                    <p className="font-medium">Timeline Q2 maintenue</p>
+              {postSummary ? (
+                <>
+                  {/* Résumé texte */}
+                  {postSummary.summary_text && (
+                    <div className="p-4 bg-primary/5 rounded-xl mb-6">
+                      <p className="text-base leading-relaxed italic">{postSummary.summary_text}</p>
+                    </div>
+                  )}
+
+                  {/* Décisions */}
+                  {(postSummary.key_decisions ?? []).length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <CheckCircle2 className="size-5 text-success" />
+                        Décisions ({postSummary.key_decisions.length})
+                      </h3>
+                      <div className="space-y-2">
+                        {postSummary.key_decisions.map((d: any, i: number) => (
+                          <div key={i} className="p-3 bg-success/10 border border-success/20 rounded-lg">
+                            <p className="font-medium text-sm">{typeof d === 'string' ? d : d.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  {(postSummary.action_items ?? []).length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <Target className="size-5 text-primary" />
+                        Actions ({postSummary.action_items.length})
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {postSummary.action_items.map((a: any, i: number) => (
+                          <div key={i} className="flex items-start gap-3 p-3 bg-muted/20 rounded-lg">
+                            <div className="size-5 rounded-full border-2 border-muted flex-shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm">{typeof a === 'string' ? a : a.task}</p>
+                              {typeof a !== 'string' && (a.owner || a.due) && (
+                                <p className="text-xs text-muted-foreground">{a.owner}{a.due ? ` · ${a.due}` : ''}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tags */}
+                  {(postSummary.tags ?? []).length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {postSummary.tags.map((tag: any, i: number) => (
+                        <KnowyBadge key={i} variant={tag.variant ?? 'muted'}>{tag.label ?? tag}</KnowyBadge>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* État vide : pas encore de compte-rendu IA */
+                <div className="text-center py-10 bg-muted/20 rounded-xl">
+                  <Sparkles className="size-10 mx-auto mb-3 text-muted-foreground/40" />
+                  <p className="text-base font-semibold mb-2">Compte-rendu IA non disponible</p>
+                  <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
+                    Le compte-rendu est généré à partir des transcriptions et des profils des participants.
+                    Activez la synchronisation pour les prochaines réunions.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                    <button className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:bg-accent transition-colors">
+                      Activer la transcription
+                    </button>
+                    <button className="px-5 py-2.5 bg-muted/50 rounded-xl text-sm font-medium hover:bg-muted/70 transition-colors">
+                      Saisir manuellement
+                    </button>
                   </div>
                 </div>
+              )}
+            </KnowyCard>
+
+            {/* BLOC 2 — Profils des participants (vraies données) */}
+            {participants.length > 0 && (
+              <KnowyCard className="p-6 bg-gradient-to-br from-primary/5 to-accent/5 border-l-4 border-l-primary">
+                <div className="flex items-center gap-3 mb-6">
+                  <Sparkles className="size-6 text-primary" />
+                  <h2 className="text-2xl font-black">PROFILS DES PARTICIPANTS</h2>
+                </div>
+
+                <p className="text-sm text-muted-foreground mb-6">
+                  Synthèse des profils cognitifs et relationnels enrichis par Knowy.
+                </p>
+
+                <div className="space-y-4">
+                  {participants.map((p) => {
+                    const fp = fullProfiles[p.id];
+                    const signals = (fp?.behavioral_analysis_data ?? p.behavioralSignals ?? []).slice(0, 3);
+                    const jtbd = fp?.jtbd_data;
+                    const insightCount = [
+                      fp?.executive_summary,
+                      jtbd?.functional_job?.text,
+                      jtbd?.social_job?.text,
+                      jtbd?.emotional_job?.text,
+                      ...(fp?.behavioral_analysis_data ?? []).slice(0, 3),
+                    ].filter(Boolean).length;
+
+                    return (
+                      <div key={p.id} className="p-4 bg-card rounded-xl border border-border">
+                        <div className="flex items-start gap-3 mb-4">
+                          <div className="size-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0">
+                            {p.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <h3 className="font-bold">{p.name}</h3>
+                              {insightCount > 0 && (
+                                <KnowyBadge variant="sage">+{insightCount} insights</KnowyBadge>
+                              )}
+                              {fp?.cognitive_mode && fp.cognitive_mode !== 'unavailable' && (
+                                <KnowyBadge variant="violet" size="sm">
+                                  {fp.cognitive_mode === 's1_dominant' ? 'S1 · Décide vite' : 'S2 · Analyse'}
+                                </KnowyBadge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground">{p.role}{p.company ? ` · ${p.company}` : ''}</p>
+                          </div>
+                          {p.relationContext && (
+                            <KnowyBadge variant={
+                              p.relationContext.engagementScore > 65 ? 'sage' :
+                              p.relationContext.engagementScore >= 35 ? 'amber' : 'coral'
+                            }>
+                              {p.relationContext.engagementScore}/100
+                            </KnowyBadge>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          {/* Résumé exécutif */}
+                          {fp?.executive_summary && (
+                            <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
+                              <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium mb-1">{fp.executive_summary}</p>
+                                <KnowyBadge variant="blue" size="sm">Synthèse IA</KnowyBadge>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* JTBD fonctionnel */}
+                          {jtbd?.functional_job?.text && (
+                            <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
+                              <Target className="size-4 text-primary mt-0.5 flex-shrink-0" />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium mb-1">{jtbd.functional_job.text}</p>
+                                <KnowyBadge variant="violet" size="sm">Objectif principal</KnowyBadge>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Signaux comportementaux */}
+                          {signals.length > 0 && (
+                            <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
+                              <CircleDot className="size-4 text-primary mt-0.5 flex-shrink-0" />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium mb-1">
+                                  {typeof signals[0] === 'string' ? signals[0] : signals[0]?.text}
+                                </p>
+                                <KnowyBadge variant="amber" size="sm">Signal comportemental</KnowyBadge>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <KnowyButton
+                          variant="ghost"
+                          size="sm"
+                          className="w-full mt-3"
+                          onClick={() => navigate(`/contact/${p.id}`)}
+                        >
+                          Voir profil complet →
+                        </KnowyButton>
+                      </div>
+                    );
+                  })}
+                </div>
+              </KnowyCard>
+            )}
+
+            {/* BLOC 3 — Suivi relationnel post-réunion */}
+            <KnowyCard className="p-6">
+              <div className="flex items-center gap-3 mb-5">
+                <CheckCircle2 className="size-5 text-primary" />
+                <h2 className="text-xl font-black">SUIVI POST-RÉUNION</h2>
               </div>
 
-              {/* Actions */}
-              <div className="mb-6">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <Target className="size-5 text-primary" />
-                  Actions (5)
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { owner: 'Sarah Chen', task: 'Envoyer contrat pilote', due: '30 mai', status: 'pending' },
-                    { owner: 'Marc Dubois', task: 'Valider specs techniques', due: '5 juin', status: 'pending' },
-                    { owner: 'Maxime Durant', task: 'Préparer ROI deck', due: '28 mai', status: 'done' },
-                    { owner: 'Sarah Chen', task: 'Organiser kickoff interne', due: '10 juin', status: 'pending' },
-                    { owner: 'Marc Dubois', task: 'Identifier beta testers', due: '15 juin', status: 'pending' }
-                  ].map((action, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 bg-muted/20 rounded-lg">
-                      <div className={`size-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                        action.status === 'done' ? 'bg-success border-success' : 'border-muted'
-                      }`}>
-                        {action.status === 'done' && <CheckCircle2 className="size-3 text-white" />}
+              <div className="space-y-3">
+                {participants.length > 0 ? participants.map((p) => {
+                  const fp = fullProfiles[p.id];
+                  const isAtRisk = fp?.score_phase === 'decline' ||
+                    (p.relationContext && p.relationContext.lastContactDays > (p.relationContext.avgFrequencyDays ?? 30) * 1.5);
+                  return (
+                    <div key={p.id} className="flex items-start gap-3 p-4 bg-muted/30 rounded-xl border border-border hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => navigate(`/contact/${p.id}`)}>
+                      <div className="size-9 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                        {p.name.charAt(0)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm">{action.task}</p>
-                        <p className="text-xs text-muted-foreground">{action.owner} · {action.due}</p>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <p className="font-semibold text-sm">{p.name}</p>
+                          {isAtRisk && <AlertTriangle className="size-3.5 text-amber-600 flex-shrink-0" />}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {isAtRisk
+                            ? `Relancer — dernier contact il y a ${p.relationContext?.lastContactDays ?? '?'}j`
+                            : fp?.score_phase === 'growth'
+                            ? 'Relation en croissance — maintenir le rythme'
+                            : 'Relation stable — consolider'
+                          }
+                        </p>
                       </div>
+                      <KnowyBadge variant={isAtRisk ? 'amber' : fp?.score_phase === 'growth' ? 'sage' : 'muted'} size="sm">
+                        {isAtRisk ? 'Relancer' : fp?.score_phase === 'growth' ? 'Croissance' : 'Stable'}
+                      </KnowyBadge>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Objections */}
-              <div className="mb-6">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <AlertCircle className="size-5 text-amber-600" />
-                  Objections soulevées
-                </h3>
-                <div className="space-y-2">
-                  <div className="p-3 border-l-4 border-success bg-success/5 rounded-r-lg">
-                    <div className="flex items-start gap-2 mb-1">
-                      <CheckCircle2 className="size-4 text-success mt-0.5 flex-shrink-0" />
-                      <p className="text-sm font-semibold flex-1">"On utilise déjà Gong, pourquoi changer ?"</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground ml-6">
-                      ✓ Traitée — Argumenté complémentarité
-                    </p>
-                  </div>
-                  <div className="p-3 border-l-4 border-amber-600 bg-amber-600/5 rounded-r-lg">
-                    <div className="flex items-start gap-2 mb-1">
-                      <CircleDot className="size-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm font-semibold flex-1">"Quel ROI chiffré exactement ?"</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground ml-6">
-                      → À suivre — Envoyer case studies sous NDA
-                    </p>
-                  </div>
-                  <div className="p-3 border-l-4 border-success bg-success/5 rounded-r-lg">
-                    <div className="flex items-start gap-2 mb-1">
-                      <CheckCircle2 className="size-4 text-success mt-0.5 flex-shrink-0" />
-                      <p className="text-sm font-semibold flex-1">"Vous pouvez vraiment déployer en 30j ?"</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground ml-6">
-                      ✓ Traitée — Timeline détaillée partagée
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Temps de parole */}
-              <div>
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <Users className="size-5 text-muted-foreground" />
-                  Répartition temps de parole
-                </h3>
-                <div className="space-y-3">
-                  {[
-                    { name: 'Sarah Chen', percentage: 42, minutes: 18, color: 'bg-primary' },
-                    { name: 'Marc Dubois', percentage: 31, minutes: 13, color: 'bg-accent' },
-                    { name: 'Maxime Durant', percentage: 27, minutes: 11, color: 'bg-success' }
-                  ].map((speaker, i) => (
-                    <div key={i}>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-sm">{speaker.name}</span>
-                        <span className="text-xs text-muted-foreground">{speaker.percentage}% ({speaker.minutes}min)</span>
-                      </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div className={`h-full ${speaker.color}`} style={{ width: `${speaker.percentage}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </KnowyCard>
-
-            {/* BLOC 2 — PROFILS ENRICHIS (THE MAGIC MOMENT) */}
-            <KnowyCard className="p-6 bg-gradient-to-br from-primary/5 to-accent/5 border-l-4 border-l-primary">
-              <div className="flex items-center gap-3 mb-6">
-                <Sparkles className="size-6 text-primary" />
-                <h2 className="text-2xl font-black">PROFILS ENRICHIS PAR CETTE RÉUNION</h2>
-              </div>
-
-              <p className="text-sm text-muted-foreground mb-6">
-                Knowy a capturé et enrichi automatiquement les profils relationnels pendant la réunion.
-              </p>
-
-              <div className="space-y-4">
-                {/* Sarah Chen */}
-                <div className="p-4 bg-card rounded-xl border border-border">
-                  <div className="flex items-start gap-3 mb-4">
-                    <div className="size-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0">
-                      SC
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-bold">Sarah Chen</h3>
-                        <KnowyBadge variant="sage">+7 insights</KnowyBadge>
-                      </div>
-                      <p className="text-sm text-muted-foreground">VP of Partnerships · Contentsquare</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
-                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium mb-1">Budget confirmé: 150K€</p>
-                        <KnowyBadge variant="blue" size="sm">Deal</KnowyBadge>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
-                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium mb-1">Cherche quick win avant Q2 pour prouver sa valeur</p>
-                        <KnowyBadge variant="violet" size="sm">Motivation</KnowyBadge>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
-                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium mb-1">Utilise déjà Gong pour coaching calls</p>
-                        <KnowyBadge variant="amber" size="sm">Contexte</KnowyBadge>
-                      </div>
-                    </div>
-                  </div>
-
-                  <KnowyButton
-                    variant="ghost"
-                    size="sm"
-                    className="w-full mt-3"
-                    onClick={() => navigate('/relation/1')}
-                  >
-                    Voir profil complet →
-                  </KnowyButton>
-                </div>
-
-                {/* Marc Dubois */}
-                <div className="p-4 bg-card rounded-xl border border-border">
-                  <div className="flex items-start gap-3 mb-4">
-                    <div className="size-12 bg-gradient-to-br from-accent to-primary rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0">
-                      MD
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-bold">Marc Dubois</h3>
-                        <KnowyBadge variant="sage">+5 insights</KnowyBadge>
-                      </div>
-                      <p className="text-sm text-muted-foreground">Head of Product Strategy · Contentsquare</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
-                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium mb-1">Besoin de ROI chiffré et KPIs précis</p>
-                        <KnowyBadge variant="violet" size="sm">Critère décision</KnowyBadge>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
-                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium mb-1">Profil analytique, data-driven (background Finance)</p>
-                        <KnowyBadge variant="blue" size="sm">Comportement</KnowyBadge>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
-                      <Sparkles className="size-4 text-primary mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium mb-1">Responsable validation specs techniques</p>
-                        <KnowyBadge variant="amber" size="sm">Rôle</KnowyBadge>
-                      </div>
-                    </div>
-                  </div>
-
-                  <KnowyButton
-                    variant="ghost"
-                    size="sm"
-                    className="w-full mt-3"
-                    onClick={() => navigate('/relation/2')}
-                  >
-                    Voir profil complet →
-                  </KnowyButton>
-                </div>
-              </div>
-            </KnowyCard>
-
-            {/* BLOC 3 — SYNCHRONISATION CRM */}
-            <KnowyCard className="p-6 border-l-4 border-l-muted">
-              <div className="flex items-center gap-3 mb-6">
-                <Database className="size-6 text-muted-foreground" />
-                <h2 className="text-2xl font-black">SYNCHRONISATION CRM</h2>
-              </div>
-
-              <p className="text-sm text-muted-foreground mb-6">
-                Les informations suivantes seront synchronisées automatiquement dans HubSpot.
-              </p>
-
-              {/* Deal Update */}
-              <div className="mb-4 p-4 bg-muted/20 rounded-xl border border-border">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Target className="size-5 text-primary" />
-                    <h3 className="font-semibold">Deal: Contentsquare - Q1 Strategic Review</h3>
-                  </div>
-                  <KnowyBadge variant="blue">HubSpot</KnowyBadge>
-                </div>
-
-                <div className="space-y-2 text-sm mb-4">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Stage:</span>
-                    <span className="font-medium">Négociation → Verbal commitment</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Montant:</span>
-                    <span className="font-medium">150 000 €</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Date de clôture:</span>
-                    <span className="font-medium">15 juin 2026</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Next step:</span>
-                    <span className="font-medium">Envoyer contrat pilote</span>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <KnowyButton variant="primary" size="sm" className="flex-1">
-                    <CheckCircle2 className="size-4" />
-                    Valider et synchroniser
-                  </KnowyButton>
-                  <KnowyButton variant="ghost" size="sm">
-                    Ignorer
-                  </KnowyButton>
-                </div>
-              </div>
-
-              {/* Tasks Created */}
-              <div className="p-4 bg-muted/20 rounded-xl border border-border">
-                <div className="flex items-center gap-2 mb-3">
-                  <CheckCircle2 className="size-5 text-success" />
-                  <h3 className="font-semibold">5 tâches créées</h3>
-                </div>
-
-                <div className="space-y-2 mb-4">
-                  {[
-                    { task: 'Envoyer contrat pilote', owner: 'Sarah Chen', due: '30 mai' },
-                    { task: 'Valider specs techniques', owner: 'Marc Dubois', due: '5 juin' },
-                    { task: 'Préparer ROI deck', owner: 'Maxime Durant', due: '28 mai' }
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm p-2 bg-card rounded-lg">
-                      <span>{item.task}</span>
-                      <span className="text-xs text-muted-foreground">{item.owner} · {item.due}</span>
-                    </div>
-                  ))}
-                  <p className="text-xs text-muted-foreground text-center pt-2">+ 2 autres tâches</p>
-                </div>
-
-                <div className="flex gap-2">
-                  <KnowyButton variant="primary" size="sm" className="flex-1">
-                    <CheckCircle2 className="size-4" />
-                    Valider et synchroniser
-                  </KnowyButton>
-                  <KnowyButton variant="ghost" size="sm">
-                    Modifier
-                  </KnowyButton>
-                </div>
+                  );
+                }) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Aucun participant enrichi pour cette réunion.
+                  </p>
+                )}
               </div>
             </KnowyCard>
           </div>

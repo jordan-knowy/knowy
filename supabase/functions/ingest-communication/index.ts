@@ -252,10 +252,13 @@ async function processContact(
   const chunkSize = 100;
   for (let i = 0; i < msgPayloads.length; i += chunkSize) {
     const chunk = msgPayloads.slice(i, i + chunkSize);
-    const { data: rows } = await supabase
+    const { data: rows, error: upsertErr } = await supabase
       .from('communication_messages')
       .upsert(chunk, { onConflict: 'organization_id,provider,external_message_id' })
       .select('id');
+    if (upsertErr) {
+      console.error('upsert error:', upsertErr.message, upsertErr.details);
+    }
     inserted += (rows ?? []).length;
   }
 

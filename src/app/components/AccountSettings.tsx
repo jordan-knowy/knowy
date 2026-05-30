@@ -29,6 +29,9 @@ import {
   RefreshCw,
   Download,
   AlertCircle,
+  Link,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 // ── Official logos (inline SVG) ────────────────────────────────────────
@@ -131,8 +134,12 @@ export default function AccountSettings() {
 
   // Gmail sync
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ messages: number; threads: number; contacts: number } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ messages: number; threads: number; contacts: number; contactStats?: Array<{ email: string; messages: number; threads: number }> } | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+
+  // LinkedIn URL
+  const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [linkedinSaved, setLinkedinSaved] = useState(false);
 
   const connectedProviders = getConnectedIdentityProviders(user);
 
@@ -223,6 +230,7 @@ export default function AccountSettings() {
         messages: data?.stats?.messages ?? 0,
         threads:  data?.stats?.threads  ?? 0,
         contacts: data?.stats?.contacts ?? 0,
+        contactStats: data?.contactStats ?? [],
       });
     } catch (e: any) {
       setSyncError(e?.message ?? 'Erreur inconnue');
@@ -249,11 +257,11 @@ export default function AccountSettings() {
       const { data: { user: u } } = await supabase.auth.getUser();
       if (!u || !mounted) return;
 
-      // Try to load sync prefs — graceful fallback if migration 202605290002 not yet applied
+      // Load sync prefs + LinkedIn URL
       try {
         const { data: profileRow, error: profileErr } = await supabase
           .from('profiles')
-          .select('sync_calendar, sync_email, sync_enrichment')
+          .select('sync_calendar, sync_email, sync_enrichment, linkedin_profile_data')
           .eq('id', u.id)
           .maybeSingle();
         if (!profileErr && mounted && profileRow) {
@@ -262,6 +270,8 @@ export default function AccountSettings() {
             email:      (profileRow as any).sync_email      ?? true,
             enrichment: (profileRow as any).sync_enrichment ?? false,
           });
+          const liData = (profileRow as any).linkedin_profile_data;
+          if (liData?.url && mounted) setLinkedinUrl(liData.url);
         }
       } catch { /* columns not yet present — use defaults */ }
 
@@ -346,6 +356,19 @@ export default function AccountSettings() {
         }).catch(() => null)
       ));
     }
+  }
+
+  async function handleSaveLinkedin() {
+    if (!supabase) return;
+    const { data: { user: u } } = await supabase.auth.getUser();
+    if (!u) return;
+    const url = linkedinUrl.trim();
+    await supabase.from('profiles').upsert(
+      { id: u.id, linkedin_profile_data: url ? { url } : null } as any,
+      { onConflict: 'id' }
+    );
+    setLinkedinSaved(true);
+    setTimeout(() => setLinkedinSaved(false), 2500);
   }
 
   async function handleLogout() {
@@ -488,6 +511,36 @@ export default function AccountSettings() {
                     : <><Save className="size-4" /> Sauvegarder</>}
                 </button>
               </div>
+
+              {/* LinkedIn URL */}
+              <div className="border-t border-border pt-6 mt-6">
+                <h3 className="text-base font-semibold mb-1 flex items-center gap-2">
+                  <LinkedInLogo />
+                  Profil LinkedIn
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Votre URL LinkedIn permet à Knowy d'enrichir votre réseau et de contextualiser vos échanges professionnels.
+                </p>
+                <div className="flex gap-3">
+                  <div className="flex-1 relative">
+                    <Link className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                    <input
+                      type="url"
+                      value={linkedinUrl}
+                      onChange={(e) => setLinkedinUrl(e.target.value)}
+                      placeholder="https://linkedin.com/in/votre-profil"
+                      className="w-full pl-10 pr-4 py-3 bg-input border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                    />
+                  </div>
+                  <button
+                    onClick={handleSaveLinkedin}
+                    disabled={!linkedinUrl}
+                    className="flex items-center gap-2 px-4 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl transition-colors text-sm font-medium disabled:opacity-40"
+                  >
+                    {linkedinSaved ? <><CheckCheck className="size-4" /> OK</> : <><Save className="size-4" /> Sauvegarder</>}
+                  </button>
+                </div>
+              </div>
             </div>
 
             {isSuperAdmin && (
@@ -553,27 +606,60 @@ export default function AccountSettings() {
                   <span>{syncError}</span>
                 </div>
               )}
+              {/* Résultat sync Gmail avec détail par contact */}
               {syncResult && (
-                <div className="mb-4 flex items-center gap-3 text-sm bg-success/10 text-success border border-success/20 px-4 py-3 rounded-xl">
-                  <RefreshCw className="size-4 flex-shrink-0" />
-                  <span>
-                    Synchronisation terminée — <strong>{syncResult.messages}</strong> emails · <strong>{syncResult.threads}</strong> threads · <strong>{syncResult.contacts}</strong> contacts traités
-                  </span>
+                <div className="mb-4 rounded-xl border border-success/20 bg-success/10 overflow-hidden">
+                  <div className="flex items-center gap-3 text-sm text-success px-4 py-3">
+                    <RefreshCw className="size-4 flex-shrink-0" />
+                    <span>
+                      Synchronisation terminée — <strong>{syncResult.messages}</strong> emails · <strong>{syncResult.threads}</strong> threads · <strong>{syncResult.contacts}</strong> contacts traités
+                    </span>
+                  </div>
+                  {(syncResult.contactStats ?? []).length > 0 && (
+                    <div className="border-t border-success/20 px-4 py-3 space-y-1.5">
+                      <p className="text-xs font-semibold text-success/80 mb-2">Détail par contact</p>
+                      {syncResult.contactStats!.map((cs, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs text-success/70">
+                          <span className="truncate mr-2">{cs.email}</span>
+                          <span className="flex-shrink-0 font-mono">{cs.messages} emails · {cs.threads} threads</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {syncResult.messages === 0 && (
+                    <div className="border-t border-success/20 px-4 py-3">
+                      <p className="text-xs text-success/70">
+                        Aucun nouvel email détecté — tous les échanges sont déjà à jour.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
+
               <div className="space-y-3">
                 {AVAILABLE_CONNECTIONS.map((conn) => {
                   const connected = isConnected(conn.id);
                   const loading = pending === conn.id;
                   return (
-                    <div key={conn.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-4">
-                        <div className={`size-12 bg-card rounded-xl flex items-center justify-center border ${connected ? 'border-success/40' : 'border-border/50'}`}>
+                    <div key={conn.id} className="flex items-start justify-between p-4 bg-muted/30 rounded-xl hover:bg-muted/50 transition-colors gap-4">
+                      <div className="flex items-start gap-4 flex-1 min-w-0">
+                        <div className={`size-12 flex-shrink-0 bg-card rounded-xl flex items-center justify-center border ${connected ? 'border-success/40' : 'border-border/50'}`}>
                           {conn.logo}
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <p className="font-medium">{conn.name}</p>
                           <p className="text-sm text-muted-foreground">{conn.subtitle}</p>
+                          {/* Note LinkedIn */}
+                          {conn.id === 'linkedin' && connected && (
+                            <p className="text-xs text-primary mt-1">
+                              Profils enrichis via données publiques · messages non accessibles via API
+                            </p>
+                          )}
+                          {conn.id === 'linkedin' && !connected && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Identification de profils · enrichissement réseau
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
@@ -582,18 +668,18 @@ export default function AccountSettings() {
                             <div className="hidden sm:flex items-center gap-1.5 text-success text-sm">
                               <CheckCircle2 className="size-4" /><span>Connecté</span>
                             </div>
-                            {/* Bouton sync Gmail — visible uniquement pour Google */}
+                            {/* Bouton sync Gmail */}
                             {conn.id === 'google' && (
                               <button
                                 onClick={handleGmailSync}
                                 disabled={syncing}
-                                title="Synchroniser les 1 000 derniers emails"
+                                title="Synchroniser jusqu'à 1 000 emails par contact"
                                 className="flex items-center gap-1.5 px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl text-sm transition-colors font-medium disabled:opacity-50"
                               >
                                 {syncing
                                   ? <span className="size-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                                   : <Download className="size-3.5" />}
-                                {syncing ? 'Sync…' : '1 000 emails'}
+                                {syncing ? 'Sync…' : 'Sync emails'}
                               </button>
                             )}
                             <button
@@ -621,6 +707,37 @@ export default function AccountSettings() {
                   );
                 })}
               </div>
+
+              {/* Bloc LinkedIn — enrichissement via données publiques */}
+              {isConnected('linkedin') && (
+                <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-start gap-3">
+                    <LinkedInLogo />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm mb-1">LinkedIn connecté</p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Knowy utilise vos données LinkedIn pour enrichir les profils de votre réseau à partir des informations publiques.
+                        L'accès aux messages LinkedIn n'est pas disponible via l'API officielle.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs mb-3">
+                        {[
+                          { icon: '✓', text: 'Identification des profils' },
+                          { icon: '✓', text: 'Postes & formations' },
+                          { icon: '✓', text: 'Données publiques' },
+                          { icon: '✗', text: 'Messages privés' },
+                          { icon: '✗', text: 'Connexions réseau' },
+                          { icon: '✗', text: 'InMail' },
+                        ].map((item, i) => (
+                          <div key={i} className={`flex items-center gap-1.5 ${item.icon === '✓' ? 'text-success' : 'text-muted-foreground'}`}>
+                            <span className="font-bold">{item.icon}</span>
+                            <span>{item.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* CRM — V2 */}
