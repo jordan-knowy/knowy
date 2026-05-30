@@ -272,29 +272,7 @@ export default function Relations() {
               </p>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="text-left sm:text-right">
-                <div className="flex items-center gap-2 mb-1">
-                  <Database className="size-4 text-muted-foreground" />
-                  <p className="text-sm font-medium">Synchronisation CRM</p>
-                </div>
-                <p className="text-2xl font-black">
-                  <span className="text-success">{syncedCount}</span>
-                  <span className="text-muted-foreground"> / {totalCount}</span>
-                </p>
-              </div>
-
-              {unsyncedContacts.length > 0 && (
-                <KnowyButton
-                  variant="secondary"
-                  size="md"
-                  icon={<AlertCircle className="size-4" />}
-                  onClick={() => setShowUnsyncedPopup(true)}
-                >
-                  Voir non synchronisées ({unsyncedContacts.length})
-                </KnowyButton>
-              )}
-            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center" />
           </div>
         </motion.div>
 
@@ -514,15 +492,10 @@ export default function Relations() {
         )}
       </div>
 
-      {/* Popup Contacts Non Synchronisés */}
       <AnimatePresence>
-        {showUnsyncedPopup && (
+        {false && (
           <>
-            {/* Backdrop */}
-            <div
-              className="fixed inset-0 bg-black/50 z-50"
-              onClick={() => setShowUnsyncedPopup(false)}
-            />
+            <div />
 
             {/* Modal */}
             <motion.div

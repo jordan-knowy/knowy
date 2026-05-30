@@ -442,18 +442,6 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground">Contacts actifs</p>
           </KnowyCard>
 
-          <KnowyCard className="p-5">
-            <Database className="size-5 text-blue-600 mb-3" />
-            <p className="text-3xl font-black mb-1">
-              {impact ? (
-                <>
-                  <span className="text-success">{impact.crmSynced}</span>
-                  <span className="text-muted-foreground text-xl"> / {impact.crmTotal}</span>
-                </>
-              ) : '—'}
-            </p>
-            <p className="text-xs text-muted-foreground">CRM sync</p>
-          </KnowyCard>
         </motion.div>
 
         {/* Main 60/40 grid */}

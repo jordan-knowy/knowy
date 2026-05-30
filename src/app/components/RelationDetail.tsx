@@ -4,7 +4,6 @@ import { useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft,
   Sparkles,
-  Database,
   TrendingUp,
   TrendingDown,
   Minus,
@@ -454,11 +453,7 @@ export default function RelationDetail() {
             <ArrowLeft className="size-4" />
             <span>Retour aux contacts</span>
           </button>
-          <div className="flex items-center gap-3">
-            <KnowyButton variant="primary" size="md" icon={<Database className="size-4" />}>
-              Synchroniser CRM
-            </KnowyButton>
-          </div>
+          <div className="flex items-center gap-3" />
         </motion.div>
 
         {/* BLOC 1 — Identity & Current Status */}
@@ -577,9 +572,6 @@ export default function RelationDetail() {
                     </KnowyBadge>
                     <KnowyBadge variant={contact.sources.linkedin ? 'sage' : 'muted'} size="sm">
                       LinkedIn {contact.sources.linkedin && '✓'}
-                    </KnowyBadge>
-                    <KnowyBadge variant={contact.sources.crm ? 'sage' : 'muted'} size="sm">
-                      CRM {contact.sources.crm && '✓'}
                     </KnowyBadge>
                   </div>
                 </div>
@@ -968,7 +960,7 @@ export default function RelationDetail() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <KnowyBadge variant="sage" size="lg">
+                      <KnowyBadge variant="sage" size="md">
                         Momentum {companyContext.momentum === 'favorable' ? 'favorable 🟢' : 'neutre ⚪'}
                       </KnowyBadge>
                       <div className="p-4 bg-success/5 border border-success/20 rounded-xl">
