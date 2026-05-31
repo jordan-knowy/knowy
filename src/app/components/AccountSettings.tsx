@@ -185,18 +185,33 @@ export default function AccountSettings() {
       if (!orgId) { setPending(null); return; }
 
       const provider = connId === 'outlook' ? 'microsoft' : connId;
-      await (supabase.from('connectors') as any).upsert({
-        organization_id: orgId,
-        user_id: user.id,
-        provider,
-        status: 'disconnected',
-        metadata: null,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'organization_id,user_id,provider' });
 
+      // update() si la ligne existe, insert() sinon — on vérifie le résultat avant de changer le state
+      const { error: updateErr, count } = await (supabase.from('connectors') as any)
+        .update({ status: 'disconnected', metadata: null, updated_at: new Date().toISOString() })
+        .eq('organization_id', orgId)
+        .eq('user_id', user.id)
+        .eq('provider', provider)
+        .select('id');
+
+      const rowUpdated = !updateErr && (count ?? 0) > 0;
+
+      if (!rowUpdated) {
+        // Aucune ligne à mettre à jour — on insère
+        const { error: insertErr } = await (supabase.from('connectors') as any).insert({
+          organization_id: orgId,
+          user_id: user.id,
+          provider,
+          status: 'disconnected',
+          updated_at: new Date().toISOString(),
+        });
+        if (insertErr) throw new Error(insertErr.message);
+      }
+
+      // State local mis à jour SEULEMENT si la DB a réussi
       setConnectorSyncStatus(prev => ({ ...prev, [provider]: 'disconnected' }));
     } catch (e: any) {
-      setConnectError(e?.message ?? 'Erreur lors de la déconnexion.');
+      setConnectError(e?.message ?? 'Erreur lors de la déconnexion. Réessayez.');
     } finally {
       setPending(null);
     }
