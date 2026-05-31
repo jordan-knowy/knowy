@@ -120,6 +120,9 @@ export default function Dashboard() {
   const [impact, setImpact] = useState<WeeklyImpact | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [totalContacts, setTotalContacts] = useState<number>(0);
+  const [totalEmails, setTotalEmails] = useState<number>(0);
+  const [displayedEmails, setDisplayedEmails] = useState<number>(0);
 
   async function handleCalendarSync() {
     if (!supabase || syncing) return;
@@ -179,6 +182,25 @@ export default function Dashboard() {
     .slice(0, 5)
     .map(mapDomainToDisplay);
 
+  // Animation compteur emails — monte de 0 → totalEmails en 1.2s
+  useEffect(() => {
+    if (totalEmails === 0) return;
+    const duration = 1200;
+    const steps = 40;
+    const increment = totalEmails / steps;
+    let current = 0;
+    const timer = setInterval(() => {
+      current += increment;
+      if (current >= totalEmails) {
+        setDisplayedEmails(totalEmails);
+        clearInterval(timer);
+      } else {
+        setDisplayedEmails(Math.floor(current));
+      }
+    }, duration / steps);
+    return () => clearInterval(timer);
+  }, [totalEmails]);
+
   // Weekly meetings count for KPIs
   const monday = new Date();
   const dow = monday.getDay();
@@ -222,6 +244,18 @@ export default function Dashboard() {
             link: e.entity_link ?? null,
           };
         }));
+      }
+
+      // Contacts total + emails synchronisés
+      const [{ count: contactCount }, { count: emailCount }] = await Promise.all([
+        supabase.from('contacts').select('*', { count: 'exact', head: true })
+          .eq('organization_id', orgId).is('merged_into_contact_id', null),
+        supabase.from('communication_messages').select('*', { count: 'exact', head: true })
+          .eq('organization_id', orgId),
+      ]);
+      if (mounted) {
+        setTotalContacts(contactCount ?? 0);
+        setTotalEmails(emailCount ?? 0);
       }
 
       // Weekly impact
@@ -438,8 +472,23 @@ export default function Dashboard() {
 
           <KnowyCard className="p-5">
             <Network className="size-5 text-success mb-3" />
-            <p className="text-3xl font-black mb-1">{impact?.activeContacts ?? '—'}</p>
-            <p className="text-xs text-muted-foreground">Contacts actifs</p>
+            <p className="text-3xl font-black mb-1">{totalContacts > 0 ? totalContacts : (impact?.activeContacts ?? '—')}</p>
+            <p className="text-xs text-muted-foreground">Contacts</p>
+          </KnowyCard>
+
+          <KnowyCard className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <Mail className="size-5 text-primary" />
+              {totalEmails > 0 && (
+                <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full animate-pulse">
+                  LIVE
+                </span>
+              )}
+            </div>
+            <p className="text-3xl font-black mb-1 tabular-nums">
+              {displayedEmails > 0 ? displayedEmails.toLocaleString('fr-FR') : '—'}
+            </p>
+            <p className="text-xs text-muted-foreground">Mails synchronisés</p>
           </KnowyCard>
 
         </motion.div>
