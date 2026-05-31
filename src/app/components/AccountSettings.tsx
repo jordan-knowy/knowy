@@ -164,7 +164,14 @@ export default function AccountSettings() {
       await linkIdentityProvider(PROVIDER_MAP[connId], '/account');
       // page redirects to OAuth — si on arrive ici c'est une erreur
     } catch (e: any) {
-      setConnectError(e?.message ?? 'Erreur de connexion.');
+      const msg: string = e?.message ?? '';
+      if (msg.toLowerCase().includes('manual linking') || msg.toLowerCase().includes('not allowed')) {
+        setConnectError('La liaison de comptes est temporairement désactivée. Rechargez la page et réessayez.');
+      } else if (msg.toLowerCase().includes('already linked')) {
+        setConnectError('Ce compte est déjà lié à votre profil.');
+      } else {
+        setConnectError(msg || 'Erreur de connexion. Réessayez.');
+      }
       setPending(null);
     }
   }
