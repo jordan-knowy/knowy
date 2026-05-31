@@ -102,7 +102,7 @@ export default function Notifications() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="absolute right-0 top-full mt-2 w-[420px] bg-card rounded-2xl border border-border shadow-2xl z-50 overflow-hidden"
+              className="fixed left-4 right-4 top-16 z-50 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[420px]"
             >
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
@@ -135,7 +135,7 @@ export default function Notifications() {
               </div>
 
               {/* List */}
-              <div className="max-h-[500px] overflow-y-auto">
+              <div className="max-h-[calc(100vh-8rem)] overflow-y-auto sm:max-h-[500px]">
                 {loading ? (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="size-6 text-primary animate-spin" />

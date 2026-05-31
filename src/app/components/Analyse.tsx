@@ -253,7 +253,7 @@ export default function Analyse() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-5 md:px-8 md:py-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -272,7 +272,7 @@ export default function Analyse() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.05 }}
-          className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8"
+          className="grid grid-cols-1 gap-4 mb-8 sm:grid-cols-2 md:grid-cols-4"
         >
           <div className="bg-card rounded-xl p-5 border border-border">
             <div className="flex items-center gap-3 mb-2">
@@ -322,7 +322,7 @@ export default function Analyse() {
             />
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Filter className="size-5 text-muted-foreground" />
             <div className="flex gap-2 flex-wrap">
               <button
@@ -489,7 +489,7 @@ export default function Analyse() {
             </div>
 
             {/* Meeting Header */}
-            <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-8 border border-primary/10">
+            <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-5 border border-primary/10 md:p-8">
               <div className="flex items-start justify-between mb-6">
                 <div className="flex items-center gap-4">
                   <div className="text-5xl">🎯</div>
@@ -528,7 +528,7 @@ export default function Analyse() {
             </div>
 
             {/* KPIs Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
               <div className="bg-card rounded-2xl p-6 border border-border">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="size-12 bg-success/10 rounded-xl flex items-center justify-center">
@@ -579,7 +579,7 @@ export default function Analyse() {
             </div>
 
             {/* Temps de parole */}
-            <div className="bg-card rounded-2xl p-8 border border-border">
+            <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
               <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
                 <BarChart3 className="size-6 text-primary" />
                 Répartition du temps de parole
@@ -612,7 +612,7 @@ export default function Analyse() {
             </div>
 
             {/* Insights IA */}
-            <div className="bg-card rounded-2xl p-8 border border-border">
+            <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
               <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
                 <Sparkles className="size-6 text-primary" />
                 Insights IA
@@ -666,7 +666,7 @@ export default function Analyse() {
             </div>
 
             {/* Topics */}
-            <div className="bg-card rounded-2xl p-8 border border-border">
+            <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
               <h3 className="text-xl font-semibold mb-6">Thèmes abordés</h3>
               <div className="space-y-4">
                 {analysisData.topics.map((topic, i) => (
@@ -694,7 +694,7 @@ export default function Analyse() {
             </div>
 
             {/* Next Steps */}
-            <div className="bg-card rounded-2xl p-8 border border-border">
+            <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
               <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
                 <Zap className="size-6 text-primary" />
                 Next Steps (détectés automatiquement)
@@ -738,7 +738,7 @@ export default function Analyse() {
             </div>
 
             {/* Recommendations */}
-            <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-8 border border-primary/10">
+            <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-5 border border-primary/10 md:p-8">
               <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
                 <Lightbulb className="size-6 text-primary" />
                 Recommandations IA
@@ -754,7 +754,7 @@ export default function Analyse() {
             </div>
 
             {/* Share CTA */}
-            <div className="bg-gradient-to-br from-primary to-accent rounded-2xl p-8 text-white">
+            <div className="bg-gradient-to-br from-primary to-accent rounded-2xl p-5 text-white md:p-8">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-2xl font-semibold mb-2">Partagez cette analyse avec vos participants</h3>

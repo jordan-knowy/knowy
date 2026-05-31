@@ -223,7 +223,7 @@ export default function CompanyDetail() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-[1200px] mx-auto px-8 py-8">
+      <div className="max-w-[1200px] mx-auto px-4 py-5 md:px-8 md:py-8">
         {/* Back Button */}
         <motion.button
           initial={{ opacity: 0, x: -20 }}
@@ -242,8 +242,8 @@ export default function CompanyDetail() {
           className="space-y-6"
         >
           {/* Company Overview Header */}
-          <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-6 border border-primary/10">
-            <div className="flex items-start justify-between mb-4">
+          <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-4 border border-primary/10 md:p-6">
+            <div className="flex flex-col gap-4 mb-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-start gap-4">
                 <span className="text-5xl">{company.logo}</span>
                 <div>
@@ -257,7 +257,7 @@ export default function CompanyDetail() {
                   </div>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-left sm:text-right">
                 <p className="text-3xl font-bold text-primary mb-1">{company.funding.valuation}</p>
                 <p className="text-sm text-muted-foreground">Valorisation</p>
               </div>
@@ -265,7 +265,7 @@ export default function CompanyDetail() {
           </div>
 
           {/* Engagement Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
             <div className="bg-card rounded-xl p-5 border border-border">
               <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="size-4 text-primary" />
@@ -317,7 +317,7 @@ export default function CompanyDetail() {
           </div>
 
           {/* Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
             <div className="bg-card rounded-xl p-5 border border-border">
               <div className="flex items-center gap-2 mb-2">
                 <Users className="size-4 text-muted-foreground" />

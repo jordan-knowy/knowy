@@ -126,7 +126,7 @@ export default function Organization() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-[1600px] mx-auto px-8 py-8">
+      <div className="max-w-[1600px] mx-auto px-4 py-5 md:px-8 md:py-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -134,8 +134,8 @@ export default function Organization() {
           transition={{ duration: 0.6 }}
           className="mb-8"
         >
-          <div className="flex items-start justify-between mb-6">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start gap-4">
               <div className="size-16 bg-gradient-to-br from-primary to-accent rounded-2xl flex items-center justify-center text-3xl">
                 🎯
               </div>
@@ -144,7 +144,7 @@ export default function Organization() {
                 <p className="text-muted-foreground">Cockpit relationnel organisationnel</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <button className="px-4 py-2 bg-muted hover:bg-muted/70 rounded-xl transition-colors flex items-center gap-2">
                 <Calendar className="size-4" />
                 <span>Calendrier global</span>
@@ -157,7 +157,7 @@ export default function Organization() {
           </div>
 
           {/* Key metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
             <div className="bg-card rounded-2xl p-6 border border-border">
               <div className="flex items-center justify-between mb-2">
                 <Users className="size-5 text-primary" />
@@ -198,7 +198,7 @@ export default function Organization() {
         >
           <h2 className="text-2xl font-semibold mb-4">Meeting Prioritization & Alerts</h2>
           {alerts.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-8 text-center">
+            <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-5 text-center md:p-8">
               <AlertTriangle className="mx-auto mb-3 size-7 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">Aucune alerte pour le moment — les alertes apparaîtront dès que Knowy détecte des risques relationnels sur vos réunions.</p>
             </div>
@@ -325,12 +325,12 @@ export default function Organization() {
           </h2>
 
           {insights.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-primary/20 bg-primary/5 p-8 text-center">
+            <div className="rounded-2xl border border-dashed border-primary/20 bg-primary/5 p-5 text-center md:p-8">
               <Sparkles className="mx-auto mb-3 size-7 text-primary/40" />
               <p className="text-sm text-muted-foreground">Les insights organisationnels apparaîtront dès que votre équipe aura connecté ses calendriers et réunions.</p>
             </div>
           ) : (
-            <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-8 border border-primary/10">
+            <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-5 border border-primary/10 md:p-8">
               <div className="space-y-4">
                 {insights.map((insight, i) => (
                   <motion.div
@@ -461,7 +461,7 @@ export default function Organization() {
           transition={{ duration: 0.6, delay: 0.6 }}
           className="mb-8"
         >
-          <div className="bg-card rounded-2xl p-8 border border-border">
+          <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
             <h2 className="text-2xl font-semibold mb-6">Inviter des membres de l'équipe</h2>
 
             <div className="flex gap-3 mb-6">
@@ -482,7 +482,7 @@ export default function Organization() {
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="grid grid-cols-1 gap-4 text-center sm:grid-cols-3">
               <div className="p-4 bg-muted/30 rounded-xl">
                 <p className="text-2xl font-semibold mb-1">3</p>
                 <p className="text-sm text-muted-foreground">Invitations en attente</p>

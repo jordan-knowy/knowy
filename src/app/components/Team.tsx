@@ -228,7 +228,7 @@ export default function Team() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-5 md:px-8 md:py-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -236,7 +236,7 @@ export default function Team() {
           transition={{ duration: 0.6 }}
           className="mb-8"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-4xl font-semibold mb-2">Team</h1>
               <p className="text-muted-foreground">
@@ -317,7 +317,7 @@ export default function Team() {
               return (
                 <>
                   {/* Compatibility Score */}
-                  <div className="bg-gradient-to-br from-success/5 to-primary/5 rounded-2xl p-8 border border-success/20 mb-6">
+                  <div className="bg-gradient-to-br from-success/5 to-primary/5 rounded-2xl p-5 border border-success/20 mb-6 md:p-8">
                     <div className="text-center mb-6">
                       <div className="inline-flex items-center justify-center size-24 bg-success/20 rounded-full mb-4">
                         <span className="text-4xl font-bold text-success">{analysis.compatibility}%</span>

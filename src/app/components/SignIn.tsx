@@ -154,7 +154,7 @@ export default function SignIn() {
       </div>
 
       {/* Right side — sign-in form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-background">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-6 md:p-8 bg-background">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -166,7 +166,7 @@ export default function SignIn() {
             <img src={logoKnowy} alt="Knowy" className="h-12" />
           </div>
 
-          <div className="bg-card rounded-3xl p-8 border border-border shadow-lg shadow-primary/5">
+          <div className="bg-card rounded-3xl p-5 border border-border shadow-lg shadow-primary/5 sm:p-8">
             <h2 className="text-3xl font-semibold mb-2">Bienvenue</h2>
             <p className="text-muted-foreground mb-8">
               Connectez-vous pour accéder à votre intelligence relationnelle.
@@ -226,7 +226,7 @@ export default function SignIn() {
                 <label className="text-sm font-medium" htmlFor="email">
                   Continuer avec email
                 </label>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <div className="relative flex-1">
                     <Mail className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                     <input

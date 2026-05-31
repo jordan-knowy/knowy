@@ -92,7 +92,7 @@ export default function Coaching() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-[1600px] mx-auto px-8 py-8">
+      <div className="max-w-[1600px] mx-auto px-4 py-5 md:px-8 md:py-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -105,7 +105,7 @@ export default function Coaching() {
         </motion.div>
 
         {/* Layout: Content 80% + Plugin Mockup 20% */}
-        <div className="grid grid-cols-[80%_20%] gap-6 mb-8">
+        <div className="grid grid-cols-1 gap-6 mb-8 xl:grid-cols-[80%_20%]">
           {/* LEFT - Content */}
           <div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
@@ -126,7 +126,7 @@ export default function Coaching() {
                 Téléchargez et installez le plugin pour activer le coaching IA pendant vos réunions Zoom, Google Meet et Microsoft Teams.
               </p>
 
-              <div className="flex gap-3 mb-6">
+              <div className="flex flex-col gap-3 mb-6 sm:flex-row">
                 <button
                   onClick={() => setSelectedOS('mac')}
                   className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 transition-all ${
@@ -307,7 +307,7 @@ export default function Coaching() {
           </div>
 
           {/* RIGHT - Plugin Mockup (20%) */}
-          <div className="sticky top-8 self-start">
+          <div className="self-start xl:sticky xl:top-8">
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -327,7 +327,7 @@ export default function Coaching() {
                 </div>
 
                 {/* Plugin Content */}
-                <div className="p-3 space-y-3 bg-gradient-to-b from-card to-muted/20" style={{ height: '600px' }}>
+                <div className="h-[420px] space-y-3 bg-gradient-to-b from-card to-muted/20 p-3 sm:h-[520px] xl:h-[600px]">
                   {/* Suggestion 1 - Équilibre parole */}
                   <div className="bg-amber-600/10 border border-amber-600/20 rounded-lg p-3">
                     <div className="flex items-start gap-2 mb-2">

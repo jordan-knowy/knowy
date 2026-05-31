@@ -45,7 +45,7 @@ export default function LandingPage() {
     <main className="min-h-screen bg-background text-foreground">
       <section className="relative overflow-hidden border-b border-border">
         <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-6 lg:px-10">
-          <header className="flex items-center justify-between gap-4">
+          <header className="flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={() => navigate('/')}
@@ -54,8 +54,8 @@ export default function LandingPage() {
               <img src={logoKnowy} alt="Knowy" className="h-10 w-auto" />
             </button>
 
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" onClick={goToApp}>
+            <div className="flex items-center gap-2">
+              <Button className="hidden sm:inline-flex" variant="ghost" onClick={goToApp}>
                 Se connecter
               </Button>
               <Button onClick={goToApp} icon={<ArrowRight className="size-4" />}>
@@ -71,11 +71,11 @@ export default function LandingPage() {
                 L'intelligence relationnelle avant la réunion
               </p>
 
-              <h1 className="text-5xl font-semibold leading-tight tracking-normal md:text-7xl">
+              <h1 className="text-4xl font-semibold leading-tight tracking-normal sm:text-5xl md:text-7xl">
                 Sachez qui vous avez en face.
               </h1>
 
-              <p className="mt-6 max-w-2xl text-xl leading-9 text-muted-foreground">
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground sm:text-xl sm:leading-9">
                 Knowy lit les signaux autorisés de vos échanges et prépare une fiche claire: comportement,
                 influence, risques, stratégie de conversation.
               </p>
@@ -102,7 +102,7 @@ export default function LandingPage() {
               <div className="rounded-lg border border-border bg-card p-3 shadow-xl">
                 <img src={relationPreview} alt="Capture Knowy montrant l'évolution relationnelle" className="aspect-[1.35] w-full rounded-md object-cover" />
               </div>
-              <div className="mt-4 grid grid-cols-3 gap-3">
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {[
                   ['84', 'Score relationnel'],
                   ['3/7', 'Couverture'],
@@ -121,7 +121,7 @@ export default function LandingPage() {
 
       <section className="mx-auto max-w-7xl px-6 py-16 lg:px-10">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-4xl font-semibold md:text-6xl">Pas un CRM. Une lecture de la pièce.</h2>
+          <h2 className="text-3xl font-semibold sm:text-4xl md:text-6xl">Pas un CRM. Une lecture de la pièce.</h2>
           <p className="mt-5 text-lg leading-8 text-muted-foreground">
             La donnée utile n'est pas seulement dans les champs. Elle est dans les silences, les objections,
             les habitudes de réponse et les relations entre les personnes.
@@ -147,7 +147,7 @@ export default function LandingPage() {
         <section key={shot.title} className={`border-t border-border ${index % 2 === 1 ? 'bg-muted/30' : 'bg-background'}`}>
           <div className="mx-auto grid max-w-7xl items-center gap-10 px-6 py-16 lg:grid-cols-2 lg:px-10">
             <div className={index % 2 === 1 ? 'lg:order-2' : ''}>
-              <h2 className="text-4xl font-semibold md:text-5xl">{shot.title}</h2>
+              <h2 className="text-3xl font-semibold sm:text-4xl md:text-5xl">{shot.title}</h2>
               <p className="mt-5 text-lg leading-8 text-muted-foreground">{shot.text}</p>
               <div className="mt-7 grid gap-3">
                 {[
@@ -173,7 +173,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-6 py-16 lg:px-10">
           <div className="grid gap-8 lg:grid-cols-[0.75fr_1.25fr]">
             <div>
-              <h2 className="text-4xl font-semibold">Un contexte IA, propre dès le départ.</h2>
+              <h2 className="text-3xl font-semibold sm:text-4xl">Un contexte IA, propre dès le départ.</h2>
               <p className="mt-4 text-muted-foreground">
                 Knowy structure votre profil, votre offre, votre site et vos connecteurs pour donner au moteur une base claire.
               </p>
@@ -198,7 +198,7 @@ export default function LandingPage() {
 
       <section className="border-t border-border bg-violet-night text-white">
         <div className="mx-auto max-w-4xl px-6 py-16 text-center lg:px-10">
-          <h2 className="text-4xl font-semibold md:text-6xl">Entrez préparé. Sortez aligné.</h2>
+          <h2 className="text-3xl font-semibold sm:text-4xl md:text-6xl">Entrez préparé. Sortez aligné.</h2>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-white/70">
             Créez votre profil, connectez vos sources, puis laissez Knowy construire votre mémoire relationnelle.
           </p>

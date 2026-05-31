@@ -183,7 +183,7 @@ export default function Subscription() {
 
   return (
     <div className="size-full bg-background overflow-auto">
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-5 sm:px-6 md:py-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -216,11 +216,11 @@ export default function Subscription() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
-            className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-3xl p-8 border border-primary/20 mb-8"
+            className="bg-gradient-to-br from-primary/10 to-accent/10 rounded-3xl p-5 border border-primary/20 mb-8 md:p-8"
           >
-            <div className="flex items-start justify-between flex-wrap gap-6">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-start gap-3 mb-4">
                   <div className="size-12 bg-primary/20 rounded-xl flex items-center justify-center">
                     <PlanIcon className={`size-6 ${planColor}`} />
                   </div>
@@ -232,7 +232,7 @@ export default function Subscription() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
+                <div className="grid grid-cols-1 gap-5 mb-6 sm:grid-cols-2 md:grid-cols-4 md:gap-6">
                   <div>
                     <p className="text-3xl font-semibold">
                       {usage.licenses_used}/{formatLimit(currentPlan.max_licenses)}
@@ -279,7 +279,7 @@ export default function Subscription() {
                 )}
               </div>
 
-              <div className="text-right flex-shrink-0">
+              <div className="text-left flex-shrink-0 lg:text-right">
                 {subscription.amount_per_period > 0 ? (
                   <>
                     <p className="text-4xl font-semibold mb-1">
@@ -310,7 +310,7 @@ export default function Subscription() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
-            className="bg-muted/30 rounded-3xl p-8 border border-border mb-8 text-center"
+            className="bg-muted/30 rounded-3xl p-5 border border-border mb-8 text-center md:p-8"
           >
             <Mail className="size-12 text-muted-foreground mx-auto mb-4" />
             <h2 className="text-xl font-semibold mb-2">Aucun abonnement actif</h2>

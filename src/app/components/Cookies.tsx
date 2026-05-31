@@ -2,7 +2,34 @@ import { useNavigate } from 'react-router';
 import { ArrowLeft } from 'lucide-react';
 
 export default function Cookies() {
-  const navigate = useNavigate();
+const navigate = useNavigate();
+  const cookieRows = [
+    {
+      type: 'Essentiel',
+      name: 'sb-auth-token',
+      purpose: "Session d'authentification Supabase",
+      duration: 'Session',
+    },
+    {
+      type: 'Essentiel',
+      name: 'knowy_session',
+      purpose: 'Maintien de la connexion',
+      duration: '7 jours',
+    },
+    {
+      type: 'Fonctionnel',
+      name: 'knowy_prefs',
+      purpose: 'Préférences utilisateur (thème, langue)',
+      duration: '1 an',
+    },
+    {
+      type: 'Analytique',
+      name: 'knowy_analytics',
+      purpose: "Mesure d'audience anonymisée",
+      duration: '13 mois',
+    },
+  ];
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="max-w-3xl mx-auto px-6 py-12">
@@ -29,7 +56,19 @@ export default function Cookies() {
 
           <section>
             <h2 className="text-xl font-semibold mb-3">Cookies utilisés par Knowy</h2>
-            <div className="overflow-x-auto">
+            <div className="space-y-3 sm:hidden">
+              {cookieRows.map((row) => (
+                <div key={row.name} className="rounded-xl border border-border bg-card p-4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="font-semibold">{row.type}</span>
+                    <span className="text-xs text-muted-foreground">{row.duration}</span>
+                  </div>
+                  <p className="mb-2 break-words font-mono text-xs text-primary">{row.name}</p>
+                  <p className="text-muted-foreground">{row.purpose}</p>
+                </div>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto sm:block">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-border">
@@ -40,30 +79,14 @@ export default function Cookies() {
                   </tr>
                 </thead>
                 <tbody className="text-muted-foreground">
-                  <tr className="border-b border-border/50">
-                    <td className="py-2 pr-4">Essentiel</td>
-                    <td className="py-2 pr-4 font-mono text-xs">sb-auth-token</td>
-                    <td className="py-2 pr-4">Session d'authentification Supabase</td>
-                    <td className="py-2">Session</td>
-                  </tr>
-                  <tr className="border-b border-border/50">
-                    <td className="py-2 pr-4">Essentiel</td>
-                    <td className="py-2 pr-4 font-mono text-xs">knowy_session</td>
-                    <td className="py-2 pr-4">Maintien de la connexion</td>
-                    <td className="py-2">7 jours</td>
-                  </tr>
-                  <tr className="border-b border-border/50">
-                    <td className="py-2 pr-4">Fonctionnel</td>
-                    <td className="py-2 pr-4 font-mono text-xs">knowy_prefs</td>
-                    <td className="py-2 pr-4">Préférences utilisateur (thème, langue)</td>
-                    <td className="py-2">1 an</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2 pr-4">Analytique</td>
-                    <td className="py-2 pr-4 font-mono text-xs">knowy_analytics</td>
-                    <td className="py-2 pr-4">Mesure d'audience anonymisée</td>
-                    <td className="py-2">13 mois</td>
-                  </tr>
+                  {cookieRows.map((row, index) => (
+                    <tr key={row.name} className={index < cookieRows.length - 1 ? 'border-b border-border/50' : ''}>
+                      <td className="py-2 pr-4">{row.type}</td>
+                      <td className="py-2 pr-4 font-mono text-xs">{row.name}</td>
+                      <td className="py-2 pr-4">{row.purpose}</td>
+                      <td className="py-2">{row.duration}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

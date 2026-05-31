@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Sparkles, Users, TrendingUp, AlertTriangle, Mail, Building2, ArrowRight, Zap } from 'lucide-react';
+import { Search, Sparkles, Users, TrendingUp, AlertTriangle, Mail, Building2, ArrowRight, Zap, Menu, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import Sidebar from './Sidebar';
 import Notifications from './Notifications';
@@ -20,6 +20,7 @@ export default function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   const searchSuggestions: SearchSuggestion[] = [
     {
@@ -81,16 +82,37 @@ export default function Layout({ children }: LayoutProps) {
   };
 
   return (
-    <div className="size-full flex">
-      <Sidebar />
-      <div className="flex-1 ml-[220px] size-full flex flex-col">
+    <div className="size-full flex overflow-x-hidden">
+      <div className="hidden md:block">
+        <Sidebar />
+      </div>
+      {isMobileNavOpen && (
+        <button
+          type="button"
+          aria-label="Fermer la navigation"
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setIsMobileNavOpen(false)}
+        />
+      )}
+      <div className={`fixed inset-y-0 left-0 z-50 w-[220px] transition-transform duration-200 md:hidden ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <Sidebar onNavigate={() => setIsMobileNavOpen(false)} />
+      </div>
+      <div className="flex-1 size-full min-w-0 flex flex-col md:ml-[220px]">
         {/* Sticky Search Bar */}
         <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-border">
-          <div className="max-w-7xl mx-auto px-8 py-4">
+          <div className="max-w-7xl mx-auto px-4 py-3 md:px-8 md:py-4">
             <div className="flex items-center gap-4">
+              <button
+                type="button"
+                aria-label={isMobileNavOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
+                className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-foreground md:hidden"
+                onClick={() => setIsMobileNavOpen((open) => !open)}
+              >
+                {isMobileNavOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+              </button>
               <div className="relative flex-1">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
-                <Sparkles className="absolute right-4 top-1/2 -translate-y-1/2 size-5 text-primary" />
+                <Sparkles className="absolute right-3 top-1/2 hidden size-5 -translate-y-1/2 text-primary sm:block" />
                 <input
                   type="text"
                   placeholder="Demandez n'importe quoi à Knowy..."
@@ -98,7 +120,7 @@ export default function Layout({ children }: LayoutProps) {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setIsSearchFocused(true)}
                   onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                  className="w-full pl-12 pr-12 py-3 bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/30 transition-all text-sm"
+                  className="w-full min-w-0 pl-12 pr-4 py-3 bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/30 transition-all text-sm sm:pr-12"
                 />
               </div>
               <Notifications />
@@ -106,8 +128,8 @@ export default function Layout({ children }: LayoutProps) {
 
             {/* Search Suggestions Dropdown */}
             {isSearchFocused && (
-              <div className="absolute top-full left-8 right-8 mt-2 bg-card border-2 border-primary/20 rounded-2xl shadow-2xl overflow-hidden">
-                <div className="bg-gradient-to-r from-primary/10 to-accent/10 px-4 py-3 border-b border-border flex items-center justify-between">
+              <div className="absolute top-full left-4 right-4 mt-2 bg-card border-2 border-primary/20 rounded-2xl shadow-2xl overflow-hidden md:left-8 md:right-8">
+                <div className="bg-gradient-to-r from-primary/10 to-accent/10 px-4 py-3 border-b border-border flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2">
                     <Sparkles className="size-4 text-primary" />
                     <p className="text-xs font-semibold text-primary">IA Knowy • Recherche intelligente</p>
@@ -160,7 +182,7 @@ export default function Layout({ children }: LayoutProps) {
                 {/* Quick Actions Footer */}
                 {searchQuery && getFilteredSuggestions().length > 0 && (
                   <div className="border-t border-border p-3 bg-muted/30">
-                    <div className="flex items-center justify-between text-xs">
+                    <div className="flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-muted-foreground flex items-center gap-1">
                         <Zap className="size-3" />
                         Appuyez sur Entrée pour rechercher
