@@ -5,7 +5,7 @@ import {
   Calendar, Sparkles, Plus, Download, X, AlertCircle,
   CheckCircle2, Loader2, Activity, Zap, Database,
   UserCheck, TrendingUp, Cake, Briefcase, ArrowUp,
-  Target, Network, Users, Star, RefreshCcw
+  Target, Network, Users, Star, RefreshCcw, Mail
 } from 'lucide-react';
 import KnowyCard from './knowy/KnowyCard';
 import KnowyButton from './knowy/KnowyButton';
