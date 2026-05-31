@@ -127,9 +127,11 @@ export default function AccountSettings() {
   // Sync settings — persistés dans profiles
   const [syncSettings, setSyncSettings] = useState({ calendar: true, email: true, enrichment: false });
 
-  // Connections — statut via user.identities, action via linkIdentityProvider
+  // Connections — identité Supabase (login) + statut sync (data)
   const [pending, setPending] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  // connectorSyncStatus : 'connected' | 'disconnected' | 'expired' | null (jamais chargé)
+  const [connectorSyncStatus, setConnectorSyncStatus] = useState<Record<string, string>>({});
 
   // Gmail sync
   const [syncing, setSyncing] = useState(false);
@@ -150,12 +152,8 @@ export default function AccountSettings() {
     linkedin: 'linkedin_oidc',
   };
 
-  function isConnected(connId: string) {
-    const p = PROVIDER_MAP[connId];
-    return connId === 'outlook'
-      ? connectedProviders.includes('microsoft') || connectedProviders.includes('azure' as any)
-      : connectedProviders.includes(p);
-  }
+  // Gardée pour compatibilité legacy — préférer isIdentityLinked + isSyncActive
+  function isConnected(connId: string) { return isIdentityLinked(connId); }
 
   async function handleConnect(connId: string) {
     setConnectError(null);
@@ -176,16 +174,48 @@ export default function AccountSettings() {
     }
   }
 
+  // Soft disconnect — révoque les tokens dans connectors, garde l'identité Supabase intacte.
+  // Les données (emails, profils) sont préservées. La sync s'arrête automatiquement (plus de token).
   async function handleDisconnect(connId: string) {
     if (!supabase || !user) return;
     setConnectError(null);
     setPending(connId);
-    const providerNames = connId === 'outlook' ? ['azure', 'microsoft'] : [PROVIDER_MAP[connId]];
-    const identity = (user.identities ?? []).find((i) => providerNames.includes(i.provider));
-    if (!identity) { setPending(null); return; }
-    const { error } = await (supabase.auth as any).unlinkIdentity(identity);
-    setPending(null);
-    if (error) setConnectError(error.message);
+    try {
+      const orgId = await getActiveOrganizationId();
+      if (!orgId) { setPending(null); return; }
+
+      const provider = connId === 'outlook' ? 'microsoft' : connId;
+      await (supabase.from('connectors') as any).upsert({
+        organization_id: orgId,
+        user_id: user.id,
+        provider,
+        status: 'disconnected',
+        metadata: null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'organization_id,user_id,provider' });
+
+      setConnectorSyncStatus(prev => ({ ...prev, [provider]: 'disconnected' }));
+    } catch (e: any) {
+      setConnectError(e?.message ?? 'Erreur lors de la déconnexion.');
+    } finally {
+      setPending(null);
+    }
+  }
+
+  // isSyncActive — le connector a des tokens valides (différent de "l'identité est liée")
+  function isSyncActive(connId: string): boolean {
+    const provider = connId === 'outlook' ? 'microsoft' : connId;
+    const status = connectorSyncStatus[provider];
+    // Si jamais chargé mais l'identité est liée, on considère actif par défaut
+    if (status === undefined) return isIdentityLinked(connId);
+    return status === 'connected';
+  }
+
+  function isIdentityLinked(connId: string): boolean {
+    const p = PROVIDER_MAP[connId];
+    return connId === 'outlook'
+      ? connectedProviders.includes('microsoft') || connectedProviders.includes('azure' as any)
+      : connectedProviders.includes(p);
   }
 
   async function handleGmailSync() {
@@ -281,6 +311,23 @@ export default function AccountSettings() {
           if (liData?.url && mounted) setLinkedinUrl(liData.url);
         }
       } catch { /* columns not yet present — use defaults */ }
+
+      // Charger les statuts sync depuis la table connectors
+      try {
+        const orgId = await getActiveOrganizationId();
+        if (orgId && mounted) {
+          const { data: connRows } = await supabase
+            .from('connectors')
+            .select('provider, status')
+            .eq('organization_id', orgId)
+            .eq('user_id', u.id);
+          if (connRows && mounted) {
+            const map: Record<string, string> = {};
+            (connRows as any[]).forEach(c => { map[c.provider] = c.status; });
+            setConnectorSyncStatus(map);
+          }
+        }
+      } catch { /* graceful */ }
 
       const { data: membership } = await supabase
         .from('memberships').select('role').eq('user_id', u.id).maybeSingle();
@@ -679,32 +726,36 @@ export default function AccountSettings() {
 
               <div className="space-y-3">
                 {AVAILABLE_CONNECTIONS.map((conn) => {
-                  const connected = isConnected(conn.id);
+                  const linked = isIdentityLinked(conn.id);
+                  const syncOn = isSyncActive(conn.id);
                   const loading = pending === conn.id;
                   return (
                     <div key={conn.id} className="flex items-start justify-between p-4 bg-muted/30 rounded-xl hover:bg-muted/50 transition-colors gap-4">
                       <div className="flex items-start gap-4 flex-1 min-w-0">
-                        <div className={`size-12 flex-shrink-0 bg-card rounded-xl flex items-center justify-center border ${connected ? 'border-success/40' : 'border-border/50'}`}>
+                        <div className={`size-12 flex-shrink-0 bg-card rounded-xl flex items-center justify-center border transition-colors ${
+                          syncOn ? 'border-success/40' : linked ? 'border-amber-400/40' : 'border-border/50'
+                        }`}>
                           {conn.logo}
                         </div>
                         <div className="min-w-0">
                           <p className="font-medium">{conn.name}</p>
                           <p className="text-sm text-muted-foreground">{conn.subtitle}</p>
-                          {/* Note LinkedIn */}
-                          {conn.id === 'linkedin' && connected && (
-                            <p className="text-xs text-primary mt-1">
-                              Profils enrichis via données publiques · messages non accessibles via API
+                          {/* Statut sync désactivée */}
+                          {linked && !syncOn && (
+                            <p className="text-xs text-amber-600 mt-1 font-medium">
+                              Compte lié · Sync désactivée — vos données sont conservées
                             </p>
                           )}
-                          {conn.id === 'linkedin' && !connected && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Identification de profils · enrichissement réseau
+                          {/* Note LinkedIn connecté */}
+                          {conn.id === 'linkedin' && syncOn && (
+                            <p className="text-xs text-primary mt-1">
+                              Profils enrichis via données publiques · messages non accessibles via API
                             </p>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
-                        {connected ? (
+                        {linked && syncOn && (
                           <>
                             <div className="hidden sm:flex items-center gap-1.5 text-success text-sm">
                               <CheckCircle2 className="size-4" /><span>Connecté</span>
@@ -733,7 +784,18 @@ export default function AccountSettings() {
                                 : 'Déconnecter'}
                             </button>
                           </>
-                        ) : (
+                        )}
+                        {linked && !syncOn && (
+                          <button
+                            onClick={() => handleConnect(conn.id)}
+                            disabled={loading}
+                            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm transition-colors font-medium disabled:opacity-50"
+                          >
+                            {loading && <span className="size-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                            {loading ? 'Connexion…' : 'Reconnecter la sync'}
+                          </button>
+                        )}
+                        {!linked && (
                           <button
                             onClick={() => handleConnect(conn.id)}
                             disabled={loading}
