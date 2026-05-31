@@ -273,32 +273,34 @@ Deno.serve(async (req) => {
     conversationContext += entry;
   }
 
-  // 6. Prompt cognitif / relationnel — Gemini 2.5 Flash
+  // 6. Prompt cognitif / relationnel + extraction de nom depuis signatures
   const prompt = `Tu es un expert en intelligence relationnelle et en psychologie cognitive.
 
-Analyse la relation professionnelle entre moi (${userEmail}) et ${contactName}${contactRow?.role_title ? ` (${contactRow.role_title}${contactRow.company_name ? ` chez ${contactRow.company_name}` : ''})` : ''} à travers ces échanges emails.
+Analyse la relation professionnelle entre moi (${userEmail}) et ${contactName}${contactRow?.role_title ? ` (${contactRow.role_title}${contactRow.company_name ? ` chez ${contactRow.company_name}` : ''})` : ''} a travers ces echanges emails.
 
-RÈGLES ABSOLUES :
+REGLES :
 - Ne reproduis JAMAIS le contenu brut des emails
-- Ne stocke aucune information personnelle ou confidentielle
 - Analyse uniquement le style, le ton et la dynamique relationnelle
+- Pour le nom : cherche dans les signatures des emails RECUS (marques [${contactName} -> Moi]) le vrai nom complet de la personne (Prenom Nom). Regarde les lignes de signature comme "Cordialement, Jean Dupont", "Best, Sarah", "-- Marie Martin", etc.
 
-ÉCHANGES À ANALYSER :
+ECHANGES :
 ${conversationContext}
 
-Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
+Reponds UNIQUEMENT en JSON valide :
 {
+  "suggested_name": "Prenom Nom trouve dans les signatures, ou null si non trouve",
+  "suggested_name_confidence": "high|medium|low — high = nom complet clair dans signature, medium = prenom seul ou ambigu, low = incertain",
   "relationship_tone": "chaud|neutre|froid",
-  "formality": "très formel|formel|semi-formel|informel",
-  "engagement_level": "très élevé|élevé|modéré|faible",
+  "formality": "tres formel|formel|semi-formel|informel",
+  "engagement_level": "tres eleve|eleve|modere|faible",
   "communication_style": "analytique|assertif|empathique|directif|collaboratif",
-  "key_topics": ["max 5 thèmes identifiés"],
+  "key_topics": ["max 5 themes identifies"],
   "behavioral_signals": ["max 5 signaux comportementaux observables"],
-  "relationship_summary": "2-3 phrases de synthèse relationnelle en français, focus sur la dynamique de la relation",
-  "contact_engagement": "description courte du niveau d'engagement du contact",
-  "my_posture": "description courte de ma posture dans ces échanges",
-  "red_flags": ["signaux d'alerte éventuels, tableau vide si aucun"],
-  "opportunities": ["opportunités relationnelles identifiées"],
+  "relationship_summary": "2-3 phrases de synthese relationnelle en francais",
+  "contact_engagement": "description courte",
+  "my_posture": "description courte",
+  "red_flags": [],
+  "opportunities": [],
   "emails_analyzed": ${emailBodies.length}
 }`;
 
@@ -314,10 +316,40 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
     ...analysis,
     analyzed_at: new Date().toISOString(),
     emails_analyzed: emailBodies.length,
-    model: 'gemini-2.5-flash',
+    model: 'gemini-2.5-flash-lite',
   };
 
-  // 8. Stocker dans contacts.email_analysis — jamais le texte brut
+  // 8. Renommage automatique depuis les signatures — si confiance high ou medium
+  let nameUpdated = false;
+  let previousName: string | null = null;
+  const suggestedName: string | null = analysis.suggested_name ?? null;
+  const nameConfidence: string = analysis.suggested_name_confidence ?? 'low';
+
+  if (
+    suggestedName &&
+    suggestedName.trim().length > 1 &&
+    (nameConfidence === 'high' || nameConfidence === 'medium') &&
+    suggestedName.trim().toLowerCase() !== contactName.toLowerCase()
+  ) {
+    // Valide que le nom suggéré ressemble à un vrai nom (au moins 2 mots ou 1 mot de plus de 3 chars)
+    const cleanName = suggestedName.trim();
+    const wordCount = cleanName.split(/\s+/).filter(w => w.length > 1).length;
+    if (wordCount >= 1 && cleanName.length >= 3 && !/[@.]/.test(cleanName)) {
+      const { error: renameErr } = await supabase.from('contacts')
+        .update({ full_name: cleanName, updated_at: new Date().toISOString() })
+        .eq('id', contactId)
+        .eq('organization_id', organizationId);
+      if (!renameErr) {
+        nameUpdated = true;
+        previousName = contactName;
+        console.log(`Contact renamed: "${contactName}" -> "${cleanName}" (confidence: ${nameConfidence})`);
+      } else {
+        console.error('Rename error:', renameErr.message);
+      }
+    }
+  }
+
+  // 9. Stocker dans contacts.email_analysis — jamais le texte brut
   const { error: saveErr } = await supabase.from('contacts')
     .update({ email_analysis: result, updated_at: new Date().toISOString() })
     .eq('id', contactId)
@@ -327,7 +359,13 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
     console.error('Save error:', saveErr.message);
   }
 
-  return jsonResponse({ success: true, analysis: result });
+  return jsonResponse({
+    success: true,
+    analysis: result,
+    name_updated: nameUpdated,
+    previous_name: previousName,
+    new_name: nameUpdated ? suggestedName?.trim() : null,
+  });
 
   } catch (e: any) {
     console.error('Uncaught error:', e?.message ?? String(e), e?.stack ?? '');

@@ -31,7 +31,6 @@ import {
   AlertCircle,
   Link,
   ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 
 // ── Official logos (inline SVG) ────────────────────────────────────────
@@ -558,8 +557,8 @@ export default function AccountSettings() {
 
                 {/* Banner de confirmation */}
                 {linkedinSaved && (
-                  <div className="mt-3 flex items-center gap-2.5 px-4 py-2.5 bg-primary/8 border border-primary/20 rounded-xl animate-in fade-in slide-in-from-top-1 duration-300">
-                    <div className="size-5 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+                  <div className="mt-3 flex items-center gap-2.5 px-4 py-2.5 bg-primary/10 border border-primary/20 rounded-xl transition-all">
+                    <div className="size-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
                       <CheckCheck className="size-3 text-primary" />
                     </div>
                     <p className="text-sm text-primary font-medium">Profil LinkedIn sauvegardé</p>

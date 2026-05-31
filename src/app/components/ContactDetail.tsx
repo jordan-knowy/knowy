@@ -421,6 +421,10 @@ export default function ContactDetail() {
         setAnalyzeError(realMsg ?? (error as any)?.message ?? 'Erreur inconnue');
       } else if (data?.analysis) {
         setEmailAnalysis(data.analysis);
+        // Rechargement de la fiche si le nom a été mis à jour depuis une signature
+        if (data?.name_updated) {
+          await loadData();
+        }
       } else {
         setAnalyzeError('Réponse inattendue de l\'analyse IA.');
       }
@@ -1085,6 +1089,22 @@ export default function ContactDetail() {
                   </button>
                 </div>
                 <div className="p-5 space-y-4">
+                  {/* Nom détecté dans les signatures */}
+                  {emailAnalysis.suggested_name && emailAnalysis.suggested_name_confidence !== 'low' && (
+                    <div className="flex items-center gap-2.5 px-3 py-2 bg-primary/8 border border-primary/15 rounded-xl">
+                      <CheckCircle className="size-4 text-primary flex-shrink-0" />
+                      <p className="text-xs text-primary">
+                        Nom détecté dans les signatures :{' '}
+                        <span className="font-semibold">{emailAnalysis.suggested_name}</span>
+                        {emailAnalysis.suggested_name_confidence === 'medium' && (
+                          <span className="text-primary/60 ml-1">(partiel)</span>
+                        )}
+                        {contact && emailAnalysis.suggested_name?.trim().toLowerCase() === contact.full_name?.toLowerCase() && (
+                          <span className="text-primary/60 ml-1">· déjà appliqué</span>
+                        )}
+                      </p>
+                    </div>
+                  )}
                   {/* Résumé */}
                   {emailAnalysis.relationship_summary && (
                     <p className="text-sm leading-relaxed italic text-foreground/90 bg-primary/5 rounded-xl px-4 py-3">
