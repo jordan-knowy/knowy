@@ -140,6 +140,7 @@ export default function AccountSettings() {
   // LinkedIn URL
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [linkedinSaved, setLinkedinSaved] = useState(false);
+  const [linkedinSaving, setLinkedinSaving] = useState(false);
 
   const connectedProviders = getConnectedIdentityProviders(user);
 
@@ -359,16 +360,18 @@ export default function AccountSettings() {
   }
 
   async function handleSaveLinkedin() {
-    if (!supabase) return;
+    if (!supabase || linkedinSaving) return;
     const { data: { user: u } } = await supabase.auth.getUser();
     if (!u) return;
+    setLinkedinSaving(true);
     const url = linkedinUrl.trim();
     await supabase.from('profiles').upsert(
       { id: u.id, linkedin_profile_data: url ? { url } : null } as any,
       { onConflict: 'id' }
     );
+    setLinkedinSaving(false);
     setLinkedinSaved(true);
-    setTimeout(() => setLinkedinSaved(false), 2500);
+    setTimeout(() => setLinkedinSaved(false), 3000);
   }
 
   async function handleLogout() {
@@ -527,19 +530,51 @@ export default function AccountSettings() {
                     <input
                       type="url"
                       value={linkedinUrl}
-                      onChange={(e) => setLinkedinUrl(e.target.value)}
+                      onChange={(e) => { setLinkedinUrl(e.target.value); setLinkedinSaved(false); }}
                       placeholder="https://linkedin.com/in/votre-profil"
-                      className="w-full pl-10 pr-4 py-3 bg-input border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                      className={`w-full pl-10 pr-4 py-3 bg-input border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
+                        linkedinSaved ? 'border-primary/40 bg-primary/5' : 'border-border'
+                      }`}
                     />
                   </div>
                   <button
                     onClick={handleSaveLinkedin}
-                    disabled={!linkedinUrl}
-                    className="flex items-center gap-2 px-4 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl transition-colors text-sm font-medium disabled:opacity-40"
+                    disabled={!linkedinUrl || linkedinSaving}
+                    className={`flex items-center gap-2 px-4 py-3 rounded-xl transition-all text-sm font-medium disabled:opacity-40 ${
+                      linkedinSaved
+                        ? 'bg-primary/10 text-primary border border-primary/20'
+                        : 'bg-primary hover:bg-accent text-white'
+                    }`}
                   >
-                    {linkedinSaved ? <><CheckCheck className="size-4" /> OK</> : <><Save className="size-4" /> Sauvegarder</>}
+                    {linkedinSaving ? (
+                      <><span className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Sauvegarde…</>
+                    ) : linkedinSaved ? (
+                      <><CheckCheck className="size-4" /> Sauvegardé !</>
+                    ) : (
+                      <><Save className="size-4" /> Sauvegarder</>
+                    )}
                   </button>
                 </div>
+
+                {/* Banner de confirmation */}
+                {linkedinSaved && (
+                  <div className="mt-3 flex items-center gap-2.5 px-4 py-2.5 bg-primary/8 border border-primary/20 rounded-xl animate-in fade-in slide-in-from-top-1 duration-300">
+                    <div className="size-5 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+                      <CheckCheck className="size-3 text-primary" />
+                    </div>
+                    <p className="text-sm text-primary font-medium">Profil LinkedIn sauvegardé</p>
+                    {linkedinUrl && (
+                      <a
+                        href={linkedinUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-auto text-xs text-primary/60 hover:text-primary transition-colors flex items-center gap-1"
+                      >
+                        Voir <ChevronDown className="size-3 -rotate-90" />
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
