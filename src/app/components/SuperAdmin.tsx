@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { motion } from 'motion/react';
 import {
   Users, Building2, Calendar, Mail, Brain, TrendingUp, TrendingDown,
@@ -46,6 +46,31 @@ interface UserRow {
 }
 
 interface TimeSeriesPoint { date: string; value: number; }
+
+interface UserEngagement {
+  userId: string;
+  userName: string | null;
+  orgName: string | null;
+  briefOpens: number;
+  briefAvgDurationMs: number;
+  briefTabDurations: Record<string, number>; // tab → total ms
+  profileOpens: number;
+  profileAvgDurationMs: number;
+  profilesViewed: string[];   // entity_ids uniques
+  lastActivityAt: string | null;
+}
+
+interface EngagementStats {
+  totalUsers: number;
+  usersWithBrief: number;
+  usersWithProfile: number;
+  totalBriefOpens: number;
+  avgBriefDurationMs: number;
+  totalProfileOpens: number;
+  avgProfileDurationMs: number;
+  tabDistribution: Record<string, number>;
+  perUser: UserEngagement[];
+}
 
 // ── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({
@@ -144,7 +169,9 @@ export default function SuperAdmin() {
   const [meetingSeries, setMeetingSeries] = useState<TimeSeriesPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'orgs' | 'users' | 'network'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'orgs' | 'users' | 'network' | 'engagement'>('overview');
+  const [engagement, setEngagement] = useState<EngagementStats | null>(null);
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!supabase) return;
@@ -266,6 +293,98 @@ export default function SuperAdmin() {
     }
     setMeetingSeries(Object.entries(meetingMap).map(([date, value]) => ({ date: date.slice(5), value })));
 
+    // ── Engagement analytics ─────────────────────────────────────────────
+    const { data: behaviorEvents } = await supabase
+      .from('user_behavior_events')
+      .select('user_id, event_type, entity_id, entity_type, tab, duration_ms, created_at')
+      .order('created_at', { ascending: false })
+      .limit(5000);
+
+    if (behaviorEvents?.length) {
+      // Agréger par user_id
+      const userMap: Record<string, { opens: any[]; closes: any[]; tabs: any[]; profileOpens: any[]; profileCloses: any[] }> = {};
+      for (const e of behaviorEvents) {
+        if (!userMap[e.user_id]) userMap[e.user_id] = { opens: [], closes: [], tabs: [], profileOpens: [], profileCloses: [] };
+        if (e.event_type === 'brief_open')    userMap[e.user_id].opens.push(e);
+        if (e.event_type === 'brief_close')   userMap[e.user_id].closes.push(e);
+        if (e.event_type === 'brief_tab')     userMap[e.user_id].tabs.push(e);
+        if (e.event_type === 'profile_open')  userMap[e.user_id].profileOpens.push(e);
+        if (e.event_type === 'profile_close') userMap[e.user_id].profileCloses.push(e);
+      }
+
+      // Distribution globale des onglets
+      const tabDist: Record<string, number> = {};
+      for (const e of behaviorEvents) {
+        if ((e.event_type === 'brief_tab' || e.event_type === 'brief_close') && e.tab && e.duration_ms) {
+          tabDist[e.tab] = (tabDist[e.tab] ?? 0) + e.duration_ms;
+        }
+      }
+
+      const perUser: UserEngagement[] = await Promise.all(
+        Object.entries(userMap).map(async ([uid, ev]) => {
+          const profileRow = userRows?.find(u => u.id === uid);
+          const memb = userDetails.find(u => u.id === uid);
+          const avgBrief = ev.closes.length > 0
+            ? Math.round(ev.closes.reduce((s, e) => s + (e.duration_ms ?? 0), 0) / ev.closes.length)
+            : 0;
+          const avgProfile = ev.profileCloses.length > 0
+            ? Math.round(ev.profileCloses.reduce((s, e) => s + (e.duration_ms ?? 0), 0) / ev.profileCloses.length)
+            : 0;
+          const tabDurations: Record<string, number> = {};
+          for (const e of [...ev.tabs, ...ev.closes]) {
+            if (e.tab && e.duration_ms) tabDurations[e.tab] = (tabDurations[e.tab] ?? 0) + e.duration_ms;
+          }
+          const profilesViewed = [...new Set(ev.profileOpens.map((e: any) => e.entity_id).filter(Boolean))];
+          const lastEvent = [...ev.opens, ...ev.profileOpens].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+          return {
+            userId: uid,
+            userName: profileRow?.full_name ?? null,
+            orgName: memb?.orgName ?? null,
+            briefOpens: ev.opens.length,
+            briefAvgDurationMs: avgBrief,
+            briefTabDurations: tabDurations,
+            profileOpens: ev.profileOpens.length,
+            profileAvgDurationMs: avgProfile,
+            profilesViewed,
+            lastActivityAt: lastEvent?.created_at ?? null,
+          };
+        })
+      );
+
+      const usersWithBrief = perUser.filter(u => u.briefOpens > 0).length;
+      const usersWithProfile = perUser.filter(u => u.profileOpens > 0).length;
+      const totalBriefOpens = perUser.reduce((s, u) => s + u.briefOpens, 0);
+      const totalProfileOpens = perUser.reduce((s, u) => s + u.profileOpens, 0);
+      const allBriefDurations = behaviorEvents.filter(e => e.event_type === 'brief_close' && e.duration_ms);
+      const avgBriefMs = allBriefDurations.length > 0
+        ? Math.round(allBriefDurations.reduce((s, e) => s + (e.duration_ms ?? 0), 0) / allBriefDurations.length)
+        : 0;
+      const allProfileDurations = behaviorEvents.filter(e => e.event_type === 'profile_close' && e.duration_ms);
+      const avgProfileMs = allProfileDurations.length > 0
+        ? Math.round(allProfileDurations.reduce((s, e) => s + (e.duration_ms ?? 0), 0) / allProfileDurations.length)
+        : 0;
+
+      setEngagement({
+        totalUsers: (totalUsers ?? 0),
+        usersWithBrief,
+        usersWithProfile,
+        totalBriefOpens,
+        avgBriefDurationMs: avgBriefMs,
+        totalProfileOpens,
+        avgProfileDurationMs: avgProfileMs,
+        tabDistribution: tabDist,
+        perUser: perUser.sort((a, b) => b.briefOpens - a.briefOpens),
+      });
+    } else {
+      setEngagement({
+        totalUsers: totalUsers ?? 0,
+        usersWithBrief: 0, usersWithProfile: 0,
+        totalBriefOpens: 0, avgBriefDurationMs: 0,
+        totalProfileOpens: 0, avgProfileDurationMs: 0,
+        tabDistribution: {}, perUser: [],
+      });
+    }
+
     setLoading(false);
     setRefreshing(false);
   }, []);
@@ -326,6 +445,7 @@ export default function SuperAdmin() {
             { id: 'orgs', label: 'Organisations', icon: Building2 },
             { id: 'users', label: 'Utilisateurs', icon: Users },
             { id: 'network', label: 'Réseau', icon: Network },
+            { id: 'engagement', label: 'Engagement', icon: Eye },
           ].map(tab => (
             <button
               key={tab.id}
@@ -599,6 +719,244 @@ export default function SuperAdmin() {
                 </div>
               </KnowyCard>
             </div>
+          </motion.div>
+        )}
+
+        {/* ── TAB: ENGAGEMENT ───────────────────────────────────────────────── */}
+        {activeTab === 'engagement' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+
+            {!engagement || engagement.totalBriefOpens === 0 ? (
+              <KnowyCard className="p-12 text-center">
+                <Eye className="size-12 text-muted-foreground/30 mx-auto mb-4" />
+                <p className="text-lg font-semibold mb-2">Aucune donnée d'engagement</p>
+                <p className="text-sm text-muted-foreground">
+                  Les métriques apparaîtront dès que des utilisateurs ouvriront des briefs ou des profils.
+                </p>
+              </KnowyCard>
+            ) : (<>
+
+              {/* KPIs globaux */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {[
+                  {
+                    label: 'Utilisateurs actifs briefs',
+                    value: engagement.usersWithBrief,
+                    pct: Math.round(engagement.usersWithBrief / Math.max(engagement.totalUsers, 1) * 100),
+                    icon: Brain, color: 'text-primary',
+                    sub: `sur ${engagement.totalUsers} utilisateurs · ${engagement.totalBriefOpens} ouvertures`,
+                  },
+                  {
+                    label: 'Temps moyen sur brief',
+                    value: engagement.avgBriefDurationMs >= 60000
+                      ? `${Math.round(engagement.avgBriefDurationMs / 60000)}min`
+                      : `${Math.round(engagement.avgBriefDurationMs / 1000)}s`,
+                    pct: Math.min(100, Math.round(engagement.avgBriefDurationMs / 300000 * 100)),
+                    icon: Clock, color: 'text-accent',
+                    sub: 'par session brief',
+                  },
+                  {
+                    label: 'Utilisateurs mémoire',
+                    value: engagement.usersWithProfile,
+                    pct: Math.round(engagement.usersWithProfile / Math.max(engagement.totalUsers, 1) * 100),
+                    icon: Activity, color: 'text-success',
+                    sub: `sur ${engagement.totalUsers} · ${engagement.totalProfileOpens} vues profils`,
+                  },
+                  {
+                    label: 'Temps moyen sur profil',
+                    value: engagement.avgProfileDurationMs >= 60000
+                      ? `${Math.round(engagement.avgProfileDurationMs / 60000)}min`
+                      : `${Math.round(engagement.avgProfileDurationMs / 1000)}s`,
+                    pct: Math.min(100, Math.round(engagement.avgProfileDurationMs / 180000 * 100)),
+                    icon: Clock, color: 'text-primary',
+                    sub: 'par session fiche',
+                  },
+                ].map(kpi => (
+                  <KnowyCard key={kpi.label} className="p-5">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="size-9 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <kpi.icon className={`size-4 ${kpi.color}`} />
+                      </div>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full bg-primary/10 ${kpi.color}`}>
+                        {kpi.pct}%
+                      </span>
+                    </div>
+                    <div className="text-2xl font-black mb-0.5">{kpi.value}</div>
+                    <div className="text-sm font-medium">{kpi.label}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{kpi.sub}</div>
+                    <div className="mt-3 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-primary rounded-full" style={{ width: `${kpi.pct}%` }} />
+                    </div>
+                  </KnowyCard>
+                ))}
+              </div>
+
+              {/* Distribution onglets brief — global */}
+              {Object.keys(engagement.tabDistribution).length > 0 && (
+                <KnowyCard className="p-5">
+                  <h3 className="font-semibold mb-4 flex items-center gap-2">
+                    <BarChart3 className="size-4 text-primary" />
+                    Temps passé par onglet (brief) — global
+                  </h3>
+                  <div className="space-y-3">
+                    {(() => {
+                      const totalMs = Object.values(engagement.tabDistribution).reduce((a, b) => a + b, 0);
+                      const labels: Record<string, string> = { prep: 'Préparation', summary: 'Résumé', participants: 'Participants' };
+                      return Object.entries(engagement.tabDistribution)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([tab, ms]) => {
+                          const pct = Math.round(ms / Math.max(totalMs, 1) * 100);
+                          const dur = ms >= 60000 ? `${Math.round(ms / 60000)}min` : `${Math.round(ms / 1000)}s`;
+                          return (
+                            <div key={tab}>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-sm font-medium">{labels[tab] ?? tab}</span>
+                                <div className="flex items-center gap-3 text-sm">
+                                  <span className="font-mono text-muted-foreground">{dur}</span>
+                                  <span className="font-bold text-primary w-10 text-right">{pct}%</span>
+                                </div>
+                              </div>
+                              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        });
+                    })()}
+                  </div>
+                </KnowyCard>
+              )}
+
+              {/* Tableau par utilisateur */}
+              <KnowyCard className="overflow-hidden">
+                <div className="p-4 border-b border-border flex items-center justify-between">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Users className="size-4 text-primary" />
+                    Engagement par utilisateur
+                  </h3>
+                  <span className="text-xs text-muted-foreground">{engagement.perUser.length} utilisateurs trackés</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        <th className="px-4 py-3 text-left">Utilisateur</th>
+                        <th className="px-4 py-3 text-center">Briefs<br/>ouverts</th>
+                        <th className="px-4 py-3 text-center">Tps moy.<br/>brief</th>
+                        <th className="px-4 py-3 text-center">Profils<br/>uniques vus</th>
+                        <th className="px-4 py-3 text-center">Tps moy.<br/>profil</th>
+                        <th className="px-4 py-3 text-center">Email brief<br/><span className="normal-case font-normal">envoyé/ouvert</span></th>
+                        <th className="px-4 py-3 text-left">Dernière<br/>activité</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {engagement.perUser.map(u => {
+                        const expanded = expandedUser === u.userId;
+                        const totalTabMs = Object.values(u.briefTabDurations).reduce((a, b) => a + b, 0);
+                        return (
+                          <React.Fragment key={u.userId}>
+                            <tr
+                              className="hover:bg-muted/20 cursor-pointer transition-colors"
+                              onClick={() => setExpandedUser(expanded ? null : u.userId)}
+                            >
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="size-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                    {(u.userName ?? '?')[0]?.toUpperCase()}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-medium truncate">{u.userName ?? <span className="text-muted-foreground italic text-xs">Sans nom</span>}</p>
+                                    {u.orgName && <p className="text-xs text-muted-foreground truncate">{u.orgName}</p>}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span className="font-bold text-primary text-base">{u.briefOpens}</span>
+                              </td>
+                              <td className="px-4 py-3 text-center font-mono text-sm">
+                                {u.briefAvgDurationMs > 0
+                                  ? u.briefAvgDurationMs >= 60000
+                                    ? `${Math.round(u.briefAvgDurationMs / 60000)}min`
+                                    : `${Math.round(u.briefAvgDurationMs / 1000)}s`
+                                  : <span className="text-muted-foreground">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span className="font-bold text-success text-base">{u.profilesViewed.length}</span>
+                                {u.profileOpens > u.profilesViewed.length && (
+                                  <span className="text-xs text-muted-foreground block">({u.profileOpens} vues)</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-center font-mono text-sm">
+                                {u.profileAvgDurationMs > 0
+                                  ? u.profileAvgDurationMs >= 60000
+                                    ? `${Math.round(u.profileAvgDurationMs / 60000)}min`
+                                    : `${Math.round(u.profileAvgDurationMs / 1000)}s`
+                                  : <span className="text-muted-foreground">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-center text-xs text-muted-foreground">
+                                — / —
+                              </td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground">
+                                {u.lastActivityAt
+                                  ? new Date(u.lastActivityAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                                  : '—'}
+                              </td>
+                            </tr>
+                            {expanded && totalTabMs > 0 && (
+                              <tr className="bg-primary/5">
+                                <td colSpan={7} className="px-6 py-4">
+                                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">
+                                    Répartition onglets brief · {u.userName}
+                                  </p>
+                                  <div className="grid grid-cols-3 gap-3">
+                                    {Object.entries(u.briefTabDurations).sort((a, b) => b[1] - a[1]).map(([tab, ms]) => {
+                                      const pct = Math.round(ms / totalTabMs * 100);
+                                      const labels: Record<string, string> = { prep: 'Préparation', summary: 'Résumé', participants: 'Participants' };
+                                      return (
+                                        <div key={tab} className="bg-card rounded-xl p-4 border border-border">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <span className="text-xs font-semibold">{labels[tab] ?? tab}</span>
+                                            <span className="text-sm font-black text-primary">{pct}%</span>
+                                          </div>
+                                          <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-2">
+                                            <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+                                          </div>
+                                          <span className="text-xs font-mono text-muted-foreground">
+                                            {ms >= 60000 ? `${Math.round(ms / 60000)}min` : `${Math.round(ms / 1000)}s`}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </KnowyCard>
+
+              {/* Email tracking — placeholder */}
+              <KnowyCard className="p-5 opacity-60">
+                <div className="flex items-center gap-3 mb-4">
+                  <Mail className="size-5 text-muted-foreground" />
+                  <h3 className="font-semibold">Tracking email brief</h3>
+                  <KnowyBadge variant="muted">Disponible avec système d'envoi</KnowyBadge>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                  {['Briefs envoyés / mail', 'Emails ouverts', 'Taux d\'ouverture', 'Consultés via mail'].map(label => (
+                    <div key={label} className="p-4 bg-muted/30 rounded-xl">
+                      <p className="text-2xl font-black text-muted-foreground">—</p>
+                      <p className="text-xs text-muted-foreground mt-1">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </KnowyCard>
+
+            </>)}
           </motion.div>
         )}
 

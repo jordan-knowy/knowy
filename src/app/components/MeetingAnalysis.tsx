@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { useNavigate, useParams } from 'react-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   RefreshCw,
@@ -36,6 +36,7 @@ import { getMeeting, getMeetingParticipants } from '../../lib/api/meetings';
 import { getActiveOrganizationId } from '../../lib/api/org';
 import { supabase } from '../../lib/supabase';
 import type { Meeting } from '../../types/domain';
+import { trackEvent } from '../../lib/trackEvent';
 
 interface Participant {
   id: string;
@@ -206,6 +207,41 @@ export default function MeetingAnalysis() {
   // Derive display values from real data (fall back to placeholders)
   const isPast = realMeeting ? new Date(realMeeting.startsAt) < new Date() : false;
   const [activeTab, setActiveTab] = useState<'summary' | 'prep' | 'participants'>('prep');
+
+  // ── Behavioral tracking ─────────────────────────────────────────────────────
+  const tabOpenedAt = useRef<number>(Date.now());
+  const activeTabRef = useRef<string>('prep');
+
+  // Ouverture du brief
+  useEffect(() => {
+    if (!id || loading) return;
+    trackEvent({ event_type: 'brief_open', entity_id: id, entity_type: 'meeting', tab: activeTabRef.current });
+    tabOpenedAt.current = Date.now();
+    return () => {
+      // Fermeture — on enregistre la durée sur l'onglet courant
+      trackEvent({
+        event_type: 'brief_close',
+        entity_id: id,
+        entity_type: 'meeting',
+        tab: activeTabRef.current,
+        duration_ms: Date.now() - tabOpenedAt.current,
+      });
+    };
+  }, [id, loading]);
+
+  function handleTabChange(tab: 'summary' | 'prep' | 'participants') {
+    // Clôture de l'onglet précédent avec sa durée
+    trackEvent({
+      event_type: 'brief_tab',
+      entity_id: id ?? undefined,
+      entity_type: 'meeting',
+      tab: activeTabRef.current,
+      duration_ms: Date.now() - tabOpenedAt.current,
+    });
+    activeTabRef.current = tab;
+    tabOpenedAt.current = Date.now();
+    setActiveTab(tab);
+  }
 
   // Duration in minutes
   const durationMin = realMeeting && (realMeeting as any).endsAt
@@ -409,7 +445,7 @@ export default function MeetingAnalysis() {
           <div className="flex gap-2">
             {isPast && (
               <button
-                onClick={() => setActiveTab('summary')}
+                onClick={() => handleTabChange('summary')}
                 className={`px-4 py-2 rounded-full font-semibold transition-all ${
                   activeTab === 'summary'
                     ? 'bg-primary text-white'
@@ -420,7 +456,7 @@ export default function MeetingAnalysis() {
               </button>
             )}
             <button
-              onClick={() => setActiveTab('prep')}
+              onClick={() => handleTabChange('prep')}
               className={`px-4 py-2 rounded-full font-semibold transition-all ${
                 activeTab === 'prep'
                   ? 'bg-primary text-white'
@@ -430,7 +466,7 @@ export default function MeetingAnalysis() {
               Préparation
             </button>
             <button
-              onClick={() => setActiveTab('participants')}
+              onClick={() => handleTabChange('participants')}
               className={`px-4 py-2 rounded-full font-semibold transition-all ${
                 activeTab === 'participants'
                   ? 'bg-primary text-white'

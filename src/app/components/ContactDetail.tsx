@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft, Mail, Calendar, ExternalLink, RefreshCw,
@@ -11,6 +11,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 import { supabase } from '../../lib/supabase';
 import { getActiveOrganizationId } from '../../lib/api/org';
 import { findMergeCandidates, mergeContacts, type MergeCandidate } from '../../lib/api/contacts';
+import { trackEvent } from '../../lib/trackEvent';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ContactRow {
@@ -250,6 +251,38 @@ export default function ContactDetail() {
   const [scoreHistory, setScoreHistory] = useState<ScorePoint[]>([]);
   const [activeTab, setActiveTab] = useState<'profil' | 'memoire' | 'echanges'>('profil');
   const [loading, setLoading] = useState(true);
+
+  // ── Behavioral tracking ─────────────────────────────────────────────────────
+  const tabOpenedAt = useRef<number>(Date.now());
+  const activeTabRef = useRef<string>('profil');
+
+  useEffect(() => {
+    if (!id || loading) return;
+    trackEvent({ event_type: 'profile_open', entity_id: id, entity_type: 'contact', tab: activeTabRef.current });
+    tabOpenedAt.current = Date.now();
+    return () => {
+      trackEvent({
+        event_type: 'profile_close',
+        entity_id: id,
+        entity_type: 'contact',
+        tab: activeTabRef.current,
+        duration_ms: Date.now() - tabOpenedAt.current,
+      });
+    };
+  }, [id, loading]);
+
+  function handleTabChange(tab: 'profil' | 'memoire' | 'echanges') {
+    trackEvent({
+      event_type: 'profile_tab',
+      entity_id: id,
+      entity_type: 'contact',
+      tab: activeTabRef.current,
+      duration_ms: Date.now() - tabOpenedAt.current,
+    });
+    activeTabRef.current = tab;
+    tabOpenedAt.current = Date.now();
+    setActiveTab(tab);
+  }
   const [enriching, setEnriching] = useState(false);
   const [enrichError, setEnrichError] = useState<string | null>(null);
   const [orgId, setOrgId] = useState<string | null>(null);
@@ -765,7 +798,7 @@ export default function ContactDetail() {
           {tabs.map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id as any)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl whitespace-nowrap transition-all text-sm font-semibold ${
                 activeTab === tab.id
                   ? 'text-white shadow-sm'
