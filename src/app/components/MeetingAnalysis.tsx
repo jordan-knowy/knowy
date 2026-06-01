@@ -82,6 +82,9 @@ export default function MeetingAnalysis() {
   const [postSummary, setPostSummary] = useState<any>(null);
   const [fullProfiles, setFullProfiles] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -207,6 +210,31 @@ export default function MeetingAnalysis() {
   // Derive display values from real data (fall back to placeholders)
   const isPast = realMeeting ? new Date(realMeeting.startsAt) < new Date() : false;
   const [activeTab, setActiveTab] = useState<'summary' | 'prep' | 'participants'>('prep');
+
+  // ── Envoi du brief par email ─────────────────────────────────────────────────
+  async function handleSendBriefEmail() {
+    if (!supabase || !id || sendingEmail) return;
+    setSendingEmail(true);
+    setEmailError(null);
+    try {
+      const orgId = await getActiveOrganizationId();
+      const { data, error } = await supabase.functions.invoke('send-brief-email', {
+        body: { meetingId: id, organizationId: orgId },
+      });
+      if (error) {
+        const body = await (error as any)?.context?.json?.().catch(() => null);
+        if (body?.already_sent) { setEmailSent(true); return; }
+        setEmailError(body?.error ?? (error as any)?.message ?? 'Erreur envoi');
+      } else if (data?.success) {
+        setEmailSent(true);
+        setTimeout(() => setEmailSent(false), 5000);
+      }
+    } catch (e: any) {
+      setEmailError(e?.message ?? 'Erreur inconnue');
+    } finally {
+      setSendingEmail(false);
+    }
+  }
 
   // ── Behavioral tracking ─────────────────────────────────────────────────────
   const tabOpenedAt = useRef<number>(Date.now());
@@ -431,6 +459,28 @@ export default function MeetingAnalysis() {
                   <p className={`text-2xl font-black ${confidenceScore >= 60 ? 'text-sage' : 'text-amber'}`}>
                     {confidenceScore}%
                   </p>
+                </div>
+              )}
+              {/* Bouton envoi brief par email */}
+              {!isPast && realMeeting?.briefStatus !== 'to_generate' && (
+                <div className="flex flex-col items-end gap-1">
+                  <button
+                    onClick={handleSendBriefEmail}
+                    disabled={sendingEmail || emailSent}
+                    title={emailSent ? 'Brief envoyé !' : 'Envoyer le brief par email'}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                      emailSent
+                        ? 'bg-success/10 text-success border border-success/20'
+                        : 'bg-primary/10 hover:bg-primary/20 text-primary'
+                    } disabled:opacity-60`}
+                  >
+                    {sendingEmail
+                      ? <><span className="size-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" /> Envoi…</>
+                      : emailSent
+                      ? <><CheckCircle2 className="size-3.5" /> Brief envoyé !</>
+                      : <><Mail className="size-3.5" /> Envoyer le brief</>}
+                  </button>
+                  {emailError && <p className="text-[10px] text-destructive max-w-[160px] text-right">{emailError}</p>}
                 </div>
               )}
               <KnowyButton variant="secondary" size="sm" icon={<Share2 className="size-4" />}>&nbsp;</KnowyButton>
