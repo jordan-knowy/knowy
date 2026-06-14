@@ -56,12 +56,12 @@ export default function Sitemap() {
         </button>
 
         <h1 className="text-4xl font-bold mb-2">Plan du site</h1>
-        <p className="text-muted-foreground mb-10">Navigation complète de la plateforme Knowy</p>
+        <p className="text-muted-foreground mb-10">Navigation complète de la plateforme Knowr</p>
 
         <div className="grid gap-8 sm:grid-cols-2">
           {sections.map((section) => (
             <div key={section.title}>
-              <h2 className="text-lg font-semibold mb-4 pb-2 border-b border-border">{section.title}</h2>
+              <h2 className="text-lg font-bold mb-4 pb-2 border-b border-border">{section.title}</h2>
               <ul className="space-y-3">
                 {section.links.map((link) => (
                   <li key={link.label}>
@@ -81,7 +81,7 @@ export default function Sitemap() {
 
         <div className="mt-12 pt-8 border-t border-border">
           <p className="text-sm text-muted-foreground">
-            Knowy SAS — Paris, France 🇫🇷 · <a href="mailto:contact@knowy.ai" className="text-primary hover:underline">contact@knowy.ai</a>
+            Knowr SAS — Paris, France 🇫🇷 · <a href="mailto:contact@knowy.ai" className="text-primary hover:underline">contact@knowy.ai</a>
           </p>
         </div>
       </div>

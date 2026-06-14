@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Knowy — Account Brief · Cabinet CSJC · Réunion Christèle Albanesi</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,200;0,9..144,400;1,9..144,200;1,9..144,300&family=Cabinet+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F0F2F5;--bg2:#FDFCFA;--bg3:#E8EBF0;
+  --border:#D8DCE4;--border2:#B8BFC9;
+  --text:#171B26;--text2:#5A6075;--text3:#9AA0B0;
+  --accent:#1D4ED8;--accent-l:#EFF3FF;--accent-m:#BFCBF7;
+  --green:#0A7C4A;--green-l:#EDFAF4;
+  --amber:#C47B00;--amber-l:#FFF8E8;
+  --red:#C8292E;--red-l:#FFF0F0;
+  --teal:#0B8878;--teal-l:#EDFAF8;
+  --purple:#6B21CC;--purple-l:#F5EEFF;
+  --serif:'Fraunces',Georgia,serif;
+  --sans:'Cabinet Grotesk',system-ui,sans-serif;
+  --mono:'DM Mono',monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.6}
+
+/* ── NAV DOUBLE NIVEAU ─────────────────────── */
+.nav{position:sticky;top:0;z-index:100;background:rgba(240,242,245,.97);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.nav-top{height:40px;display:flex;align-items:center;padding:0 28px;gap:12px;border-bottom:1px solid var(--border)}
+.nav-brand{font-family:var(--serif);font-size:16px;font-weight:200;letter-spacing:-.02em}
+.nav-sep{width:1px;height:14px;background:var(--border2)}
+.nav-level{display:flex;gap:4px}
+.nav-lvl-btn{font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;cursor:pointer;transition:all .15s;border:1px solid transparent}
+.nav-lvl-btn.active{background:var(--text);color:#fff}
+.nav-lvl-btn:not(.active){background:var(--bg3);color:var(--text3);border-color:var(--border)}
+.nav-ctx{font-size:11px;color:var(--text2);margin-left:4px}
+.nav-ctx strong{color:var(--text)}
+.nav-r{margin-left:auto;display:flex;gap:8px;align-items:center}
+.cb{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500}
+.cb-g{background:var(--green-l);color:var(--green);border:1px solid #A7F3D0}
+.cb-a{background:var(--amber-l);color:var(--amber);border:1px solid #EECF7A}
+.nav-bottom{height:36px;display:flex;align-items:center;padding:0 28px;gap:0;overflow-x:auto;scrollbar-width:none}
+.ntab{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:0 14px;height:36px;display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;white-space:nowrap}
+.ntab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.ntab .dot{width:5px;height:5px;border-radius:50%}
+
+/* ── DIFF BANNER ───────────────────────────── */
+.diff-banner{background:var(--text);border-radius:14px;padding:18px 24px;margin-bottom:20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;position:relative;overflow:hidden}
+.diff-banner::before{content:'';position:absolute;top:0;right:0;width:200px;height:100%;background:linear-gradient(135deg,transparent 50%,rgba(29,78,216,.08));pointer-events:none}
+.diff-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.35);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.diff-items{font-size:11px;line-height:1.7}
+.diff-new{color:rgba(255,255,255,.8)}
+.diff-same{color:rgba(255,255,255,.45)}
+.diff-warn{color:#FCD34D}
+.diff-ago{font-size:9px;font-family:var(--mono);color:rgba(255,255,255,.25);margin-left:6px}
+
+/* ── ACCOUNT SCORE CARD ────────────────────── */
+.account-card{background:var(--bg2);border-radius:16px;border:1px solid var(--border);overflow:hidden;margin-bottom:20px}
+.account-header{background:var(--text);padding:20px 28px;display:flex;align-items:center;gap:24px}
+.ah-logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#1D4ED8,#0B8878);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;font-family:var(--serif);flex-shrink:0}
+.ah-info{flex:1}
+.ah-name{font-family:var(--serif);font-size:22px;font-weight:200;color:#fff;letter-spacing:-.02em;margin-bottom:2px}
+.ah-sub{font-size:11px;color:rgba(255,255,255,.4)}
+.ah-scores{display:flex;gap:24px}
+.ah-score{text-align:center}
+.ah-score-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.3);margin-bottom:3px}
+.ah-score-val{font-family:var(--serif);font-size:32px;font-weight:200;line-height:1}
+.ah-score-sub{font-size:10px;font-family:var(--mono);color:rgba(255,255,255,.35);margin-top:2px}
+.ah-divider{width:1px;background:rgba(255,255,255,.1);align-self:stretch}
+.ah-phase{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.5);font-family:var(--mono);margin-top:6px;display:inline-block}
+
+/* ── A0 ACCOUNT MAP ────────────────────────── */
+.account-map{padding:20px 24px}
+.am-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.am-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.contact-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.contact-card{border-radius:10px;border:2px solid transparent;padding:12px;position:relative;transition:all .15s}
+.contact-card.in-meeting{border-color:var(--accent);background:var(--accent-l)}
+.contact-card.known{border-color:var(--border);background:var(--bg3)}
+.contact-card.blind-spot{border-color:#FDE68A;background:var(--amber-l)}
+.cc-badge{position:absolute;top:8px;right:8px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:2px 6px;border-radius:10px}
+.cc-badge-meeting{background:var(--accent);color:#fff}
+.cc-badge-absent{background:var(--bg2);color:var(--text3);border:1px solid var(--border)}
+.cc-badge-blind{background:#F59E0B;color:#fff}
+.cc-av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;margin-bottom:8px}
+.cc-name{font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px;line-height:1.3}
+.cc-role{font-size:10px;color:var(--text2);line-height:1.3;margin-bottom:6px}
+.cc-tag{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:10px;display:inline-block;margin-bottom:5px}
+.cc-last{font-size:9px;color:var(--text3);font-family:var(--mono)}
+.cc-score{font-family:var(--mono);font-size:11px;font-weight:500;margin-top:4px}
+.rel-map{margin-top:14px;padding:12px 16px;background:var(--bg3);border-radius:8px;border:1px solid var(--border)}
+.rel-map-t{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:8px}
+.rel-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11px;color:var(--text2)}
+.rel-arrow{font-family:var(--mono);color:var(--text3);font-size:11px}
+.blind-spot-box{margin-top:10px;padding:10px 14px;background:var(--amber-l);border-radius:8px;border:1px solid #FDE68A;font-size:11px;color:#78350F;line-height:1.5}
+
+/* ── MÉMOIRE RELATIONNELLE ─────────────────── */
+.mem-section{background:var(--bg2);border-radius:16px;border:1px solid var(--border);overflow:hidden;margin-bottom:20px}
+.mem-header{background:var(--text);padding:16px 24px;display:flex;align-items:center;gap:14px;border-bottom:1px solid rgba(255,255,255,.06)}
+.mem-icon{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#1D4ED8,#0B8878);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.mem-ttl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.4);flex:1}
+.mem-scores{display:flex;gap:20px;align-items:center}
+.mem-score-block{text-align:right}
+.mem-slbl{font-size:9px;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px}
+.mem-sval{display:flex;align-items:baseline;gap:8px}
+.mem-snum{font-family:var(--serif);font-size:32px;font-weight:200;line-height:1}
+.mem-sbadge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.5);font-family:var(--mono)}
+.mem-sdelta{font-size:10px;color:rgba(255,255,255,.35);font-family:var(--mono)}
+.mem-divider{width:1px;height:48px;background:rgba(255,255,255,.08)}
+.mem-body{display:grid;grid-template-columns:260px 1fr;gap:0}
+.mem-left{padding:20px 24px;border-right:1px solid var(--border)}
+.mem-right{padding:20px 24px}
+.dim{margin-bottom:13px}
+.dim-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px}
+.dim-n{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3)}
+.dim-v{font-family:var(--mono);font-size:13px;font-weight:500}
+.dim-w{font-size:9px;color:var(--text3);font-family:var(--mono)}
+.dim-bar{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:3px}
+.dim-fill{height:100%;border-radius:3px}
+.dim-note{font-size:10px;color:var(--text2);line-height:1.4}
+.chart-filters{display:flex;gap:6px;margin-bottom:12px}
+.cf{font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;cursor:pointer;border:1px solid var(--border);color:var(--text3);background:var(--bg3)}
+.cf.active{background:var(--text);color:#fff;border-color:var(--text)}
+.chart-wrap{position:relative}
+.chart-tt{position:absolute;background:var(--text);color:#fff;font-size:10px;padding:6px 10px;border-radius:6px;pointer-events:none;display:none;font-family:var(--mono);line-height:1.5;white-space:nowrap;z-index:10}
+
+/* ── GENERAL LAYOUT ────────────────────────── */
+.page{max-width:1080px;margin:0 auto;padding:24px 24px 80px}
+.cg{margin-bottom:28px}
+.ch{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.cd{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--text3)}
+.cline{flex:1;height:1px;background:var(--border)}
+.sec{margin-bottom:12px}
+.sc{background:var(--bg2);border-radius:14px;border:1px solid var(--border);overflow:hidden}
+.sh{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border)}
+.sl{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.st{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);flex:1}
+.scnf{font-size:11px;font-family:var(--mono);color:var(--text3)}
+.sb{padding:20px}
+.sr{display:flex;flex-wrap:wrap;gap:5px;padding-top:14px;margin-top:14px;border-top:1px solid var(--border)}
+.pill{font-size:10px;padding:3px 9px;border-radius:20px;display:inline-flex;align-items:center;gap:4px}
+.pg{background:var(--green-l);color:var(--green);border:1px solid #A7F3D0}
+.pa{background:var(--accent-l);color:var(--accent);border:1px solid var(--accent-m)}
+.px{background:var(--bg3);color:var(--text3);border:1px solid var(--border)}
+.pp{background:var(--purple-l);color:var(--purple);border:1px solid #DDD6FE}
+.tag{font-size:11px;padding:4px 10px;border-radius:6px;font-weight:500}
+.tg{background:var(--green-l);color:var(--green)}
+.ta{background:var(--amber-l);color:var(--amber)}
+.tr{background:var(--red-l);color:var(--red)}
+.tb{background:var(--accent-l);color:var(--accent)}
+.tt{background:var(--teal-l);color:var(--teal)}
+.tp{background:var(--purple-l);color:var(--purple)}
+.tagrow{display:flex;flex-wrap:wrap;gap:6px}
+.rq{font-family:var(--serif);font-size:15px;font-weight:200;font-style:italic;color:var(--text);line-height:1.75;padding:16px 20px;background:var(--accent-l);border-radius:10px;border-left:3px solid var(--accent);margin-bottom:14px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.four{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.card{background:var(--bg3);border-radius:8px;padding:12px;border:1px solid var(--border)}
+.card-l{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:4px}
+.card-v{font-size:13px;font-weight:700}
+.card-s{font-size:11px;color:var(--text2)}
+.ri{display:flex;gap:14px;padding:14px;background:var(--bg3);border-radius:10px;border:1px solid var(--border);margin-bottom:8px}
+.rn{font-family:var(--mono);font-size:11px;color:var(--text3);flex-shrink:0;width:18px}
+.rph{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:3px}
+.rtxt{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:4px}
+.rwy{font-size:11px;color:var(--text2)}.rwy::before{content:'→ ';color:var(--text3)}
+.rsig{font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono)}
+.obj{padding:14px;background:var(--bg3);border-radius:10px;border:1px solid var(--border);margin-bottom:8px}
+.obj-v{font-family:var(--serif);font-size:13px;font-style:italic;color:var(--text);margin-bottom:8px;line-height:1.5}
+.obj-r{font-size:11px;color:var(--text2);line-height:1.4;padding:8px 10px;background:var(--bg2);border-radius:6px;margin-bottom:6px}
+.obj-ap{font-size:10px;color:var(--red);margin-top:4px}.obj-ap::before{content:'⚠ Anti-pattern : ';font-weight:700}
+.rk{display:flex;gap:12px;padding:14px;border-radius:10px;border:1px solid;margin-bottom:8px}
+.rk-h{background:var(--red-l);border-color:#FECACA}.rk-m{background:var(--amber-l);border-color:#FDE68A}
+.rkb{width:3px;border-radius:2px;align-self:stretch;flex-shrink:0}.rbh{background:var(--red)}.rbm{background:var(--amber)}
+.rkt{font-size:11px;font-weight:700;margin-bottom:3px}.rkth{color:#991B1B}.rktm{color:#92400E}
+.rkd{font-size:11px;color:var(--text2);line-height:1.4}
+.piv{background:var(--bg3);border-radius:8px;border:1px solid var(--border);padding:12px 14px;margin-bottom:8px}
+.piv-s{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:6px}
+.piv-ph{font-size:11px;color:var(--accent);font-style:italic;padding:6px 10px;background:var(--accent-l);border-radius:6px;margin-bottom:4px}
+.piv-w{font-size:11px;color:var(--text2)}
+.lev{padding:12px 14px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);margin-bottom:8px;display:flex;gap:12px}
+.levicon{font-size:18px;flex-shrink:0}
+.levt{font-size:11px;font-weight:700;color:var(--text);margin-bottom:3px}
+.levd{font-size:11px;color:var(--text2);line-height:1.4}
+.levph{font-size:11px;color:var(--accent);font-style:italic;margin-top:5px}.levph::before{content:'💬 ';font-style:normal}
+.mt-card{background:var(--bg3);border-radius:10px;border:1px solid var(--border);padding:14px;margin-bottom:10px;display:flex;gap:14px}
+.mt-av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0;margin-top:2px}
+.mt-name{font-size:12px;font-weight:700;margin-bottom:2px}
+.mt-sub{font-size:10px;color:var(--text3);margin-bottom:6px;font-family:var(--mono)}
+.mt-why{font-size:11px;color:var(--text2);line-height:1.4;margin-bottom:5px}
+.mt-angle{font-size:11px;color:var(--accent);font-style:italic}
+.mt-angle::before{content:'💡 ';font-style:normal}
+.mt-timing{font-size:10px;color:var(--text3);margin-top:4px;font-family:var(--mono)}
+.ps{background:var(--teal-l);border-radius:10px;border:1px solid #99E6DD;padding:14px;margin-bottom:12px}
+.ps-t{font-size:11px;font-weight:700;color:var(--teal);margin-bottom:8px}
+.ps-i{font-size:11px;color:var(--text2);padding:3px 0;display:flex;gap:8px;line-height:1.4}.ps-i::before{content:'·';color:var(--teal);flex-shrink:0}
+.ns-g{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.nsi{display:flex;gap:10px;padding:12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border)}
+.nscb{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border2);flex-shrink:0;margin-top:1px}
+.nst{font-size:12px;color:var(--text);line-height:1.4;margin-bottom:3px}
+.nsm{display:flex;gap:8px}.nsw{font-size:10px;color:var(--text3);font-family:var(--mono)}.nsp{font-size:10px;color:var(--accent);font-weight:600}
+.bc-g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.bc{background:var(--bg3);border-radius:8px;padding:12px;border:1px solid var(--border)}
+.bc-n{font-size:12px;font-weight:700;margin-bottom:2px}
+.bc-e{font-size:10px;color:var(--text3);font-family:var(--mono);margin-bottom:6px}
+.bc-d{font-size:11px;color:var(--text2);line-height:1.4}
+.med-g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.med{background:var(--bg3);border-radius:8px;padding:12px;border:1px solid var(--border)}
+.med-l{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+.med-v{font-size:11px;color:var(--text);line-height:1.4;margin-bottom:4px}
+.med-s{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:2px 7px;border-radius:20px;display:inline-block}
+.ms-q{background:var(--green-l);color:var(--green)}.ms-p{background:var(--amber-l);color:var(--amber)}.ms-u{background:var(--bg3);color:var(--text3);border:1px solid var(--border)}
+.imm-g{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.imm{background:var(--bg3);border-radius:6px;padding:7px 9px;border:1px solid var(--border)}
+.imm-r{font-size:9px;font-family:var(--mono);color:var(--text3)}
+.imm-a{font-size:10px;color:var(--text);line-height:1.3}
+.imm-s{font-size:9px;color:var(--green);font-weight:600;margin-top:2px}
+.imm-w{font-size:9px;color:var(--red);font-weight:600;margin-top:2px}
+.ji{background:var(--bg3);border-radius:8px;padding:10px;border:1px solid var(--border);margin-bottom:8px}
+.jilbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:4px}
+.jival{font-size:11px;color:var(--text);line-height:1.4;margin-bottom:4px}
+.jicnf{font-size:9px;font-family:var(--mono);color:var(--text3)}
+.ppanel{display:grid;grid-template-columns:185px 1fr 1fr;gap:20px;align-items:start}
+.psw-g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.psw{border-radius:10px;border:2px solid transparent;padding:10px 12px;cursor:pointer;background:var(--bg3);transition:all .15s;display:flex;align-items:center;gap:10px}
+.psw.active{background:var(--bg2)}
+.psw-av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+.psw-n{font-size:11px;font-weight:700}.psw-t{font-size:10px;color:var(--text3);line-height:1.2}
+.ax{margin-bottom:9px}.axt{display:flex;justify-content:space-between;margin-bottom:3px}
+.axl{font-size:11px;font-weight:600}.axr{font-size:11px;color:var(--text3)}
+.axtr{height:4px;background:var(--bg3);border-radius:2px;position:relative;margin-bottom:2px}
+.axc{position:absolute;left:50%;top:-3px;width:1px;height:10px;background:var(--border2)}
+.axf{height:100%;border-radius:2px}.axb{display:flex;justify-content:space-between}
+.axcnf{font-size:9px;font-family:var(--mono);color:var(--text3)}.axlvl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.lobs{color:var(--green)}.linf{color:var(--amber)}.lhyp{color:var(--text3)}
+.sm{padding:14px;background:var(--teal-l);border-radius:10px;border:1px solid #99E6DD;margin-bottom:8px}
+.sm-t{font-size:11px;font-weight:700;color:var(--teal);margin-bottom:8px}
+.sm-i{font-size:11px;color:var(--text2);padding:3px 0;display:flex;gap:8px}.sm-i::before{content:'·';color:var(--text3);flex-shrink:0}
+.sm-s{margin-top:10px;padding:10px 12px;background:rgba(255,255,255,.6);border-radius:7px;font-family:var(--serif);font-size:13px;font-weight:200;font-style:italic;color:var(--text);line-height:1.6}
+.express{background:var(--text);border-radius:16px;padding:26px 30px;margin-bottom:18px;position:relative;overflow:hidden}
+.express::before{content:'';position:absolute;top:0;right:0;width:300px;height:100%;background:linear-gradient(135deg,transparent 60%,rgba(29,78,216,.08));pointer-events:none}
+.egrid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px}
+.eli{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.35);margin-bottom:6px}
+.elt{font-family:var(--serif);font-size:14px;font-weight:200;font-style:italic;color:rgba(255,255,255,.9);line-height:1.5}
+.efoot{margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.es-row{display:flex;gap:3px}.es{width:18px;height:3px;border-radius:2px}.es-on{background:#34D399}.es-off{background:rgba(255,255,255,.1)}
+.etxt{font-size:11px;color:rgba(255,255,255,.35);font-family:var(--mono)}
+.emc{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;border-radius:20px;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5)}
+.emc.on{background:rgba(29,78,216,.3);border-color:rgba(29,78,216,.5);color:#A5B4FC}
+.sl-ctx{background:var(--bg3);border:1px solid var(--border)}.ltrc{color:var(--text2)}
+.sl-ppl{background:var(--accent-l)}.ltrp{color:var(--accent)}
+.sl-deal{background:var(--purple-l)}.ltrd{color:var(--purple)}
+.sl-act{background:var(--green-l)}.ltra{color:var(--green)}
+</style>
+</head>
+<body>
+
+<!-- ══ NAV DOUBLE NIVEAU ══════════════════════════════════════════ -->
+<nav class="nav">
+  <div class="nav-top">
+    <span class="nav-brand">Knowy</span>
+    <div class="nav-sep"></div>
+    <div class="nav-level">
+      <div class="nav-lvl-btn" onclick="setLevel('account')">🏢 Compte</div>
+      <div class="nav-lvl-btn active" onclick="setLevel('meeting')">📋 Réunion</div>
+    </div>
+    <span class="nav-ctx"><strong>Cabinet CSJC</strong> · Réunion Christèle Albanesi · 29 mai 2026</span>
+    <div class="nav-r">
+      <span class="cb cb-g">Outlook · FNAIM · Pappers</span>
+      <span class="cb cb-a">Conf. 88% · Account</span>
+    </div>
+  </div>
+  <div class="nav-bottom">
+    <div class="ntab active"><span class="dot" style="background:#C5D9CE"></span>Carte compte</div>
+    <div class="ntab"><span class="dot" style="background:#1D4ED8"></span>Contexte</div>
+    <div class="ntab"><span class="dot" style="background:#1D4ED8"></span>Personnes</div>
+    <div class="ntab"><span class="dot" style="background:var(--purple)"></span>Deal</div>
+    <div class="ntab"><span class="dot" style="background:var(--green)"></span>Action</div>
+    <div class="ntab"><span class="dot" style="background:var(--teal)"></span>Multi-threading</div>
+  </div>
+</nav>
+
+<div class="page">
+
+<!-- ══ DIFF BANNER ═══════════════════════════════════════════════ -->
+<div class="diff-banner">
+  <div>
+    <div class="diff-lbl">🆕 Nouveau <span class="diff-ago">Il y a 23j</span></div>
+    <div class="diff-items">
+      <div class="diff-new">+ Avis de virement reçu · compta@csjc.fr</div>
+      <div class="diff-new">+ Score account : 69 → 72 (+3 pts)</div>
+      <div class="diff-new">+ Immeuble 29 rue Charles Auray identifié</div>
+      <div class="diff-new">+ Catherine Albanesi (repr. légale) — source FNAIM</div>
+    </div>
+  </div>
+  <div>
+    <div class="diff-lbl">⏸ Inchangé</div>
+    <div class="diff-items">
+      <div class="diff-same">~ Solde Ledru Rollin en attente (2 400€)</div>
+      <div class="diff-same">~ 3 devis sans calendrier AG (0094, 0129, 0137)</div>
+      <div class="diff-same">~ AMO Robert Branchard — issue inconnue</div>
+    </div>
+  </div>
+  <div>
+    <div class="diff-lbl">⚠ À surveiller</div>
+    <div class="diff-items">
+      <div class="diff-warn">Catherine Albanesi — jamais contactée</div>
+      <div class="diff-warn">RN 2023 : 9 013€ — trésorerie serrée</div>
+      <div class="diff-warn">Frictions Lemonway non totalement résolues</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ EXPRESS ═══════════════════════════════════════════════════ -->
+<div class="express">
+  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.3);margin-bottom:18px;display:flex;align-items:center;gap:8px">Brief express · 30 secondes<span style="flex:1;height:1px;background:rgba(255,255,255,.07);display:block"></span></div>
+  <div class="egrid">
+    <div><div class="eli">🎯 Insight clef</div><div class="elt">CSJC gère 80 copropriétés / 6 704 lots — 60 non encore adressés. Jean-Charles est le gérant légal et le vrai décideur. Catherine Albanesi est représentante légale mais n'a jamais été contactée — angle mort critique.</div></div>
+    <div><div class="eli">⚡ Action prioritaire</div><div class="elt">Résoudre les frictions Lemonway, puis ouvrir le sujet des 60 immeubles restants. Jean-Charles doit être multi-threadé sur l'AMO — via Christèle ou en direct sur OS urgent.</div></div>
+    <div><div class="eli">⚠️ Risque principal</div><div class="elt">Résultat net 2023 : 9 013€. Trésorerie structurellement serrée. Les tensions de paiement ne sont pas accidentelles. Si plusieurs comptes ont des tensions simultanées, le risque s'accumule.</div></div>
+    <div><div class="eli">❓ Question d'ouverture</div><div class="elt">"Christèle, combien d'immeubles dans votre parc n'ont pas encore leur DTG cette année ?"</div></div>
+  </div>
+  <div class="efoot">
+    <div style="font-size:10px;color:rgba(255,255,255,.25)">Account</div>
+    <div class="es-row"><div class="es es-on"></div><div class="es es-on"></div><div class="es es-on"></div><div class="es es-on"></div><div class="es es-on"></div><div class="es es-on"></div><div class="es es-on"></div><div class="es es-off"></div></div>
+    <div class="etxt">88% · Outlook 50+ · FNAIM · Pappers · Registre copropriétés</div>
+    <div class="emc on">Operator</div><div class="emc on">Validator</div><div class="emc on">S1</div>
+  </div>
+</div>
+
+<!-- ══ ACCOUNT CARD + MAP ════════════════════════════════════════ -->
+<div class="account-card">
+
+  <!-- Account header avec double score -->
+  <div class="account-header">
+    <div class="ah-logo">CS</div>
+    <div class="ah-info">
+      <div class="ah-name">Cabinet CSJC</div>
+      <div class="ah-sub">Syndic copropriété · 6 rue Taine 75012 Paris · SIRET 45039498600027 · Fondé 2003</div>
+    </div>
+    <div class="ah-scores">
+      <div class="ah-score">
+        <div class="ah-score-lbl">Score account</div>
+        <div class="ah-score-val" style="color:#34D399">72</div>
+        <div class="ah-score-sub">+ Développement</div>
+        <div class="ah-phase">+3 pts · 30j</div>
+      </div>
+      <div class="ah-divider"></div>
+      <div class="ah-score">
+        <div class="ah-score-lbl">Score contact · Christèle</div>
+        <div class="ah-score-val" style="color:#F59E0B">67</div>
+        <div class="ah-score-sub">= Stagnation</div>
+        <div class="ah-phase">−2 pts · 30j</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section A0 — Carte du compte -->
+  <div class="account-map">
+    <div class="am-title">A0 · Carte du compte · 5 contacts identifiés</div>
+
+    <div class="contact-grid">
+
+      <!-- Christèle — EN RÉUNION -->
+      <div class="contact-card in-meeting">
+        <span class="cc-badge cc-badge-meeting">En réunion</span>
+        <div class="cc-av" style="background:#1D4ED8">CA</div>
+        <div class="cc-name">Christèle Albanesi</div>
+        <div class="cc-role">Directrice opérationnelle</div>
+        <div class="cc-tag" style="background:#EEF1FF;color:#1D4ED8">Champion · Operator</div>
+        <div class="cc-last">Dernier contact : 22j</div>
+        <div class="cc-score" style="color:#F59E0B">67/100 · = Stagnation</div>
+      </div>
+
+      <!-- Jean-Charles — DÉCIDEUR ABSENT -->
+      <div class="contact-card known">
+        <span class="cc-badge cc-badge-absent">Absent · Clé</span>
+        <div class="cc-av" style="background:#7C3AED">JCA</div>
+        <div class="cc-name">Jean-Charles Albanesi</div>
+        <div class="cc-role">Gérant légal · Associé SARL</div>
+        <div class="cc-tag" style="background:var(--purple-l);color:var(--purple)">Décideur · Signataire</div>
+        <div class="cc-last">Dernier contact : 51j (Pierre Bayle OS)</div>
+        <div class="cc-score" style="color:#F59E0B">52/100 · = Stable</div>
+      </div>
+
+      <!-- Tanguy — ABSENT -->
+      <div class="contact-card known">
+        <span class="cc-badge cc-badge-absent">Absent</span>
+        <div class="cc-av" style="background:#0B8878">TS</div>
+        <div class="cc-name">Tanguy Siove</div>
+        <div class="cc-role">Gestionnaire copropriété</div>
+        <div class="cc-tag" style="background:var(--teal-l);color:var(--teal)">Utilisateur</div>
+        <div class="cc-last">Dernier contact : 61j</div>
+        <div class="cc-score" style="color:#F59E0B">45/100</div>
+      </div>
+
+      <!-- Compta — ABSENT -->
+      <div class="contact-card known">
+        <span class="cc-badge cc-badge-absent">Absent</span>
+        <div class="cc-av" style="background:#C47B00">CP</div>
+        <div class="cc-name">Comptabilité CSJC</div>
+        <div class="cc-role">compta@csjc.fr</div>
+        <div class="cc-tag" style="background:var(--amber-l);color:var(--amber)">Gatekeeper financier</div>
+        <div class="cc-last">Dernier contact : 22j</div>
+        <div class="cc-score" style="color:#F87171">38/100</div>
+      </div>
+
+      <!-- Catherine — ANGLE MORT -->
+      <div class="contact-card blind-spot">
+        <span class="cc-badge cc-badge-blind">Angle mort</span>
+        <div class="cc-av" style="background:#92400E">?</div>
+        <div class="cc-name">Catherine Albanesi</div>
+        <div class="cc-role">Représentante légale SARL · Source FNAIM</div>
+        <div class="cc-tag" style="background:#FEF3C7;color:#92400E">Jamais contactée</div>
+        <div class="cc-last" style="color:#92400E">Aucun échange connu</div>
+        <div class="cc-score" style="color:#9CA3AF">Score : —</div>
+      </div>
+
+    </div>
+
+    <!-- Relations entre contacts -->
+    <div class="rel-map">
+      <div class="rel-map-t">Relations entre contacts</div>
+      <div class="rel-row"><span style="font-weight:700;color:var(--purple)">Jean-Charles</span><span class="rel-arrow">─── délègue ops à ───→</span><span style="font-weight:700;color:#1D4ED8">Christèle</span></div>
+      <div class="rel-row"><span style="font-weight:700;color:#1D4ED8">Christèle</span><span class="rel-arrow">─── transfère finances à ───→</span><span style="font-weight:700;color:#C47B00">compta@csjc.fr</span></div>
+      <div class="rel-row"><span style="font-weight:700;color:#1D4ED8">Christèle</span><span class="rel-arrow">─── délègue virements à ───→</span><span style="font-weight:700;color:#0B8878">Tanguy</span></div>
+      <div class="rel-row"><span style="font-weight:700;color:#92400E">Catherine Albanesi</span><span class="rel-arrow">─── relation à qualifier ───→</span><span style="font-weight:700;color:var(--purple)">Jean-Charles</span><span style="font-size:10px;color:var(--text3);margin-left:8px">(famille · co-gérante ?)</span></div>
+    </div>
+
+    <div class="blind-spot-box">
+      🎯 <strong>Angle mort prioritaire — Catherine Albanesi :</strong> Représentante légale SARL selon FNAIM, aux côtés de Jean-Charles. Jamais apparue dans 50+ échanges Outlook. Son rôle est inconnu mais son poids légal est réel. À qualifier lors du prochain échange : <em>"Christèle, Catherine Albanesi est-elle impliquée dans les décisions du cabinet ?"</em>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MÉMOIRE RELATIONNELLE ══════════════════════════════════════ -->
+<div class="mem-section">
+  <div class="mem-header">
+    <div class="mem-icon">📡</div>
+    <div class="mem-ttl">Mémoire Relationnelle</div>
+    <div class="mem-scores">
+      <div class="mem-score-block">
+        <div class="mem-slbl">Score Account · CSJC</div>
+        <div class="mem-sval">
+          <span class="mem-snum" style="color:#34D399">72</span>
+          <span class="mem-sbadge">+ Développement</span>
+          <span class="mem-sdelta">+3 · 30j</span>
+        </div>
+      </div>
+      <div class="mem-divider"></div>
+      <div class="mem-score-block">
+        <div class="mem-slbl">Score Contact · Christèle</div>
+        <div class="mem-sval">
+          <span class="mem-snum" style="color:#F59E0B">67</span>
+          <span class="mem-sbadge">= Stagnation</span>
+          <span class="mem-sdelta">−2 · 30j</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="padding:12px 24px;background:var(--accent-l);border-bottom:1px solid var(--border);font-size:11px;color:var(--accent)">
+    💡 <strong>Score account (72) > Score contact Christèle (67)</strong> — La relation commerciale CSJC est en développement (volume actif, nouveaux OS) mais la relation avec Christèle spécifiquement stagne (frictions Lemonway, délégation automatique). Jean-Charles, difficile à joindre, tire le score account vers le haut via les urgences OS.
+  </div>
+
+  <div class="mem-body">
+    <div class="mem-left">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:14px">3 Dimensions · Score contact Christèle</div>
+      <div class="dim">
+        <div class="dim-h"><span class="dim-n">Intensité</span><span><span class="dim-v">70</span><span class="dim-w"> /100 · 40%</span></span></div>
+        <div class="dim-bar"><div class="dim-fill" style="width:70%;background:#1D4ED8"></div></div>
+        <div class="dim-note">3-5 échanges/semaine sur périodes actives. Canal email + OS signatures.</div>
+      </div>
+      <div class="dim">
+        <div class="dim-h"><span class="dim-n">Réciprocité</span><span><span class="dim-v" style="color:var(--amber)">52</span><span class="dim-w"> /100 · 35%</span></span></div>
+        <div class="dim-bar"><div class="dim-fill" style="width:52%;background:var(--amber)"></div></div>
+        <div class="dim-note">Répond mais délègue immédiatement. Initiation mixte — Optee relance sur paiements.</div>
+      </div>
+      <div class="dim">
+        <div class="dim-h"><span class="dim-n">Longévité</span><span><span class="dim-v" style="color:var(--green)">82</span><span class="dim-w"> /100 · 25%</span></span></div>
+        <div class="dim-bar"><div class="dim-fill" style="width:82%;background:var(--green)"></div></div>
+        <div class="dim-note">14 mois de relation stable. Aucune interruption.</div>
+      </div>
+      <div style="margin-top:12px;padding:10px 12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);font-size:11px;color:var(--text2);line-height:1.4">
+        <strong>Impact :</strong> Réciprocité 52 → Anti-pattern dans section O. Phase stagnation → adresser frictions en ouverture (section N).
+      </div>
+    </div>
+
+    <div class="mem-right">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3)">Évolution · Mar 2025 → Aujourd'hui</div>
+        <div class="chart-filters" id="filters">
+          <div class="cf" onclick="setWin(6)">6 mois</div>
+          <div class="cf" onclick="setWin(12)">12 mois</div>
+          <div class="cf active" onclick="setWin(0)">Tout</div>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart" height="155" style="width:100%;cursor:crosshair"></canvas>
+        <div class="chart-tt" id="tt"></div>
+      </div>
+      <div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text3)"><div style="width:12px;height:3px;background:#34D399;border-radius:1px"></div>Score contact</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text3)"><div style="width:12px;height:3px;background:#1D4ED8;border-radius:1px;border-top:2px dashed #1D4ED8;height:0"></div><div style="width:12px;height:0;border-top:2px dashed #1D4ED8"></div>Score account</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text3)"><div style="width:8px;height:8px;border-radius:50%;background:#34D399"></div>Événement clef</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text3)"><div style="width:8px;height:8px;border-radius:50%;background:var(--red)"></div>Friction</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CONTEXTE ═══════════════════════════════════════════════════ -->
+<div class="cg">
+  <div class="ch"><div class="cd" style="background:#C5D9CE"></div><div class="cl">Contexte</div><div class="cline"></div></div>
+
+  <div class="sec"><div class="sc">
+    <div class="sh"><div class="sl sl-ctx ltrc">A</div><div class="st">Résumé exécutif</div><div class="scnf">Conf. 88%</div></div>
+    <div class="sb">
+      <div class="rq">"CSJC est le compte le plus actif d'Optee sur les DTG/PPPT : 20+ immeubles commandés en 14 mois sur un portefeuille total de 80 copropriétés / 6 704 lots. Jean-Charles ALBANESI est le gérant légal et propriétaire. Le résultat net 2023 de 9 013€ pour 6-9 salariés explique les tensions de trésorerie structurelles. 60 immeubles non encore adressés = le vrai potentiel du compte."</div>
+      <div class="tagrow">
+        <span class="tag tg">80 cop. / 6 704 lots</span>
+        <span class="tag tb">20 adressés · 60 restants</span>
+        <span class="tag ta">RN 2023 : 9 013€ — trésorerie serrée</span>
+        <span class="tag tt">Jean-Charles = Gérant légal · SARL 2003</span>
+      </div>
+      <div class="sr"><span class="pill pg">Outlook 50+</span><span class="pill pg">FNAIM</span><span class="pill pg">Pappers</span><span class="pill pg">Registre copropriétés</span></div>
+    </div>
+  </div></div>
+
+  <div class="sec"><div class="sc">
+    <div class="sh"><div class="sl sl-ctx ltrc">B</div><div class="st">Contexte entreprise · Framing</div></div>
+    <div class="sb">
+      <div class="four" style="margin-bottom:12px">
+        <div class="card"><div class="card-l">Portefeuille</div><div class="card-v" style="color:var(--green)">80 cop.</div><div class="card-s">6 704 lots</div></div>
+        <div class="card"><div class="card-l">Adressés Optee</div><div class="card-v" style="color:var(--amber)">20</div><div class="card-s">60 restants 🎯</div></div>
+        <div class="card"><div class="card-l">RN 2023</div><div class="card-v" style="color:var(--red)">9 013€</div><div class="card-s">Marges très serrées</div></div>
+        <div class="card"><div class="card-l">Ancienneté</div><div class="card-v">22 ans</div><div class="card-s">SARL · fondé 2003</div></div>
+      </div>
+      <div class="imm-g">
+        <div class="imm"><div class="imm-r">0075</div><div class="imm-a">103 av. Ledru Rollin</div><div class="imm-w">⚠ 2400€ en att.</div></div>
+        <div class="imm"><div class="imm-r">0125</div><div class="imm-a">5 rue Pierre Bayle</div><div class="imm-w">🔴 DTG urgence</div></div>
+        <div class="imm"><div class="imm-r">0094</div><div class="imm-a">27 rue Jean Beauvais</div><div class="imm-s">Devis en cours</div></div>
+        <div class="imm"><div class="imm-r">0129</div><div class="imm-a">8 rue Edmond Vitry</div><div class="imm-s">Devis en cours</div></div>
+        <div class="imm"><div class="imm-r">0137</div><div class="imm-a">4bis rue R. Lenoir</div><div class="imm-s">Devis en cours</div></div>
+        <div class="imm"><div class="imm-r">0116</div><div class="imm-a">76 rue des Meuniers</div><div class="imm-w">⚠ Lemonway</div></div>
+        <div class="imm"><div class="imm-r">0121</div><div class="imm-a">193 rue de Paris</div><div class="imm-s">✓ Livré</div></div>
+        <div class="imm"><div class="imm-r">0101</div><div class="imm-a">27 rue du Château</div><div class="imm-s">✓ Livré</div></div>
+        <div class="imm"><div class="imm-r">+ 12</div><div class="imm-a">autres immeubles</div><div class="imm-s">✓ Livrés</div></div>
+        <div class="imm"><div class="imm-r">+ 60</div><div class="imm-a" style="color:var(--teal)">non encore adressés</div><div class="imm-s" style="color:var(--teal)">→ Potentiel</div></div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="sec"><div class="sc">
+    <div class="sh"><div class="sl sl-ctx ltrc" style="font-size:9px">Bbis</div><div class="st">Buying Center · Dynamique organisationnelle</div></div>
+    <div class="sb">
+      <div class="bc-g">
+        <div class="bc"><div style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;background:#EEF1FF;color:#1D4ED8;display:inline-block;margin-bottom:6px">Champion</div><div class="bc-n">Christèle Albanesi</div><div class="bc-e">christelealbanesi@csjc.fr</div><div class="bc-d">Interface 90% du temps. Commande, signe, délègue. Ne décide pas seule.</div></div>
+        <div class="bc"><div style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;background:var(--purple-l);color:var(--purple);display:inline-block;margin-bottom:6px">Décideur · Gérant</div><div class="bc-n">Jean-Charles Albanesi</div><div class="bc-e">jcalbanesi@csjc.fr</div><div class="bc-d">Propriétaire légal SARL. Signe les OS urgents. Valide les AG. Difficile à joindre.</div></div>
+        <div class="bc"><div style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;background:var(--amber-l);color:var(--amber);display:inline-block;margin-bottom:6px">Gatekeeper financier</div><div class="bc-n">Comptabilité CSJC</div><div class="bc-e">compta@csjc.fr</div><div class="bc-d">Exécute les paiements. A reconnu "problème de trésorerie". Source des erreurs de routing.</div></div>
+        <div class="bc"><div style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;background:#FEF3C7;color:#92400E;display:inline-block;margin-bottom:6px">⚠ Angle mort</div><div class="bc-n">Catherine Albanesi</div><div class="bc-e">— jamais contactée</div><div class="bc-d">Représentante légale SARL (FNAIM). Rôle inconnu. Potentiellement co-gérante ou directrice associée.</div></div>
+      </div>
+      <div style="padding:10px 14px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);font-size:11px;color:var(--text2)">
+        <strong>APC (Agence Parisienne du Climat) — Influenceur externe critique :</strong> Contacts : Claire POISSON-QUINTON, Maxence BAILLY, Célia ROUSSELET, Noé BODART. Accord APC obligatoire avant tout OS. Vrai verrou des délais.
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ══ PERSONNES ══════════════════════════════════════════════════ -->
+<div class="cg">
+  <div class="ch"><div class="cd" style="background:#1D4ED8"></div><div class="cl">Personnes · Réunion Christèle</div><div class="cline"></div></div>
+  <div class="sec"><div class="sc">
+    <div class="sh"><div class="sl sl-ppl ltrp">D–G</div><div class="st">Profil interactionnel · JTBD · Christèle Albanesi</div><div class="scnf">Conf. 75% · Observable</div></div>
+    <div class="sb">
+      <div class="ppanel">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
+          <svg width="185" height="185" viewBox="0 0 190 190">
+            <polygon points="95,55 126,72 126,108 95,125 64,108 64,72" fill="none" stroke="#D8DCE4" stroke-width="0.5"/>
+            <polygon points="95,35 148,65 148,125 95,155 42,125 42,65" fill="none" stroke="#D8DCE4" stroke-width="0.5"/>
+            <polygon points="95,14 168,55 168,135 95,176 22,135 22,55" fill="none" stroke="#D8DCE4" stroke-width="0.5"/>
+            <line x1="95" y1="14" x2="95" y2="176" stroke="#D8DCE4" stroke-width="0.5"/>
+            <line x1="22" y1="55" x2="168" y2="135" stroke="#D8DCE4" stroke-width="0.5"/>
+            <line x1="22" y1="135" x2="168" y2="55" stroke="#D8DCE4" stroke-width="0.5"/>
+            <polygon points="95,22 155,68 142,132 62,138 35,78" fill="rgba(29,78,216,0.10)" stroke="#1D4ED8" stroke-width="1.5"/>
+            <text x="95" y="9" text-anchor="middle" font-size="9" fill="#9AA0B0">Résultat</text>
+            <text x="173" y="52" text-anchor="start" font-size="9" fill="#9AA0B0">Rapidité</text>
+            <text x="173" y="140" text-anchor="start" font-size="9" fill="#9AA0B0">Structure</text>
+            <text x="95" y="186" text-anchor="middle" font-size="9" fill="#9AA0B0">Relation</text>
+            <text x="17" y="140" text-anchor="end" font-size="9" fill="#9AA0B0">Intuition</text>
+            <text x="17" y="52" text-anchor="end" font-size="9" fill="#9AA0B0">Contrôle</text>
+          </svg>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center">
+            <span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:var(--accent-l);color:var(--accent);border:1px solid var(--accent-m)">Operator</span>
+            <span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;background:var(--bg3);color:var(--text3);border:1px solid var(--border)">Validator</span>
+          </div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--text3);text-align:center">S1 · décide et délègue vite</div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:10px">Axes interactionnels</div>
+          <div class="ax"><div class="axt"><span class="axl" style="color:#1D4ED8">Résultat</span><span class="axr">vs Relation</span></div><div class="axtr"><div class="axc"></div><div class="axf" style="width:78%;background:#1D4ED8"></div></div><div class="axb"><span class="axcnf">orientée résultat · pas de small talk</span><span class="axlvl lobs">Observable</span></div></div>
+          <div class="ax"><div class="axt"><span class="axl" style="color:#0B8878">Rapidité</span><span class="axr">vs Prudence</span></div><div class="axtr"><div class="axc"></div><div class="axf" style="width:82%;background:#0B8878"></div></div><div class="axb"><span class="axcnf">répond le jour même sur urgent</span><span class="axlvl lobs">Observable</span></div></div>
+          <div class="ax"><div class="axt"><span class="axl" style="color:#7C3AED">Intuition</span><span class="axr">vs Structure</span></div><div class="axtr"><div class="axc"></div><div class="axf" style="width:35%;margin-left:65%;background:#7C3AED"></div></div><div class="axb"><span class="axcnf">délègue sans chercher les détails</span><span class="axlvl linf">Inféré</span></div></div>
+          <div class="ax"><div class="axt"><span class="axl" style="color:#C47B00">Contrôle</span><span class="axr">vs Consensus</span></div><div class="axtr"><div class="axc"></div><div class="axf" style="width:60%;background:#C47B00"></div></div><div class="axb"><span class="axcnf">contrôle le flux · délègue l'exécution</span><span class="axlvl linf">Inféré</span></div></div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:8px;margin-top:14px">Signaux comportementaux</div>
+          <div style="font-size:11px;color:var(--text2);margin-bottom:4px">✉️ Emails ultra-courts : "ET VOILA", "La voilà", "Ok merci"</div>
+          <div style="font-size:11px;color:var(--text2);margin-bottom:4px">📌 Importance: high systématique sur tous ses emails</div>
+          <div style="font-size:11px;color:var(--text2);margin-bottom:4px">🔀 Délègue immédiatement à compta ou Tanguy sur le financier</div>
+          <div style="font-size:11px;color:var(--text2)">📋 A formalisé mars 2026 : "Toutes les factures doivent transiter par OPTEE"</div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:10px">JTBD</div>
+          <div class="ji"><div class="jilbl">Job fonctionnel</div><div class="jival">Gérer son portefeuille DTG en conformité sans friction opérationnelle</div><div class="jicnf">Conf. 82% · Observable</div></div>
+          <div class="ji"><div class="jilbl">Job social</div><div class="jival">Être la syndic qui gère son parc en conformité réglementaire</div><div class="jicnf">Conf. 65% · Inféré</div></div>
+          <div class="ji"><div class="jilbl">Job émotionnel</div><div class="jival">Que les paiements se passent sans relances ni complications</div><div class="jicnf">Conf. 70% · Observable</div></div>
+          <div class="ji"><div class="jilbl">JTBD organisationnel</div><div class="jival">Mettre les 80 copropriétés en conformité DTG/PPPT avant les deadlines réglementaires</div><div class="jicnf">Conf. 75% · Externe + Inféré</div></div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ══ DEAL ═══════════════════════════════════════════════════════ -->
+<div class="cg">
+  <div class="ch"><div class="cd" style="background:var(--purple)"></div><div class="cl">Deal</div><div class="cline"></div></div>
+  <div class="sec"><div class="sc">
+    <div class="sh"><div class="sl sl-deal ltrd">H</div><div class="st">MEDDPICC</div><div class="scnf">6/8 · Conf. 75%</div></div>
+    <div class="sb">
+      <div class="med-g">
+        <div class="med"><div class="med-l" style="color:var(--green)">Metrics</div><div class="med-v">20+ DTG · 60 restants · Récurrence confirmée</div><div class="med-s ms-q">Qualifié</div></div>
+        <div class="med"><div class="med-l" style="color:var(--green)">Economic Buyer</div><div class="med-v">Jean-Charles (gérant légal). Christèle (opérationnel). compta (paiement).</div><div class="med-s ms-q">Qualifié</div></div>
+        <div class="med"><div class="med-l" style="color:var(--green)">Decision Process</div><div class="med-v">Devis → APC → AG → OS → LADES → Facture compta. Confirmé JC.</div><div class="med-s ms-q">Qualifié</div></div>
+        <div class="med"><div class="med-l" style="color:var(--green)">Identify Pain</div><div class="med-v">DTG/PPPT obligatoires légalement. Deadline décret tertiaire.</div><div class="med-s ms-q">Qualifié</div></div>
+        <div class="med"><div class="med-l" style="color:var(--green)">Paper Process</div><div class="med-v">OS signé. Facture LADES. Virement compta via Lemonway.</div><div class="med-s ms-q">Qualifié</div></div>
+        <div class="med"><div class="med-l" style="color:var(--green)">Decision Criteria</div><div class="med-v">Conformité APC, délais, prix. "Toutes factures → OPTEE" (mars 2026).</div><div class="med-s ms-q">Qualifié</div></div>
+        <div class="med"><div class="med-l" style="color:var(--amber)">Champion</div><div class="med-v">Christèle : solide. Jean-Charles AMO : potentiel non confirmé.</div><div class="med-s ms-p">Partiel</div></div>
+        <div class="med"><div class="med-l" style="color:var(--text3)">Competition</div><div class="med-v">Aucun concurrent mentionné. Optee = seul référent DTG.</div><div class="med-s ms-u">Inconnu</div></div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="sec"><div class="sc">
+    <div class="sh"><div class="sl sl-deal ltrd">L</div><div class="st">Leviers d'influence · Cialdini</div></div>
+    <div class="sb">
+      <div class="lev"><div class="levicon">🔗</div><div><div class="levt">🟢 TRÈS FORT — Réciprocité · 14 mois de livraisons</div><div class="levd">20+ immeubles livrés sans remise en cause. Track record prouvé.</div><div class="levph">"En 14 mois on a livré 20 immeubles — je veux simplifier les paiements pour que ça soit aussi fluide."</div></div></div>
+      <div class="lev"><div class="levicon">📐</div><div><div class="levt">🟢 FORT — Cohérence · Engagement mars 2026</div><div class="levd">"Toutes les factures transitent par OPTEE" — son propre engagement écrit.</div><div class="levph">"Tu avais confirmé en mars que tout passe par nous — est-ce que la compta a bien mis ça à jour ?"</div></div></div>
+      <div class="lev"><div class="levicon">⏰</div><div><div class="levt">🟢 FORT — Rareté réelle · Calendrier AG</div><div class="levd">Jean-Charles ne peut pas signer avant AG. Manquer une AG = report d'un an.</div><div class="levph">"Pour les 3 devis en cours — vos prochaines AG c'est quand ?"</div></div></div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ══ ACTION ═════════════════════════════════════════════════════ -->
+<div class="cg">
+  <div class="ch"><div class="cd" style="background:var(--green)"></div><div class="cl">Action · Réunion Christèle</div><div class="cline"></div></div>
+
+  <div class="sec"><div class="sc">
+    <div class="sh"><div class="sl sl-act ltra">N</div><div class="st">Recommandations meeting</div></div>
+    <div class="sb">
+      <div class="ri"><div class="rn">01</div><div><div class="rph">Ouverture · min 0–3</div><div class="rtxt">Reconnaître les frictions Lemonway en ouverture.</div><div class="rwy">Phase stagnation (score −2 pts). Les ignorer = perte de crédibilité.</div><div class="rsig">Score Mémoire Relationnelle · Réciprocité 52 · Conf. 90%</div></div></div>
+      <div class="ri"><div class="rn">02</div><div><div class="rph">Qualification account · min 3–8</div><div class="rtxt">"Combien d'immeubles dans votre parc n'ont pas encore leur DTG cette année ?"</div><div class="rwy">CSJC gère 80 cop. — 60 non adressés. La question déverrouille le pipeline account.</div><div class="rsig">Externe : 80 cop. / 6 704 lots · registre copropriétés · Conf. 85%</div></div></div>
+      <div class="ri"><div class="rn">03</div><div><div class="rph">AG Planning · min 8–15</div><div class="rtxt">Calendrier des prochaines AG pour les 3 devis en cours (0094, 0129, 0137).</div><div class="rwy">JC contraint par rythme des AG. Anticiper 3 mois = débloquer les signatures.</div><div class="rsig">Observable · JC email avril 2025 · Conf. 85%</div></div></div>
+      <div class="ri"><div class="rn">04</div><div><div class="rph">Qualifier Catherine Albanesi · si ouverture</div><div class="rtxt">"Christèle, Catherine Albanesi — c'est votre associée ? Elle est impliquée dans les décisions du cabinet ?"</div><div class="rwy">Représentante légale SARL identifiée externalement. Angle mort critique à combler.</div><div class="rsig">Source FNAIM · Angle mort compte · Conf. 80%</div></div></div>
+      <div class="ri"><div class="rn">05</div><div><div class="rph">AMO Jean-Charles · si ouverture</div><div class="rtxt">"La proposition AMO pour Robert Branchard — elle a été présentée en AG ? Suite donnée ?"</div><div class="rwy">JC a envoyé la convocation AG = signal d'intérêt. Issue inconnue depuis avril 2025.</div><div class="rsig">Calendar event · Conf. 70%</div></div></div>
+    </div>
+  </div></div>
+
+  <div class="sec"><div class="sc">
+    <div class="sh"><div class="sl sl-act ltra" style="font-size:9px">Nbis</div><div class="st">Pre-Suasion · Email J-1</div></div>
+    <div class="sb">
+      <div class="two">
+        <div class="ps"><div class="ps-t">📧 Email J-1 (profil S1)</div><div class="ps-i">Sujet : "Avant notre échange — tableau de suivi CSJC"</div><div class="ps-i">Contenu : 20 immeubles + statuts + 3 devis en cours</div><div class="ps-i">Timing : 17h la veille · Ne pas envoyer de relance paiement</div></div>
+        <div class="ps"><div class="ps-t">🗂️ Ordre des sujets</div><div class="ps-i">1er : frictions Lemonway (leur problème d'abord)</div><div class="ps-i">2e : portefeuille complet (60 immeubles restants)</div><div class="ps-i">3e : AG planning devis en cours · Dernier : AMO</div></div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="sec"><div class="sc">
+    <div class="sh"><div class="sl sl-act ltra" style="font-size:9px">Nter</div><div class="st">Pivots en cours de réunion</div></div>
+    <div class="sb">
+      <div class="piv"><div class="piv-s">Signal : "Je vais transmettre à la compta"</div><div class="piv-ph">"Avant de transmettre — peut-on régler le Lemonway en direct là, ça nous fait gagner du temps ?"</div><div class="piv-w">Intercepter avant la délégation permet de traiter en direct.</div></div>
+      <div class="piv"><div class="piv-s">Signal : "On attend l'accord de l'APC"</div><div class="piv-ph">"Le contact APC pour cet immeuble c'est qui — Maxence Bailly ou Claire Poisson-Quinton ?"</div><div class="piv-w">Connaître les contacts APC de mémoire = effet de compétence fort.</div></div>
+      <div class="piv"><div class="piv-s">Signal : monosyllabes ou regard ailleurs</div><div class="piv-ph">"Je t'envoie ce soir le tableau des AG avec les devis en cours — tu veux que j'inclue les 60 immeubles restants ?"</div><div class="piv-w">Proposer une action concrète immédiate réactive l'attention S1.</div></div>
+    </div>
+  </div></div>
+
+  <div class="sec"><div class="sc">
+    <div class="sh"><div class="sl sl-act ltra">O</div><div class="st">Objections · Anti-Patterns</div><div class="scnf">OBLIGATOIRE</div></div>
+    <div class="sb">
+      <div class="obj"><div class="obj-v">"Les virements ont été faits — c'est Lemonway le problème, pas nous."</div><div style="display:flex;gap:8px;margin-bottom:8px"><span class="tag ta" style="font-size:10px">85%</span><span class="tag tb" style="font-size:10px">Défensif</span></div><div class="obj-r">Reconnaître la bonne foi. Proposer un process pour éviter que ça se reproduise. L'erreur est technique, pas intentionnelle.</div><div class="obj-ap">ne jamais attaquer la compta — adresser le process, pas les personnes.</div></div>
+      <div class="obj"><div class="obj-v">"On ne peut rien signer avant l'AG."</div><div style="display:flex;gap:8px;margin-bottom:8px"><span class="tag ta" style="font-size:10px">90%</span><span class="tag tb" style="font-size:10px">Structurel</span></div><div class="obj-r">Ne pas contester — c'est vrai. Demander les dates des prochaines AG pour anticiper. 3 mois d'avance = déverrouiller.</div><div class="obj-ap">ne jamais demander à bypasser l'AG — Jean-Charles l'a dit clairement.</div></div>
+      <div style="margin-top:12px;padding:12px 14px;background:var(--red-l);border-radius:8px;border:1px solid #FECACA;font-size:11px;color:#991B1B;line-height:1.5">⚠️ <strong>Anti-Pattern principal (Operator S1) :</strong> Envoyer des emails longs avec détails financiers complexes. Elle transfère sans lire entièrement. 2 phrases max + objet clair.</div>
+    </div>
+  </div></div>
+
+  <div class="sec"><div class="sc">
+    <div class="sh"><div class="sl sl-act ltra">Q</div><div class="st">Risques</div></div>
+    <div class="sb">
+      <div class="rk rk-h"><div class="rkb rbh"></div><div><div class="rkt rkth">Élevé — Trésorerie structurellement serrée · RN 2023 = 9 013€</div><div class="rkd">Données externes confirmées. Les tensions paiement ne sont pas accidentelles. Si plusieurs immeubles ont des tensions simultanées, cascade de retards possible.</div></div></div>
+      <div class="rk rk-h"><div class="rkb rbh"></div><div><div class="rkt rkth">Élevé — Catherine Albanesi : représentante légale jamais qualifiée</div><div class="rkd">Si elle a un pouvoir décisionnel sur les contrats ou les budgets, Optee parle à la mauvaise personne depuis 14 mois sans le savoir.</div></div></div>
+      <div class="rk rk-m"><div class="rkb rbm"></div><div><div class="rkt rktm">Moyen — 60 immeubles non adressés = fenêtre de captation concurrentielle</div><div class="rkd">Si un concurrent identifie le portefeuille CSJC avant Optee, 60 immeubles peuvent être captés AG par AG.</div></div></div>
+    </div>
+  </div></div>
+
+  <!-- ══ MULTI-THREADING ══════════════════════════════════════════ -->
+  <div class="sec"><div class="sc">
+    <div class="sh">
+      <div class="sl" style="background:linear-gradient(135deg,#1D4ED8,#0B8878)"><span style="color:#fff;font-size:11px;font-weight:700">MT</span></div>
+      <div class="st">Multi-threading · Qui adresser en dehors de Christèle</div>
+      <div class="scnf">Account-first · Nouveau</div>
+    </div>
+    <div class="sb">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:14px;padding:10px 14px;background:var(--accent-l);border-radius:8px;border:1px solid var(--accent-m)">
+        💡 <strong>Principe :</strong> Chaque réunion avec Christèle est un mouvement dans le compte CSJC, pas une fin en soi. Ces contacts doivent être adressés en parallèle pour maximiser la surface commerciale.
+      </div>
+
+      <div class="mt-card">
+        <div class="mt-av" style="background:#7C3AED">JCA</div>
+        <div>
+          <div class="mt-name">Jean-Charles Albanesi — Gérant légal</div>
+          <div class="mt-sub">jcalbanesi@csjc.fr · Dernier contact : 51j</div>
+          <div class="mt-why">Seul à pouvoir décider les AMO en AG. Contrôle le calendrier AG de tout le portefeuille. C'est le levier pour adresser les 60 immeubles restants.</div>
+          <div class="mt-angle">AMO Robert Branchard → relancer sur l'issue AG · Calendrier AG immeubles restants · Démarche directe sur OS urgent</div>
+          <div class="mt-timing">Timing : 3 mois avant prochaine AG identifiée · Via Christèle ou direct sur OS urgent</div>
+        </div>
+      </div>
+
+      <div class="mt-card">
+        <div class="mt-av" style="background:#92400E">?</div>
+        <div>
+          <div class="mt-name">Catherine Albanesi — Représentante légale · Angle mort</div>
+          <div class="mt-sub">Email inconnu · Jamais contactée · Source FNAIM</div>
+          <div class="mt-why">Représentante légale SARL aux côtés de Jean-Charles. Son rôle réel est inconnu. Si elle a un pouvoir décisionnel sur les contrats ou les budgets, ignorer son existence est un risque commercial direct.</div>
+          <div class="mt-angle">Qualifier son rôle via Christèle en réunion aujourd'hui · "Catherine Albanesi est-elle impliquée dans les décisions ?"</div>
+          <div class="mt-timing">Timing : qualifier AUJOURD'HUI — 1 question à Christèle suffit</div>
+        </div>
+      </div>
+
+      <div class="mt-card">
+        <div class="mt-av" style="background:#C47B00">CP</div>
+        <div>
+          <div class="mt-name">Service Comptabilité — compta@csjc.fr</div>
+          <div class="mt-sub">compta@csjc.fr · Dernier contact : 22j</div>
+          <div class="mt-why">Gatekeeper financier. Source des erreurs Lemonway. Trésorerie serrée sur certains comptes. Un email direct avec le process clarifié évite 80% des frictions.</div>
+          <div class="mt-angle">Email process simplifié après résolution Lemonway avec Christèle · Confirmer que le routing "toutes factures → OPTEE" est bien implémenté</div>
+          <div class="mt-timing">Timing : J+2 après le meeting</div>
+        </div>
+      </div>
+
+    </div>
+  </div></div>
+
+  <div class="sec"><div class="sc">
+    <div class="sh"><div class="sl sl-act ltra">R</div><div class="st">Next steps</div></div>
+    <div class="sb">
+      <div class="ns-g">
+        <div class="nsi"><div class="nscb"></div><div><div class="nst">Envoyer tableau suivi 20 immeubles — J-1 · 17h</div><div class="nsm"><span class="nsw">J-1</span><span class="nsp">Obligatoire</span></div></div></div>
+        <div class="nsi"><div class="nscb"></div><div><div class="nst">Qualifier rôle de Catherine Albanesi en meeting</div><div class="nsm"><span class="nsw">En meeting</span><span class="nsp">Angle mort</span></div></div></div>
+        <div class="nsi"><div class="nscb"></div><div><div class="nst">Adresser frictions Lemonway en ouverture</div><div class="nsm"><span class="nsw">En meeting</span><span class="nsp">Obligatoire</span></div></div></div>
+        <div class="nsi"><div class="nscb"></div><div><div class="nst">Qualifier portefeuille complet (60 immeubles restants)</div><div class="nsm"><span class="nsw">En meeting</span><span class="nsp">Priorité 1</span></div></div></div>
+        <div class="nsi"><div class="nscb"></div><div><div class="nst">Calendrier AG pour 0094, 0129, 0137</div><div class="nsm"><span class="nsw">En meeting</span><span class="nsp">Priorité 1</span></div></div></div>
+        <div class="nsi"><div class="nscb"></div><div><div class="nst">Email compta — process Lemonway simplifié</div><div class="nsm"><span class="nsw">J+2</span><span class="nsp">Multi-threading</span></div></div></div>
+        <div class="nsi"><div class="nscb"></div><div><div class="nst">Contacter Jean-Charles · AMO + calendrier AG</div><div class="nsm"><span class="nsw">J+30</span><span class="nsp">Multi-threading</span></div></div></div>
+        <div class="nsi"><div class="nscb"></div><div><div class="nst">Relancer compta sur solde Ledru Rollin (2 400€)</div><div class="nsm"><span class="nsw">J+7</span><span class="nsp">Priorité 2</span></div></div></div>
+      </div>
+    </div>
+  </div></div>
+
+</div>
+</div>
+
+<script>
+const DATA = {
+  all:[
+    {d:'Mar 25',s:38,sA:null,ev:'Premiers OS',type:'pos'},
+    {d:'Avr 25',s:54,sA:null,ev:'Accord paiement',type:'pos'},
+    {d:'Mai 25',s:71,sA:68,ev:'8 OS en 1 jour 🚀',type:'peak'},
+    {d:'Jun 25',s:67,sA:70,ev:null,type:'neutral'},
+    {d:'Jul 25',s:64,sA:70,ev:null,type:'neutral'},
+    {d:'Aoû 25',s:63,sA:69,ev:null,type:'neutral'},
+    {d:'Sep 25',s:66,sA:71,ev:'Audit DTG&PPPT',type:'pos'},
+    {d:'Oct 25',s:65,sA:71,ev:null,type:'neutral'},
+    {d:'Nov 25',s:63,sA:70,ev:null,type:'neutral'},
+    {d:'Déc 25',s:62,sA:69,ev:null,type:'neutral'},
+    {d:'Jan 26',s:68,sA:72,ev:'Nouveaux devis',type:'pos'},
+    {d:'Fév 26',s:65,sA:71,ev:null,type:'neutral'},
+    {d:'Mar 26',s:61,sA:69,ev:'Frictions Lemonway',type:'neg'},
+    {d:'Avr 26',s:57,sA:68,ev:'Trésorerie Ledru ⚠',type:'neg'},
+    {d:'Mai 26',s:65,sA:72,ev:'Avis de virement',type:'pos'},
+  ]
+};
+
+let curWin=0;
+function setWin(w){
+  curWin=w;
+  const btns=document.querySelectorAll('#filters .cf');
+  btns.forEach(b=>b.classList.remove('active'));
+  btns[w===6?0:w===12?1:2].classList.add('active');
+  drawChart(w);
+}
+
+function drawChart(win){
+  const canvas=document.getElementById('chart');
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  const dpr=window.devicePixelRatio||1;
+  const W=canvas.offsetWidth, H=155;
+  canvas.width=W*dpr; canvas.height=H*dpr; ctx.scale(dpr,dpr);
+  const pts=win===0?DATA.all:DATA.all.slice(Math.max(0,DATA.all.length-win));
+  const pad={t:16,r:16,b:34,l:44};
+  const cw=W-pad.l-pad.r,ch=H-pad.t-pad.b;
+  const allScores=[...pts.map(p=>p.s),...pts.filter(p=>p.sA).map(p=>p.sA)];
+  const minS=Math.max(0,Math.min(...allScores)-8);
+  const maxS=Math.min(100,Math.max(...allScores)+8);
+  function xp(i){return pad.l+(i/Math.max(pts.length-1,1))*cw;}
+  function yp(v){return pad.t+(1-(v-minS)/(maxS-minS))*ch;}
+
+  // Grille
+  ctx.strokeStyle='#E8EBF0';ctx.lineWidth=0.5;
+  [20,40,60,80,100].forEach(v=>{
+    if(v<minS||v>maxS)return;
+    const y=yp(v);ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
+    ctx.fillStyle='#9AA0B0';ctx.font='9px monospace';ctx.textAlign='right';ctx.fillText(v,pad.l-4,y+3);
+  });
+
+  // Zones
+  const z70=yp(70),z40=yp(40);
+  ctx.fillStyle='rgba(10,124,74,0.04)';ctx.fillRect(pad.l,pad.t,cw,Math.max(0,z70-pad.t));
+  ctx.fillStyle='rgba(196,123,0,0.04)';ctx.fillRect(pad.l,z70,cw,Math.max(0,z40-z70));
+  ctx.fillStyle='rgba(200,41,46,0.04)';ctx.fillRect(pad.l,z40,cw,Math.max(0,pad.t+ch-z40));
+
+  // Fill contact score
+  const grad=ctx.createLinearGradient(0,pad.t,0,pad.t+ch);
+  grad.addColorStop(0,'rgba(52,211,153,0.2)');grad.addColorStop(1,'rgba(52,211,153,0)');
+  ctx.beginPath();
+  pts.forEach((p,i)=>{
+    if(i===0)ctx.moveTo(xp(i),yp(p.s));
+    else{const px=xp(i-1),py=yp(pts[i-1].s),cx2=xp(i),cy2=yp(p.s);ctx.bezierCurveTo((px+cx2)/2,py,(px+cx2)/2,cy2,cx2,cy2);}
+  });
+  ctx.lineTo(xp(pts.length-1),pad.t+ch);ctx.lineTo(xp(0),pad.t+ch);ctx.closePath();
+  ctx.fillStyle=grad;ctx.fill();
+
+  // Ligne contact score
+  ctx.beginPath();ctx.strokeStyle='#34D399';ctx.lineWidth=2;
+  pts.forEach((p,i)=>{
+    if(i===0)ctx.moveTo(xp(i),yp(p.s));
+    else{const px=xp(i-1),py=yp(pts[i-1].s),cx2=xp(i),cy2=yp(p.s);ctx.bezierCurveTo((px+cx2)/2,py,(px+cx2)/2,cy2,cx2,cy2);}
+  });ctx.stroke();
+
+  // Ligne account score (dashed)
+  const accountPts=pts.filter(p=>p.sA!==null);
+  if(accountPts.length>1){
+    ctx.beginPath();ctx.strokeStyle='#1D4ED8';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    const start=pts.findIndex(p=>p.sA!==null);
+    pts.forEach((p,i)=>{
+      if(p.sA===null)return;
+      if(i===start)ctx.moveTo(xp(i),yp(p.sA));
+      else{
+        let prevI=i-1;while(prevI>=0&&pts[prevI].sA===null)prevI--;
+        if(prevI<0)return;
+        const px=xp(prevI),py=yp(pts[prevI].sA),cx2=xp(i),cy2=yp(p.sA);
+        ctx.bezierCurveTo((px+cx2)/2,py,(px+cx2)/2,cy2,cx2,cy2);
+      }
+    });
+    ctx.stroke();ctx.setLineDash([]);
+  }
+
+  // Labels X
+  ctx.fillStyle='#9AA0B0';ctx.font='9px monospace';ctx.textAlign='center';
+  pts.forEach((p,i)=>{
+    if(pts.length<=8||i%Math.ceil(pts.length/8)===0||i===pts.length-1)ctx.fillText(p.d,xp(i),H-5);
+  });
+
+  // Markers
+  pts.forEach((p,i)=>{
+    if(!p.ev){ctx.beginPath();ctx.arc(xp(i),yp(p.s),2.5,0,Math.PI*2);ctx.fillStyle='rgba(52,211,153,0.4)';ctx.fill();return;}
+    const col=p.type==='neg'?'#C8292E':p.type==='peak'?'#F59E0B':'#34D399';
+    ctx.beginPath();ctx.arc(xp(i),yp(p.s),5,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();
+    ctx.beginPath();ctx.arc(xp(i),yp(p.s),5,0,Math.PI*2);ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();
+  });
+
+  // Tooltip
+  const tt=document.getElementById('tt');
+  canvas.onmousemove=function(e){
+    const rect=canvas.getBoundingClientRect(),mx=e.clientX-rect.left;
+    let nearest=0,nd=Infinity;
+    pts.forEach((p,i)=>{const d=Math.abs(xp(i)-mx);if(d<nd){nd=d;nearest=i;}});
+    const p=pts[nearest];
+    tt.style.display='block';
+    tt.innerHTML=`<strong>${p.d}</strong><br>Contact: ${p.s}/100${p.sA?` · Account: ${p.sA}/100`:''}${p.ev?'<br>'+p.ev:''}`;
+    let lx=xp(nearest)+10;if(lx+200>W)lx=xp(nearest)-210;
+    tt.style.left=lx+'px';tt.style.top=(yp(p.s)-28)+'px';
+  };
+  canvas.onmouseleave=()=>{tt.style.display='none';};
+}
+
+function setLevel(l){
+  document.querySelectorAll('.nav-lvl-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`.nav-lvl-btn:${l==='account'?'first':'last'}-of-type`).classList.add('active');
+}
+
+window.addEventListener('load',()=>drawChart(0));
+window.addEventListener('resize',()=>drawChart(curWin));
+</script>
+</body>
+</html>

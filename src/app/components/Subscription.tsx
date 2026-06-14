@@ -191,7 +191,7 @@ export default function Subscription() {
           transition={{ duration: 0.6 }}
           className="mb-12"
         >
-          <h1 className="text-4xl font-semibold mb-2">Abonnement & Facturation</h1>
+          <h1 className="text-4xl font-bold mb-2">Abonnement & Facturation</h1>
           <p className="text-muted-foreground">
             Gérez votre plan, vos licences et votre facturation.
           </p>
@@ -225,7 +225,7 @@ export default function Subscription() {
                     <PlanIcon className={`size-6 ${planColor}`} />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-semibold">Plan {currentPlan.name}</h2>
+                    <h2 className="text-2xl font-bold">Plan {currentPlan.name}</h2>
                     <p className="text-muted-foreground text-sm">
                       Actif depuis le {formatDate(subscription.started_at)} · Renouvellement le {formatDate(subscription.current_period_end)}
                     </p>
@@ -313,7 +313,7 @@ export default function Subscription() {
             className="bg-muted/30 rounded-3xl p-5 border border-border mb-8 text-center md:p-8"
           >
             <Mail className="size-12 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Aucun abonnement actif</h2>
+            <h2 className="text-xl font-bold mb-2">Aucun abonnement actif</h2>
             <p className="text-muted-foreground">Choisissez un plan ci-dessous pour commencer.</p>
           </motion.div>
         )}
@@ -383,7 +383,7 @@ export default function Subscription() {
                   <div className="size-12 bg-muted/50 rounded-xl flex items-center justify-center mb-4">
                     <PIcon className={`size-6 ${pColor}`} />
                   </div>
-                  <h3 className="text-2xl font-semibold mb-1">{plan.name}</h3>
+                  <h3 className="text-2xl font-bold mb-1">{plan.name}</h3>
                   <p className="text-xs text-muted-foreground mb-3">{plan.description}</p>
                   {isCustom ? (
                     <p className="text-3xl font-semibold">Sur devis</p>
@@ -446,7 +446,7 @@ export default function Subscription() {
         >
           {/* Payment Method */}
           <div className="bg-card rounded-2xl p-6 border border-border">
-            <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
               <CreditCard className="size-5 text-primary" />
               Moyen de paiement
             </h3>
@@ -463,7 +463,7 @@ export default function Subscription() {
 
           {/* Billing Info */}
           <div className="bg-card rounded-2xl p-6 border border-border">
-            <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
               <Building2 className="size-5 text-primary" />
               Informations de facturation
             </h3>
@@ -486,7 +486,7 @@ export default function Subscription() {
           transition={{ duration: 0.6, delay: 0.8 }}
           className="bg-card rounded-2xl p-6 border border-border"
         >
-          <h3 className="text-xl font-semibold mb-6">Historique de facturation</h3>
+          <h3 className="text-xl font-bold mb-6">Historique de facturation</h3>
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <div className="size-16 bg-muted/50 rounded-2xl flex items-center justify-center mb-4">
               <FileText className="size-8 text-muted-foreground" />

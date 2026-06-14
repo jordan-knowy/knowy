@@ -18,6 +18,9 @@ import Relations from './components/Relations';
 import RelationDetail from './components/RelationDetail';
 import ContactDetail from './components/ContactDetail';
 import Contacts from './components/Contacts';
+import Companies from './components/Companies';
+import CompanyDetail from './components/CompanyDetail';
+import BriefExterne from './components/BriefExterne';
 import AccountSettings from './components/AccountSettings';
 import SuperAdmin from './components/SuperAdmin';
 import Subscription from './components/Subscription';
@@ -57,7 +60,7 @@ async function checkOnboardingDone(): Promise<boolean> {
 
 const Spinner = () => (
   <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
-    Chargement de votre espace Knowy...
+    Chargement de votre espace Knowr...
   </div>
 );
 
@@ -147,6 +150,11 @@ export default function App() {
         <Route path="/contacts" element={<ProtectedApp><Layout><Contacts /></Layout></ProtectedApp>} />
         <Route path="/contact/:id" element={<ProtectedApp><Layout><ContactDetail /></Layout></ProtectedApp>} />
         <Route path="/contacts/:id" element={<ProtectedApp><Layout><ContactDetail /></Layout></ProtectedApp>} />
+        {/* Comptes (Accounts) */}
+        <Route path="/companies" element={<ProtectedApp><Layout><Companies /></Layout></ProtectedApp>} />
+        <Route path="/company/:id" element={<ProtectedApp><Layout><CompanyDetail /></Layout></ProtectedApp>} />
+        {/* Brief externe (spec-38) — wedge d'acquisition sans inbox */}
+        <Route path="/brief-externe" element={<ProtectedApp><Layout><BriefExterne /></Layout></ProtectedApp>} />
         <Route path="/subscription" element={<ProtectedApp><Layout><Subscription /></Layout></ProtectedApp>} />
         <Route path="/account" element={<ProtectedApp><Layout><AccountSettings /></Layout></ProtectedApp>} />
         <Route path="/super-admin" element={<ProtectedApp><Layout><SuperAdmin /></Layout></ProtectedApp>} />

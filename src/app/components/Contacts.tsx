@@ -23,6 +23,7 @@ import {
   AlertCircle,
   Brain,
 } from 'lucide-react';
+import PageHeader from './knowr/PageHeader';
 import { supabase } from '../../lib/supabase';
 import { getActiveOrganizationId } from '../../lib/api/org';
 
@@ -175,7 +176,7 @@ function AddContactModal({ onClose, onAdded, orgId }: AddContactModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border">
           <div>
-            <h2 className="text-xl font-semibold">Ajouter un contact</h2>
+            <h2 className="text-xl font-bold">Ajouter un contact</h2>
             <p className="text-xs text-muted-foreground mt-0.5">L'IA enrichira automatiquement le profil cognitif</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-muted rounded-xl transition-colors">
@@ -275,7 +276,7 @@ function AddContactModal({ onClose, onAdded, orgId }: AddContactModalProps) {
               <div className="flex items-start gap-2 p-3 bg-primary/5 rounded-xl border border-primary/10">
                 <Brain className="size-4 text-primary flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-muted-foreground">
-                  L'IA recherchera des informations publiques sur ce contact et rédigera automatiquement son profil cognitif Knowy.
+                  L'IA recherchera des informations publiques sur ce contact et rédigera automatiquement son profil cognitif Knowr.
                 </p>
               </div>
             </>
@@ -569,47 +570,47 @@ export default function Contacts() {
           transition={{ duration: 0.6 }}
           className="mb-8"
         >
-          <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h1 className="text-4xl font-semibold mb-2">Intelligence Relationnelle</h1>
-              <p className="text-muted-foreground flex flex-wrap items-center gap-2 sm:gap-4">
-                {loading ? (
-                  <span className="flex items-center gap-2"><Loader2 className="size-3 animate-spin" /> Chargement…</span>
-                ) : (
-                  <>
-                    <span className="font-medium">{contacts.length} contact{contacts.length !== 1 ? 's' : ''}</span>
-                    {contacts.length > 0 && (
-                      <>
-                        <span className="text-xs">•</span>
-                        <span>{companies.size ?? companies.length} entreprise{companies.length !== 1 ? 's' : ''}</span>
-                        <span className="text-xs">•</span>
-                        <span className="flex items-center gap-1">
-                          <Calendar className="size-3 text-primary" />
-                          {contacts.reduce((s, c) => s + c.meetingsCount, 0)} réunion{contacts.reduce((s, c) => s + c.meetingsCount, 0) !== 1 ? 's' : ''}
-                        </span>
-                      </>
-                    )}
-                  </>
-                )}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <button
-                onClick={loadContacts}
-                className="px-4 py-2 bg-muted hover:bg-muted/70 rounded-xl flex items-center gap-2 text-sm transition-colors"
-              >
-                <RefreshCw className="size-4" />
-                Actualiser
-              </button>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="px-4 py-2 bg-primary text-white hover:bg-accent rounded-xl flex items-center gap-2 text-sm font-medium transition-colors"
-              >
-                <Plus className="size-4" />
-                Ajouter un contact
-              </button>
-            </div>
-          </div>
+          <PageHeader
+            title="Personnes"
+            subtitle={
+              loading ? (
+                <span className="flex items-center gap-2"><Loader2 className="size-3 animate-spin" /> Chargement…</span>
+              ) : (
+                <span className="flex flex-wrap items-center gap-2 sm:gap-3">
+                  <span>{contacts.length} contact{contacts.length !== 1 ? 's' : ''}</span>
+                  {contacts.length > 0 && (
+                    <>
+                      <span>•</span>
+                      <span>{companies.size ?? companies.length} entreprise{companies.length !== 1 ? 's' : ''}</span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="size-3 text-primary" />
+                        {contacts.reduce((s, c) => s + c.meetingsCount, 0)} réunion{contacts.reduce((s, c) => s + c.meetingsCount, 0) !== 1 ? 's' : ''}
+                      </span>
+                    </>
+                  )}
+                </span>
+              )
+            }
+            actions={
+              <>
+                <button
+                  onClick={loadContacts}
+                  className="px-4 py-2 bg-muted hover:bg-muted/70 rounded-xl flex items-center gap-2 text-sm transition-colors"
+                >
+                  <RefreshCw className="size-4" />
+                  Actualiser
+                </button>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="px-4 py-2 bg-primary text-white hover:bg-accent rounded-xl flex items-center gap-2 text-sm font-medium transition-colors"
+                >
+                  <Plus className="size-4" />
+                  Ajouter un contact
+                </button>
+              </>
+            }
+          />
 
           {/* View Toggle + Search */}
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -659,7 +660,7 @@ export default function Contacts() {
             <div className="size-20 bg-muted/50 rounded-3xl flex items-center justify-center mb-6">
               <Users className="size-10 text-muted-foreground" />
             </div>
-            <h2 className="text-2xl font-semibold mb-3">Aucun contact pour le moment</h2>
+            <h2 className="text-2xl font-bold mb-3">Aucun contact pour le moment</h2>
             <p className="text-muted-foreground max-w-md mb-8">
               Vos contacts apparaîtront automatiquement après la synchronisation de votre Google Calendar.
               Chaque participant à vos réunions externes sera importé.

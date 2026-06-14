@@ -55,7 +55,7 @@ export function useCurrentProfile() {
     const metadata = user.user_metadata ?? {};
     const email = user.email ?? '';
     const fullName = profileRow?.full_name ?? metadata.full_name ?? metadata.name ?? email;
-    const companyName = profileRow?.company_name ?? metadata.company_name ?? 'Workspace Knowy';
+    const companyName = profileRow?.company_name ?? metadata.company_name ?? 'Workspace Knowr';
     const roleTitle = profileRow?.role_title ?? metadata.role_title ?? 'Compte test';
 
     return {

@@ -1,594 +1,840 @@
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
-  ArrowLeft,
-  Building2,
-  Users,
-  TrendingUp,
-  Target,
-  AlertCircle,
-  Network,
-  Newspaper,
-  Star,
-  ArrowRight,
-  Mail,
-  Calendar,
-  Clock,
-  BarChart3
+  ArrowLeft, Building2, Users, Calendar, Mail,
+  Clock, Star, Loader2, AlertTriangle,
+  TrendingUp, TrendingDown, Minus, RefreshCw, ChevronRight,
+  Globe,
 } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { getActiveOrganizationId } from '../../lib/api/org';
+import { computeVerdict } from '../../lib/scoring';
+import { resolveAccountType, accountTypeConfig } from '../../lib/accountType';
+import VerdictCard from './knowr/VerdictCard';
+import ConfidenceRing from './knowr/ConfidenceRing';
+import ViewSwitcher from './knowr/ViewSwitcher';
+import SignalRail, { type Signal } from './knowr/SignalRail';
+import CollapsibleSection from './knowr/CollapsibleSection';
 
-interface Company {
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface CompanyRow {
   id: string;
   name: string;
-  logo: string;
-  industry: string;
-  founded: string;
-  businessModel: string;
-  employees: string;
-  growth: string;
-  activeContacts: number;
-  totalContacts: number;
-  emails30d: number;
-  meetings30d: number;
-  healthScore: number;
-  lastContactDays: number;
-  funding: {
-    stage: string;
-    valuation: string;
-    totalRaised: string;
-    lastRound: string;
-    investors: string[];
-  };
-  financials: {
-    revenue: string;
-    revenueGrowth: string;
-    customers: string;
-    averageContractValue: string;
-  };
-  departments: { name: string; size: string; growth: string }[];
-  recentNews: { title: string; date: string; type: string }[];
-  positioning: string;
-  competitors: string[];
-  locations: string[];
-  challenges: string[];
-  priorities: string[];
+  domain: string | null;
+  industry: string | null;
+  size_label: string | null;
+  public_context: Record<string, any>;
+  account_type: string | null;
+  account_type_confidence: number | null;
 }
 
-interface Contact {
+interface ContactRow {
   id: string;
-  name: string;
-  role: string;
-  photo: string;
-  engagementScore: number;
-  isDecisionMaker: boolean;
-  lastContactDays: number;
+  full_name: string;
+  email: string | null;
+  role_title: string | null;
+  avatar_url: string | null;
+  linkedin_url: string | null;
+  influence_level: number | null;
+  badge: string | null;
+  engagement_score: number | null;
+  score_phase: string | null;
+  score_delta: number | null;
+  global_confidence: number | null;
+  last_contact_at: string | null;
 }
 
+interface MeetingRow {
+  id: string;
+  title: string;
+  starts_at: string;
+  brief_status: string;
+  is_external: boolean | null;
+  has_decision_maker: boolean;
+}
+
+interface BehavioralSignal {
+  id: string;
+  contact_id: string;
+  signal_type: string;
+  text: string;
+  inference: string | null;
+  inference_level: string;
+  confidence: number;
+  source_type: string;
+  observed_at: string | null;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function relDate(iso: string): string {
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (d === 0) return "Aujourd'hui";
+  if (d === 1) return 'Hier';
+  if (d < 7) return `Il y a ${d}j`;
+  if (d < 30) return `Il y a ${Math.floor(d / 7)} sem.`;
+  return `Il y a ${Math.floor(d / 30)} mois`;
+}
+
+function daysSince(iso: string | null): number | null {
+  if (!iso) return null;
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+}
+
+function initials(name: string) {
+  return name.split(/[\s\-&]+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+}
+
+function scoreColor(s: number | null) {
+  if (s === null) return '#9082B8';
+  if (s >= 70) return '#2EA86A';
+  if (s >= 40) return '#6E50C8';
+  return '#D94F63';
+}
+
+function PhaseIcon({ phase }: { phase: string | null }) {
+  if (phase === 'growth')  return <TrendingUp  className="size-3.5 text-success" />;
+  if (phase === 'decline') return <TrendingDown className="size-3.5 text-destructive" />;
+  return <Minus className="size-3.5 text-muted-foreground" />;
+}
+
+// Map signal_type → SignalRail tag
+const SIGNAL_TAG_MAP: Record<string, Signal['tag']> = {
+  churn:      'Churn',
+  risk:       'Risque',
+  risque:     'Risque',
+  objection:  'Risque',
+  lever:      'Levier',
+  levier:     'Levier',
+  opportunit: 'Levier',
+  job_change: 'Mobilité',
+  mobility:   'Mobilité',
+  mobilite:   'Mobilité',
+  reseau:     'Réseau',
+  network:    'Réseau',
+  market:     'Marché',
+  marche:     'Marché',
+  growth:     'Croissance',
+  croissance: 'Croissance',
+  presence:   'Présence',
+  linkedin:   'Présence',
+};
+
+function mapSignalTag(signal_type: string): Signal['tag'] {
+  const lower = signal_type.toLowerCase();
+  for (const [key, tag] of Object.entries(SIGNAL_TAG_MAP)) {
+    if (lower.includes(key)) return tag;
+  }
+  return 'Présence';
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 export default function CompanyDetail() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // Mock data
-  const allCompanies: Company[] = [
-    {
-      id: 'c1',
-      name: 'Contentsquare',
-      logo: '🎯',
-      industry: 'Digital Experience Analytics',
-      founded: '2012',
-      businessModel: 'SaaS B2B',
-      employees: '1,200+',
-      growth: '+45% YoY',
-      activeContacts: 8,
-      totalContacts: 12,
-      emails30d: 127,
-      meetings30d: 6,
-      healthScore: 95,
-      lastContactDays: 2,
-      funding: {
-        stage: 'Series F',
-        valuation: '$5.6B',
-        totalRaised: '$800M',
-        lastRound: 'Series F - $500M (2024)',
-        investors: ['SoftBank', 'Eurazeo', 'Canaan Partners', 'Highland Europe']
-      },
-      financials: {
-        revenue: '$200M ARR',
-        revenueGrowth: '+60% YoY',
-        customers: '1,300+',
-        averageContractValue: '$150K'
-      },
-      departments: [
-        { name: 'Engineering', size: '450+', growth: '+35% cette année' },
-        { name: 'Sales & BD', size: '280+', growth: '+50% cette année' },
-        { name: 'Customer Success', size: '180+', growth: '+40% cette année' },
-        { name: 'Marketing', size: '120+', growth: '+30% cette année' },
-        { name: 'Product', size: '85+', growth: '+45% cette année' },
-        { name: 'Operations', size: '85+', growth: '+25% cette année' }
-      ],
-      recentNews: [
-        { title: 'Acquisition de Hotjar pour $120M', date: '2024', type: 'expansion' },
-        { title: 'Ouverture bureau Tokyo', date: 'Jan 2026', type: 'expansion' },
-        { title: '150+ nouvelles embauches en engineering', date: 'Q1 2026', type: 'hiring' },
-        { title: 'Nouveau VP of Sales EMEA', date: 'Mars 2026', type: 'leadership' }
-      ],
-      positioning: 'Leader du marché de l\'analyse d\'expérience digitale, concurrençant des acteurs établis comme Adobe Analytics et Google Analytics pour les entreprises mid-market et enterprise.',
-      competitors: ['Adobe Analytics', 'Google Analytics 360', 'Mixpanel', 'Amplitude', 'Heap'],
-      locations: ['Paris', 'New York', 'London', 'Munich', 'Tokyo', 'San Francisco', 'Singapore'],
-      challenges: [
-        'Compétition intense avec Adobe et Google sur le segment enterprise',
-        'Besoin d\'accélérer l\'intégration de Hotjar post-acquisition',
-        'Scaling international rapide nécessite harmonisation processus'
-      ],
-      priorities: [
-        'Expansion Asie-Pacifique (focus Japon et Singapour)',
-        'Lancement nouvelle plateforme AI-powered analytics Q3 2026',
-        'Consolidation position enterprise en Europe',
-        'Intégration complète Hotjar dans la suite produit'
-      ]
-    },
-    {
-      id: 'c2',
-      name: 'Qonto',
-      logo: '💳',
-      industry: 'Fintech - Business Banking',
-      founded: '2016',
-      businessModel: 'SaaS B2B Fintech',
-      employees: '1,600+',
-      growth: '+55% YoY',
-      activeContacts: 6,
-      totalContacts: 8,
-      emails30d: 184,
-      meetings30d: 9,
-      healthScore: 92,
-      lastContactDays: 1,
-      funding: {
-        stage: 'Series D',
-        valuation: '$5.0B',
-        totalRaised: '$900M',
-        lastRound: 'Series D - $550M (2023)',
-        investors: ['Tencent', 'TCV', 'Valar Ventures', 'Alven Capital']
-      },
-      financials: {
-        revenue: '$150M ARR',
-        revenueGrowth: '+70% YoY',
-        customers: '450K+',
-        averageContractValue: '$65K'
-      },
-      departments: [
-        { name: 'Engineering & Product', size: '520+', growth: '+40% cette année' },
-        { name: 'Sales', size: '380+', growth: '+60% cette année' },
-        { name: 'Customer Support', size: '240+', growth: '+45% cette année' },
-        { name: 'Operations & Risk', size: '180+', growth: '+35% cette année' },
-        { name: 'Marketing', size: '95+', growth: '+30% cette année' },
-        { name: 'Finance', size: '85+', growth: '+25% cette année' }
-      ],
-      recentNews: [
-        { title: 'Lancement en Espagne et Italie', date: 'Fév 2026', type: 'expansion' },
-        { title: 'Partenariat stratégique avec Stripe', date: 'Mars 2026', type: 'product' },
-        { title: 'Licence bancaire européenne obtenue', date: 'Jan 2026', type: 'leadership' },
-        { title: '200+ nouvelles embauches prévues en 2026', date: 'Q1 2026', type: 'hiring' }
-      ],
-      positioning: 'Challenger des banques traditionnelles pour les PME et startups en Europe. Alternative moderne à des acteurs établis comme les banques traditionnelles et des néo-banques comme Revolut Business.',
-      competitors: ['Revolut Business', 'N26 Business', 'Shine', 'Penta', 'Banques traditionnelles'],
-      locations: ['Paris', 'Berlin', 'Milan', 'Madrid', 'Barcelona', 'Amsterdam'],
-      challenges: [
-        'Régulation bancaire complexe et différente par pays européen',
-        'Compétition féroce avec Revolut sur segment PME',
-        'Besoin de maintenir croissance tout en respectant contraintes réglementaires'
-      ],
-      priorities: [
-        'Expansion dans 5 nouveaux pays européens en 2026',
-        'Lancement offre crédit pour PME Q2 2026',
-        'Renforcement équipe compliance et risk management',
-        'Amélioration produits d\'investissement et épargne'
-      ]
+  const [company,   setCompany]   = useState<CompanyRow | null>(null);
+  const [contacts,  setContacts]  = useState<ContactRow[]>([]);
+  const [meetings,  setMeetings]  = useState<MeetingRow[]>([]);
+  const [signals,   setSignals]   = useState<BehavioralSignal[]>([]);
+  const [emailCount30d, setEmailCount30d] = useState<number>(0);
+  const [loading,   setLoading]   = useState(true);
+  const [showAllMeetings, setShowAllMeetings] = useState(false);
+
+  const loadData = useCallback(async () => {
+    if (!supabase || !id) { setLoading(false); return; }
+    try {
+      const orgId = await getActiveOrganizationId();
+      if (!orgId) { setLoading(false); return; }
+
+      // ── 1. Load company ────────────────────────────────────────────────
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      let companyData: CompanyRow | null = null;
+
+      if (isUUID) {
+        const { data } = await supabase
+          .from('companies')
+          .select('id, name, domain, industry, size_label, public_context, account_type, account_type_confidence')
+          .eq('id', id)
+          .eq('organization_id', orgId)
+          .maybeSingle();
+        companyData = data as CompanyRow | null;
+      }
+
+      // Fallback: search by name-slug if UUID lookup failed
+      if (!companyData) {
+        const { data } = await supabase
+          .from('companies')
+          .select('id, name, domain, industry, size_label, public_context, account_type, account_type_confidence')
+          .eq('organization_id', orgId)
+          .ilike('name', `%${decodeURIComponent(id)}%`)
+          .limit(1)
+          .maybeSingle();
+        companyData = data as CompanyRow | null;
+      }
+
+      if (!companyData) { setLoading(false); return; }
+      setCompany(companyData);
+
+      // ── 2. Load contacts for this company ─────────────────────────────
+      const { data: rawContacts } = await supabase
+        .from('contacts')
+        .select('id, full_name, email, role_title, avatar_url, linkedin_url, influence_level, badge')
+        .eq('company_id', companyData.id)
+        .eq('organization_id', orgId)
+        .is('merged_into_contact_id', null);
+
+      const contactRows = (rawContacts ?? []) as any[];
+      const contactIds = contactRows.map(c => c.id);
+
+      // ── 3. Load cognitive profiles for contacts ────────────────────────
+      let profileMap: Record<string, any> = {};
+      if (contactIds.length) {
+        const { data: profiles } = await supabase
+          .from('cognitive_profiles')
+          .select('contact_id, engagement_score, score_phase, score_delta, global_confidence')
+          .in('contact_id', contactIds)
+          .eq('organization_id', orgId)
+          .order('profile_version', { ascending: false });
+
+        for (const p of (profiles ?? []) as any[]) {
+          if (!profileMap[p.contact_id]) profileMap[p.contact_id] = p;
+        }
+      }
+
+      // ── 4. Last contact date per contact (latest email or meeting) ─────
+      let lastContactMap: Record<string, string> = {};
+      if (contactIds.length) {
+        const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
+
+        const [{ data: msgs }, { data: meetParts }] = await Promise.all([
+          supabase
+            .from('communication_messages')
+            .select('contact_id, sent_at')
+            .eq('organization_id', orgId)
+            .in('contact_id', contactIds)
+            .order('sent_at', { ascending: false }),
+          supabase
+            .from('meeting_participants')
+            .select('contact_id, meetings(starts_at)')
+            .eq('organization_id', orgId)
+            .in('contact_id', contactIds),
+        ]);
+
+        // emails 30d count
+        const recent = (msgs ?? []).filter((m: any) => m.sent_at && m.sent_at > since30);
+        setEmailCount30d(recent.length);
+
+        for (const m of (msgs ?? []) as any[]) {
+          if (!lastContactMap[m.contact_id] || m.sent_at > lastContactMap[m.contact_id]) {
+            lastContactMap[m.contact_id] = m.sent_at;
+          }
+        }
+        for (const mp of (meetParts ?? []) as any[]) {
+          const sa = mp.meetings?.starts_at;
+          if (sa && (!lastContactMap[mp.contact_id] || sa > lastContactMap[mp.contact_id])) {
+            lastContactMap[mp.contact_id] = sa;
+          }
+        }
+      }
+
+      const enrichedContacts: ContactRow[] = contactRows.map(c => ({
+        ...c,
+        engagement_score:  profileMap[c.id]?.engagement_score  ?? null,
+        score_phase:       profileMap[c.id]?.score_phase       ?? null,
+        score_delta:       profileMap[c.id]?.score_delta       ?? null,
+        global_confidence: profileMap[c.id]?.global_confidence ?? null,
+        last_contact_at:   lastContactMap[c.id]                ?? null,
+      }));
+
+      setContacts(enrichedContacts.sort((a, b) => (b.engagement_score ?? 0) - (a.engagement_score ?? 0)));
+
+      // ── 5. Load meetings for company ───────────────────────────────────
+      const { data: mtgs } = await supabase
+        .from('meetings')
+        .select('id, title, starts_at, brief_status, is_external, has_decision_maker')
+        .eq('company_id', companyData.id)
+        .eq('organization_id', orgId)
+        .order('starts_at', { ascending: false })
+        .limit(20);
+
+      setMeetings((mtgs ?? []) as MeetingRow[]);
+
+      // ── 6. Load behavioral signals for all contacts ────────────────────
+      if (contactIds.length) {
+        const { data: sigs } = await supabase
+          .from('behavioral_signals')
+          .select('id, contact_id, signal_type, text, inference, inference_level, confidence, source_type, observed_at')
+          .eq('organization_id', orgId)
+          .in('contact_id', contactIds)
+          .order('observed_at', { ascending: false })
+          .limit(24);
+
+        setSignals((sigs ?? []) as BehavioralSignal[]);
+      }
+
+    } catch (e) {
+      console.error('CompanyDetail load error:', e);
+    } finally {
+      setLoading(false);
     }
-  ];
+  }, [id]);
 
-  const company = allCompanies.find(c => c.id === id);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  const getDaysText = (days: number) => {
-    if (days === 0) return "Aujourd'hui";
-    if (days === 1) return "Hier";
-    if (days < 7) return `Il y a ${days} jours`;
-    if (days < 30) return `Il y a ${Math.floor(days / 7)} semaines`;
-    return `Il y a ${Math.floor(days / 30)} mois`;
-  };
-
-  const companyContacts: Contact[] = [
-    { id: '1', name: 'Sarah Chen', role: 'VP of Partnerships', photo: '👩‍💼', engagementScore: 88, isDecisionMaker: true, lastContactDays: 2 },
-    { id: '2', name: 'Marc Dubois', role: 'Head of Product Strategy', photo: '👨‍💻', engagementScore: 72, isDecisionMaker: true, lastContactDays: 5 },
-    { id: '3', name: 'Emma Wilson', role: 'Partnerships Lead', photo: '👩‍💼', engagementScore: 68, isDecisionMaker: false, lastContactDays: 12 },
-    { id: '4', name: 'Nathalie Roux', role: 'CFO', photo: '👩‍💼', engagementScore: 86, isDecisionMaker: true, lastContactDays: 3 },
-  ];
-
-  if (!company) {
+  // ── Derived values ────────────────────────────────────────────────────────
+  if (loading) {
     return (
-      <div className="size-full bg-background flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="size-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-2xl font-semibold mb-2">Entreprise introuvable</h2>
-          <p className="text-muted-foreground mb-6">Cette entreprise n'existe pas ou a été supprimée.</p>
-          <button
-            onClick={() => navigate('/network')}
-            className="px-6 py-3 bg-primary text-white rounded-xl hover:bg-accent transition-colors"
-          >
-            Retour au réseau
-          </button>
+      <div className="size-full flex items-center justify-center bg-background">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <Loader2 className="size-5 animate-spin text-primary" />
+          <span>Chargement du compte…</span>
         </div>
       </div>
     );
   }
 
+  if (!company) {
+    return (
+      <div className="size-full flex flex-col items-center justify-center gap-4">
+        <AlertTriangle className="size-10 text-warning" />
+        <p className="text-muted-foreground">Compte introuvable.</p>
+        <button onClick={() => navigate('/companies')} className="text-primary text-sm underline">
+          Retour aux Comptes
+        </button>
+      </div>
+    );
+  }
+
+  // Compute company-level metrics
+  const scores = contacts.map(c => c.engagement_score).filter((s): s is number => s !== null);
+  const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+  const minScore = scores.length ? Math.min(...scores) : null;
+
+  const confidences = contacts.map(c => c.global_confidence).filter((s): s is number => s !== null);
+  const avgConfidence = confidences.length
+    ? Math.round(confidences.reduce((a, b) => a + b, 0) / confidences.length)
+    : null;
+
+  // Last contact = min days across all contacts
+  const allLastDates = contacts.map(c => c.last_contact_at).filter(Boolean) as string[];
+  const lastContactAt = allLastDates.length ? allLastDates.reduce((a, b) => a > b ? a : b) : null;
+  const lastContactDays = daysSince(lastContactAt);
+
+  // Type de compte effectif (spec-32, seuil τ appliqué)
+  const accountType = resolveAccountType(company.account_type, company.account_type_confidence);
+  const typeCfg = accountTypeConfig(accountType);
+
+  // Pénétration (spec-28 §3) + site web (spec-33) — lus dans public_context (sourcé, jamais inventé)
+  const pubCtx: Record<string, any> = company.public_context ?? {};
+  const headcount: number | null =
+    typeof pubCtx.headcount === 'number' ? pubCtx.headcount
+    : typeof pubCtx.effectif === 'number' ? pubCtx.effectif
+    : null;
+  const headcountSource: string | null = pubCtx.headcount_source ?? pubCtx.effectif_source ?? null;
+  const knownContacts = contacts.length;
+  const penetrationPct = headcount && headcount > 0
+    ? Math.min(100, Math.round((knownContacts / headcount) * 100))
+    : null;
+
+  const webDescription: string | null = typeof pubCtx.description === 'string' ? pubCtx.description : null;
+  const webInsights: string[] = Array.isArray(pubCtx.insights) ? pubCtx.insights : [];
+  const webProvenance = pubCtx.web_provenance ?? null; // { pages, date }
+  const hasWebData = Boolean(webDescription || webInsights.length);
+
+  // Verdict: computed from min (most at-risk) score + company signals, modulé par le type (spec-32)
+  const verdictInput = minScore ?? avgScore;
+  const verdictSignals = signals.map(s => ({ signal_type: s.signal_type }));
+  const verdict = computeVerdict(verdictInput, lastContactDays, verdictSignals, null, accountType);
+
+  // Rail signals from behavioral_signals
+  const railSignals: Signal[] = signals.slice(0, 8).map(s => ({
+    tag: mapSignalTag(s.signal_type),
+    text: s.text,
+    source: s.source_type,
+    date: s.observed_at ? relDate(s.observed_at) : undefined,
+    provenance: (s.inference_level === 'observable' ? 'observable'
+      : s.inference_level === 'inferred' ? 'inferred' : 'public') as Signal['provenance'],
+  }));
+
+  const visibleMeetings = showAllMeetings ? meetings : meetings.slice(0, 4);
+
+  const daysText = (d: number | null) => {
+    if (d === null) return '—';
+    if (d === 0) return "Auj.";
+    if (d === 1) return 'Hier';
+    if (d < 7) return `${d}j`;
+    if (d < 30) return `${Math.floor(d / 7)}sem`;
+    return `${Math.floor(d / 30)}m`;
+  };
+
+  const daysColor = (d: number | null) => {
+    if (d === null) return 'text-muted-foreground';
+    if (d <= 7) return 'text-success';
+    if (d <= 30) return 'text-amber-600';
+    return 'text-destructive';
+  };
+
   return (
-    <div className="size-full bg-background overflow-auto">
-      <div className="max-w-[1200px] mx-auto px-4 py-5 md:px-8 md:py-8">
-        {/* Back Button */}
-        <motion.button
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
+    <div className="size-full overflow-auto" style={{ background: 'var(--color-background)' }}>
+      <div className="max-w-6xl mx-auto px-4 py-6 md:px-8">
+
+        {/* Back */}
+        <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-6"
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-5"
         >
-          <ArrowLeft className="size-4" />
-          Retour
-        </motion.button>
+          <ArrowLeft className="size-4" /> Retour
+        </button>
 
+        {/* Commutateur de vue Réunion · Personne · Compte (spec-25 §B) */}
+        <div className="flex justify-center mb-4">
+          <ViewSwitcher
+            active="compte"
+            meetingId={meetings[0]?.id ?? null}
+            contacts={contacts.map(c => ({ id: c.id, name: c.full_name, role: c.role_title }))}
+            companyId={company.id}
+          />
+        </div>
+
+        {/* ══ HERO DARK ════════════════════════════════════════════════════ */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="space-y-6"
+          className="rounded-2xl overflow-hidden mb-4"
+          style={{ background: '#13111E' }}
         >
-          {/* Company Overview Header */}
-          <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-4 border border-primary/10 md:p-6">
-            <div className="flex flex-col gap-4 mb-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex items-start gap-4">
-                <span className="text-5xl">{company.logo}</span>
-                <div>
-                  <h2 className="text-2xl font-semibold mb-2">{company.name}</h2>
-                  <p className="text-muted-foreground mb-3">{company.industry}</p>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="px-3 py-1 bg-success/10 text-success rounded-lg text-sm font-medium">{company.funding.stage}</span>
-                    <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm">{company.employees} employés</span>
-                    <span className="px-3 py-1 bg-accent/10 text-accent rounded-lg text-sm">{company.businessModel}</span>
-                    <span className="px-3 py-1 bg-warning/10 text-warning rounded-lg text-sm">Fondée en {company.founded}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="text-left sm:text-right">
-                <p className="text-3xl font-bold text-primary mb-1">{company.funding.valuation}</p>
-                <p className="text-sm text-muted-foreground">Valorisation</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Engagement Metrics */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
-            <div className="bg-card rounded-xl p-5 border border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="size-4 text-primary" />
-                <p className="text-sm text-muted-foreground">Health Score</p>
-              </div>
-              <p className="text-2xl font-semibold mb-1">{company.healthScore}</p>
-              <div className="mt-2 w-full bg-border rounded-full h-1.5">
-                <div
-                  className={`rounded-full h-1.5 ${
-                    company.healthScore >= 80 ? 'bg-success' :
-                    company.healthScore >= 70 ? 'bg-primary' :
-                    company.healthScore >= 60 ? 'bg-warning' :
-                    'bg-destructive'
-                  }`}
-                  style={{ width: `${company.healthScore}%` }}
-                />
-              </div>
-            </div>
-            <div className="bg-card rounded-xl p-5 border border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <Mail className="size-4 text-primary" />
-                <p className="text-sm text-muted-foreground">Emails</p>
-              </div>
-              <p className="text-2xl font-semibold mb-1">{company.emails30d}</p>
-              <p className="text-xs text-muted-foreground">30 derniers jours</p>
-            </div>
-            <div className="bg-card rounded-xl p-5 border border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <Calendar className="size-4 text-primary" />
-                <p className="text-sm text-muted-foreground">Meetings</p>
-              </div>
-              <p className="text-2xl font-semibold mb-1">{company.meetings30d}</p>
-              <p className="text-xs text-muted-foreground">30 derniers jours</p>
-            </div>
-            <div className="bg-card rounded-xl p-5 border border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <Clock className="size-4 text-primary" />
-                <p className="text-sm text-muted-foreground">Dernier contact</p>
-              </div>
-              <p className={`text-2xl font-semibold mb-1 ${
-                company.lastContactDays > 10 ? 'text-destructive' :
-                company.lastContactDays > 5 ? 'text-warning' :
-                'text-success'
-              }`}>
-                {company.lastContactDays}j
-              </p>
-              <p className="text-xs text-muted-foreground">{getDaysText(company.lastContactDays)}</p>
-            </div>
-          </div>
-
-          {/* Key Metrics */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
-            <div className="bg-card rounded-xl p-5 border border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <Users className="size-4 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Employés</p>
-              </div>
-              <p className="text-2xl font-semibold mb-1">{company.employees}</p>
-              <p className="text-xs text-success flex items-center gap-1">
-                <TrendingUp className="size-3" />
-                {company.growth}
-              </p>
-            </div>
-            <div className="bg-card rounded-xl p-5 border border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="size-4 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">ARR (estimé)</p>
-              </div>
-              <p className="text-2xl font-semibold mb-1">{company.financials.revenue}</p>
-              <p className="text-xs text-success">{company.financials.revenueGrowth}</p>
-            </div>
-            <div className="bg-card rounded-xl p-5 border border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <Building2 className="size-4 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Clients</p>
-              </div>
-              <p className="text-2xl font-semibold mb-1">{company.financials.customers}</p>
-              <p className="text-xs text-muted-foreground">Enterprise focus</p>
-            </div>
-            <div className="bg-card rounded-xl p-5 border border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <Target className="size-4 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">ACV moyen</p>
-              </div>
-              <p className="text-2xl font-semibold mb-1">{company.financials.averageContractValue}</p>
-              <p className="text-xs text-muted-foreground">Deal size</p>
-            </div>
-          </div>
-
-          {/* Contacts at Company */}
-          <div className="bg-card rounded-2xl p-6 border border-border">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <Users className="size-5 text-primary" />
-                <h2 className="text-xl font-semibold">Contacts dans l'entreprise</h2>
-              </div>
-              <span className="text-sm text-muted-foreground">
-                {company.activeContacts} actifs / {company.totalContacts} total ({Math.round((company.activeContacts / company.totalContacts) * 100)}% coverage)
-              </span>
+          <div className="p-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
+            {/* Logo */}
+            <div
+              className="size-16 flex-shrink-0 rounded-xl flex items-center justify-center text-xl font-black text-white"
+              style={{ background: 'linear-gradient(135deg, #6E50C8, #9747FF)' }}
+            >
+              {initials(company.name)}
             </div>
 
-            <div className="space-y-3">
-              {companyContacts.map((contact, i) => (
-                <motion.div
-                  key={contact.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  onClick={() => navigate(`/contact/${contact.id}`)}
-                  className="flex items-center justify-between p-4 bg-muted/20 rounded-xl hover:bg-muted/40 transition-colors cursor-pointer group"
+            {/* Name + meta */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-2xl font-black leading-tight" style={{ color: '#fff' }}>
+                  {company.name}
+                </h1>
+                {/* Pastille type de compte (spec-32) */}
+                <span
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide"
+                  style={{
+                    color: accountType ? '#fff' : 'rgba(255,255,255,0.5)',
+                    background: accountType ? typeCfg.color : 'rgba(255,255,255,0.08)',
+                    fontFamily: 'var(--mono)',
+                  }}
+                  title={typeCfg.label}
                 >
-                  <div className="flex items-center gap-4">
-                    <span className="text-3xl">{contact.photo}</span>
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="font-semibold">{contact.name}</p>
-                        {contact.isDecisionMaker && (
-                          <Star className="size-3 text-primary fill-primary" />
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">{contact.role}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <p className="text-sm font-semibold mb-1">Score: {contact.engagementScore}</p>
-                      <p className={`text-xs ${
-                        contact.lastContactDays > 10 ? 'text-destructive' :
-                        contact.lastContactDays > 5 ? 'text-warning' :
-                        'text-success'
-                      }`}>
-                        Dernier contact: {contact.lastContactDays}j
-                      </p>
-                    </div>
-                    <ArrowRight className="size-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-
-          {/* Funding & Investors */}
-          <div className="bg-card rounded-2xl p-6 border border-border">
-            <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <TrendingUp className="size-5 text-success" />
-              Financement & Investisseurs
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Total levé</p>
-                    <p className="text-2xl font-semibold">{company.funding.totalRaised}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Dernier tour</p>
-                    <p className="font-medium">{company.funding.lastRound}</p>
-                  </div>
-                </div>
+                  {typeCfg.label}
+                </span>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-3">Investisseurs principaux</p>
-                <div className="flex flex-wrap gap-2">
-                  {company.funding.investors.map((investor, i) => (
-                    <span key={i} className="px-3 py-1.5 bg-success/10 text-success rounded-lg text-sm font-medium">
-                      {investor}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Departments & Structure */}
-          <div className="bg-card rounded-2xl p-6 border border-border">
-            <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <Building2 className="size-5 text-primary" />
-              Structure & Départements
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {company.departments.map((dept, i) => (
-                <div key={i} className="bg-muted/30 rounded-xl p-4 border border-border">
-                  <div className="flex items-start justify-between mb-2">
-                    <h4 className="font-semibold">{dept.name}</h4>
-                    <span className="text-sm font-semibold text-primary">{dept.size}</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{dept.growth}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Recent News & Signals */}
-          <div className="bg-card rounded-2xl p-6 border border-border">
-            <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <Newspaper className="size-5 text-accent" />
-              Actualités & Signaux récents
-            </h3>
-            <div className="space-y-3">
-              {company.recentNews.map((news, i) => (
-                <div key={i} className="flex items-start gap-4 p-4 bg-muted/30 rounded-xl">
-                  <div className={`size-2 rounded-full mt-2 ${
-                    news.type === 'expansion' ? 'bg-success' :
-                    news.type === 'hiring' ? 'bg-primary' :
-                    news.type === 'leadership' ? 'bg-warning' :
-                    'bg-accent'
-                  }`} />
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between mb-1">
-                      <p className="font-medium">{news.title}</p>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap ml-3">{news.date}</span>
-                    </div>
-                    <span className={`text-xs px-2 py-0.5 rounded ${
-                      news.type === 'expansion' ? 'bg-success/10 text-success' :
-                      news.type === 'hiring' ? 'bg-primary/10 text-primary' :
-                      news.type === 'leadership' ? 'bg-warning/10 text-warning' :
-                      'bg-accent/10 text-accent'
-                    }`}>
-                      {news.type}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Market Position */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-card rounded-2xl p-6 border border-border">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <Target className="size-5 text-primary" />
-                Positionnement
-              </h3>
-              <p className="text-muted-foreground mb-4">{company.positioning}</p>
-              <div>
-                <p className="text-sm text-muted-foreground mb-2">Concurrents principaux</p>
-                <div className="flex flex-wrap gap-2">
-                  {company.competitors.map((comp, i) => (
-                    <span key={i} className="px-2 py-1 bg-muted rounded text-sm">
-                      {comp}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-card rounded-2xl p-6 border border-border">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <Network className="size-5 text-accent" />
-                Présence mondiale
-              </h3>
-              <p className="text-sm text-muted-foreground mb-3">Bureaux: {company.locations.length} villes</p>
-              <div className="flex flex-wrap gap-2">
-                {company.locations.map((loc, i) => (
-                  <span key={i} className="px-3 py-1 bg-accent/10 text-accent rounded-lg text-sm">
-                    {loc}
+              <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                {[company.industry, company.size_label, company.domain].filter(Boolean).join(' · ')}
+              </p>
+              <div className="flex flex-wrap items-center gap-3 mt-2.5">
+                {company.domain && (
+                  <a
+                    href={`https://${company.domain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs transition-colors"
+                    style={{ color: 'rgba(255,255,255,0.35)' }}
+                  >
+                    <Globe className="size-3" /> {company.domain}
+                  </a>
+                )}
+                {contacts.length > 0 && (
+                  <span className="flex items-center gap-1.5 text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    <Users className="size-3" /> {contacts.length} contact{contacts.length > 1 ? 's' : ''}
                   </span>
-                ))}
+                )}
+                {lastContactAt && (
+                  <span className="flex items-center gap-1.5 text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    <Clock className="size-3" /> {relDate(lastContactAt)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Hero canonique = 3 blocs : Score · Confiance · Dernier contact (doctrine #4) */}
+            <div className="flex items-center gap-5 flex-shrink-0">
+              {/* Bloc 1 — Score moyen */}
+              {avgScore !== null && (
+                <>
+                  <div className="text-center">
+                    <p className="text-[9px] font-bold uppercase tracking-widest mb-1"
+                      style={{ color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--mono)' }}>Score moy.</p>
+                    <p className="text-4xl font-black leading-none" style={{ color: scoreColor(avgScore) }}>{avgScore}</p>
+                    <p className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--mono)' }}>/100</p>
+                  </div>
+                  <div className="w-px h-10" style={{ background: 'rgba(255,255,255,0.08)' }} />
+                </>
+              )}
+
+              {/* Bloc 2 — Confiance (anneau %) */}
+              {avgConfidence !== null && (
+                <>
+                  <ConfidenceRing value={avgConfidence} size={48} dark />
+                  <div className="w-px h-10" style={{ background: 'rgba(255,255,255,0.08)' }} />
+                </>
+              )}
+
+              {/* Bloc 3 — Dernier contact */}
+              <div className="text-center">
+                <p className="text-[9px] font-bold uppercase tracking-widest mb-1"
+                  style={{ color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--mono)' }}>Dernier contact</p>
+                <p className="text-sm font-semibold" style={{ color: '#fff' }}>
+                  {lastContactAt ? relDate(lastContactAt) : '—'}
+                </p>
+                <p className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--mono)' }}>
+                  {meetings.length} réunion{meetings.length > 1 ? 's' : ''}
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Strategic Context */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-warning/5 border border-warning/20 rounded-2xl p-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <AlertCircle className="size-5 text-warning" />
-                Défis identifiés
-              </h3>
-              <ul className="space-y-2">
-                {company.challenges.map((challenge, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <span className="text-warning mt-1">•</span>
-                    <span>{challenge}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="bg-success/5 border border-success/20 rounded-2xl p-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <Target className="size-5 text-success" />
-                Priorités 2026
-              </h3>
-              <ul className="space-y-2">
-                {company.priorities.map((priority, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <span className="text-success mt-1">•</span>
-                    <span>{priority}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {/* Metrics bar */}
+          <div className="px-6 pb-4 flex items-center gap-4 flex-wrap">
+            {[
+              { label: 'Emails 30j',   value: emailCount30d, icon: Mail },
+              { label: 'Contacts',     value: contacts.length, icon: Users },
+              { label: 'Réunions',     value: meetings.length, icon: Calendar },
+            ].map(({ label, value, icon: Icon }) => (
+              <div key={label} className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                  style={{ background: 'rgba(110,80,200,0.2)', color: '#B39DDB', border: '1px solid rgba(110,80,200,0.3)' }}>
+                  <Icon className="size-3 inline mr-1" />{value} {label}
+                </span>
+              </div>
+            ))}
+            <button
+              onClick={loadData}
+              className="ml-auto flex items-center gap-1.5 text-[11px] transition-colors"
+              style={{ color: 'rgba(255,255,255,0.3)' }}
+            >
+              <RefreshCw className="size-3.5" /> Actualiser
+            </button>
           </div>
+        </motion.div>
 
-          {/* Relationship Insights */}
-          <div className="bg-card border border-border rounded-2xl p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <BarChart3 className="size-5 text-primary" />
-              <h2 className="text-xl font-semibold">Insights relationnels</h2>
-            </div>
-            <div className="space-y-3">
-              <div className="p-4 bg-muted/20 rounded-xl">
-                <p className="text-sm">
-                  <span className="font-semibold">Tendance d'engagement:</span> Le volume d'interactions a {company.healthScore >= 85 ? 'augmenté de 24%' : 'diminué de 12%'} ce mois-ci, principalement grâce aux échanges avec les contacts clés.
-                </p>
-              </div>
-              <div className="p-4 bg-muted/20 rounded-xl">
-                <p className="text-sm">
-                  <span className="font-semibold">Opportunité détectée:</span> {company.activeContacts} contacts actifs sur {company.totalContacts} au total. Envisager de renouer le contact avec les {company.totalContacts - company.activeContacts} autres personnes pour maximiser la couverture.
-                </p>
-              </div>
-              {company.healthScore >= 85 && (
-                <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl">
-                  <p className="text-sm">
-                    <span className="font-semibold">🔥 Moment fort:</span> {company.meetings30d} meetings planifiés dans les 30 derniers jours. C'est le moment idéal pour proposer de nouvelles initiatives.
+        {/* ══ LAYOUT: MAIN + ASIDE ════════════════════════════════════════ */}
+        <div className="flex flex-col lg:flex-row gap-5">
+
+          {/* ── MAIN COL ─────────────────────────────────────────────────── */}
+          <div className="flex-1 min-w-0 space-y-4">
+
+            {/* SITE WEB & DESCRIPTION ENTREPRISE (spec-33) */}
+            <CollapsibleSection
+              title="Site web & description entreprise"
+              icon={<Globe className="size-4" />}
+              defaultOpen={hasWebData}
+            >
+              {company.domain ? (
+                <a
+                  href={`https://${company.domain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline mb-3"
+                >
+                  <Globe className="size-3.5" /> {company.domain}
+                </a>
+              ) : (
+                <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mb-3"
+                  style={{ background: 'rgba(201,122,32,0.12)', color: '#C97A20', fontFamily: 'var(--mono)' }}>
+                  À CAPTER
+                </span>
+              )}
+
+              {hasWebData ? (
+                <>
+                  {webDescription && (
+                    <div className="rounded-xl border border-border bg-muted/20 p-4 mb-3">
+                      <p className="text-sm text-foreground leading-relaxed">{webDescription}</p>
+                    </div>
+                  )}
+                  {webInsights.length > 0 && (
+                    <ul className="space-y-1.5 mb-3">
+                      {webInsights.map((insight, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                          <span className="text-primary mt-0.5">›</span>
+                          <span>{insight}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="text-[11px] text-muted-foreground italic mb-2">
+                    Ces insights nourrissent la fiche et adaptent les briefs de réunion.
+                  </p>
+                  {webProvenance && (
+                    <p className="text-[10px] text-muted-foreground" style={{ fontFamily: 'var(--mono)' }}>
+                      Source : site officiel
+                      {webProvenance.pages ? ` · ${webProvenance.pages} pages` : ''}
+                      {webProvenance.date ? ` · ${webProvenance.date}` : ''}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-6">
+                  <Globe className="size-8 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Site web pas encore capté. La description sera générée à l'ingestion (spec-33).
                   </p>
                 </div>
               )}
-            </div>
+            </CollapsibleSection>
+
+            {/* CONTACTS */}
+            <CollapsibleSection
+              title="Contacts"
+              icon={<Users className="size-4" />}
+              badge={contacts.length > 0 ? String(contacts.length) : undefined}
+              defaultOpen={true}
+            >
+              {/* Pénétration du compte (spec-28 §3) */}
+              {knownContacts > 0 && (
+                <div className="mb-4 rounded-xl border border-border bg-muted/20 p-3">
+                  <div className="flex items-baseline justify-between mb-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground" style={{ fontFamily: 'var(--mono)' }}>
+                      Pénétration du compte
+                    </p>
+                    <p className="text-xs font-mono font-semibold text-foreground">
+                      {penetrationPct !== null
+                        ? `${knownContacts}/${headcount} · ${penetrationPct}%`
+                        : `${knownContacts} connu${knownContacts > 1 ? 's' : ''}`}
+                    </p>
+                  </div>
+                  {penetrationPct !== null ? (
+                    <>
+                      <div className="h-2 rounded-full overflow-hidden" style={{ background: '#E8EBF0' }}>
+                        <motion.div
+                          initial={{ width: 0 }} animate={{ width: `${penetrationPct}%` }}
+                          transition={{ duration: 0.9, ease: 'easeOut' }}
+                          className="h-full rounded-full"
+                          style={{ background: 'linear-gradient(90deg, #D4C5F5, #6E50C8)' }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1.5" style={{ fontFamily: 'var(--mono)' }}>
+                        Effectif total : {headcountSource ?? 'source à confirmer'}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">
+                      Effectif total à confirmer (presse / Société.info / connecteur) pour calculer le % de couverture.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {contacts.length === 0 ? (
+                <div className="text-center py-8">
+                  <Users className="size-8 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Aucun contact associé à ce compte.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {contacts.map((c, i) => {
+                    const days = daysSince(c.last_contact_at);
+                    return (
+                      <motion.button
+                        key={c.id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.04 }}
+                        onClick={() => navigate(`/contact/${c.id}`)}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted/30 transition-colors text-left border border-border group"
+                      >
+                        {/* Avatar */}
+                        {c.avatar_url ? (
+                          <img src={c.avatar_url} alt={c.full_name}
+                            className="size-9 rounded-lg object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="size-9 flex-shrink-0 rounded-lg flex items-center justify-center text-xs font-bold text-white"
+                            style={{ background: 'linear-gradient(135deg,#6E50C8,#9747FF)' }}>
+                            {initials(c.full_name)}
+                          </div>
+                        )}
+
+                        {/* Name + role */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-semibold truncate group-hover:text-primary transition-colors">
+                              {c.full_name}
+                            </p>
+                            {(c.influence_level ?? 0) >= 4 && (
+                              <Star className="size-3 fill-primary text-primary flex-shrink-0" />
+                            )}
+                            {c.badge && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                                style={{ background: 'rgba(110,80,200,0.12)', color: '#6E50C8' }}>
+                                {c.badge}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">{c.role_title || '—'}</p>
+                        </div>
+
+                        {/* Score + last contact */}
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          {c.engagement_score !== null && (
+                            <div className="flex items-center gap-1">
+                              <PhaseIcon phase={c.score_phase ?? null} />
+                              <span className="text-sm font-black font-mono"
+                                style={{ color: scoreColor(c.engagement_score) }}>
+                                {c.engagement_score}
+                              </span>
+                            </div>
+                          )}
+                          <span className={`text-xs font-mono font-semibold ${daysColor(days)}`}>
+                            {daysText(days)}
+                          </span>
+                        </div>
+
+                        <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              )}
+            </CollapsibleSection>
+
+            {/* RÉUNIONS */}
+            <CollapsibleSection
+              title="Réunions"
+              icon={<Calendar className="size-4" />}
+              badge={meetings.length > 0 ? String(meetings.length) : undefined}
+              defaultOpen={true}
+            >
+              {meetings.length === 0 ? (
+                <div className="text-center py-8">
+                  <Calendar className="size-8 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Aucune réunion enregistrée.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    {visibleMeetings.map(m => (
+                      <button
+                        key={m.id}
+                        onClick={() => navigate(`/meeting/${m.id}`)}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted/30 transition-colors text-left border border-border group"
+                      >
+                        <div className="size-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                          style={{ background: 'rgba(11,136,120,0.1)', color: '#0B8878' }}>
+                          <Calendar className="size-3.5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
+                            {m.title || 'Réunion'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{relDate(m.starts_at)}</p>
+                        </div>
+                        {m.has_decision_maker && (
+                          <Star className="size-3 fill-primary text-primary flex-shrink-0" />
+                        )}
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${
+                          m.brief_status === 'ready' ? 'bg-success/10 text-success' :
+                          m.brief_status === 'generating' ? 'bg-primary/10 text-primary' :
+                          'bg-muted text-muted-foreground'
+                        }`}>
+                          {m.brief_status === 'ready' ? 'Brief prêt' :
+                           m.brief_status === 'generating' ? 'En génération' : 'À générer'}
+                        </span>
+                        <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                  {meetings.length > 4 && (
+                    <button
+                      onClick={() => setShowAllMeetings(v => !v)}
+                      className="mt-3 w-full text-xs text-primary font-medium hover:underline"
+                    >
+                      {showAllMeetings ? 'Réduire' : `Voir les ${meetings.length - 4} précédentes`}
+                    </button>
+                  )}
+                </>
+              )}
+            </CollapsibleSection>
+
+            {/* MÉTRIQUES RELATIONNELLES */}
+            {(avgScore !== null || emailCount30d > 0) && (
+              <CollapsibleSection
+                title="Métriques relationnelles"
+                icon={<TrendingUp className="size-4" />}
+                defaultOpen={false}
+              >
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Score moyen',     value: avgScore !== null ? `${avgScore}/100` : '—', color: scoreColor(avgScore) },
+                    { label: 'Emails 30j',      value: String(emailCount30d), color: '#6E50C8' },
+                    { label: 'Réunions',        value: String(meetings.length), color: '#0B8878' },
+                    { label: 'Contacts actifs', value: `${contacts.filter(c => daysSince(c.last_contact_at) !== null && (daysSince(c.last_contact_at) ?? 999) <= 30).length}/${contacts.length}`, color: '#C97A20' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-muted/30 rounded-xl border border-border p-3 text-center">
+                      <p className="text-2xl font-black" style={{ color }}>{value}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleSection>
+            )}
           </div>
-        </motion.div>
+
+          {/* ── SIGNAL RAIL ──────────────────────────────────────────────── */}
+          <aside className="lg:w-64 xl:w-72 flex-shrink-0">
+            <div className="lg:sticky lg:top-6 space-y-0">
+
+              {/* VerdictCard en tête du rail */}
+              <AnimatePresence>
+                {verdict && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    <VerdictCard
+                      {...verdict}
+                      onAction={() => navigate('/meetings')}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* SignalRail — faits atomiques */}
+              <SignalRail
+                signals={railSignals}
+                title={`Signaux · ${company.name}`}
+              />
+
+              {/* Carte récap compte */}
+              <div className="mt-4 rounded-2xl border border-border bg-card p-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                  Fiche Compte
+                </p>
+                <div className="space-y-2">
+                  {[
+                    { label: 'Secteur',    value: company.industry    ?? '—' },
+                    { label: 'Taille',     value: company.size_label  ?? '—' },
+                    { label: 'Domaine',    value: company.domain      ?? '—' },
+                    { label: 'Contacts',   value: String(contacts.length) },
+                    { label: 'Réunions',   value: String(meetings.length) },
+                    { label: 'Dernier contact', value: daysText(lastContactDays) },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{label}</span>
+                      <span className="font-mono font-semibold text-foreground truncate max-w-[120px] text-right">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
   );

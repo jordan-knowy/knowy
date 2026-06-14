@@ -5,7 +5,7 @@ const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 const MODEL = 'google/gemini-2.5-flash-lite';
 
 // ── System prompt (doc 06 v3) ────────────────────────────────────────────────
-const SYSTEM_PROMPT = `Tu es le moteur d'intelligence interactionnelle de Knowy.
+const SYSTEM_PROMPT = `Tu es le moteur d'intelligence interactionnelle de Knowr.
 Tu génères des briefs pré-meeting ultra-précis, stratégiquement actionnables et scientifiquement fondés.
 
 RÈGLE N°1 — ZÉRO HALLUCINATION
@@ -15,7 +15,7 @@ RÈGLE N°2 — ANALYSE PAR CHOIX DE VIE
 Profil comportemental depuis les décisions observables, jamais le titre.
 
 RÈGLE N°3 — HIÉRARCHIE DES SOURCES
-Mémoire Knowy > Interne (emails/calendar) > Externe vérifiable > Externe inférentiel.
+Mémoire Knowr > Interne (emails/calendar) > Externe vérifiable > Externe inférentiel.
 
 RÈGLE N°4 — NIVEAUX D'INFÉRENCE
 Observable / Inféré / Hypothétique / Non disponible — afficher toujours.
@@ -210,7 +210,7 @@ function buildUserMessage(ctx: BriefContext): string {
       if (p.contact.tenure_start_date) lines.push(`  Dans le poste depuis : ${p.contact.tenure_start_date}`);
     }
     if (p.snapshot) {
-      lines.push(`  Score d'engagement Knowy : ${p.snapshot.engagement_score}/100`);
+      lines.push(`  Score d'engagement Knowr : ${p.snapshot.engagement_score}/100`);
       lines.push(`  Phase relationnelle : ${p.snapshot.phase} (évolution : ${p.snapshot.score_evolution > 0 ? '+' : ''}${p.snapshot.score_evolution} pts/30j)`);
       if (p.snapshot.last_contact_at) {
         const daysAgo = Math.round((Date.now() - new Date(p.snapshot.last_contact_at).getTime()) / 86400000);
@@ -501,7 +501,7 @@ Deno.serve(async (req) => {
         'Authorization': `Bearer ${openrouterKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://knowy-ai.netlify.app',
-        'X-Title': 'Knowy Brief Engine',
+        'X-Title': 'Knowr Brief Engine',
       },
       body: JSON.stringify({
         model: MODEL,

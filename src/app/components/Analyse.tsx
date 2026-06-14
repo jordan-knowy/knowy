@@ -123,7 +123,7 @@ export default function Analyse() {
         { name: 'Sophie Martin', role: 'Sales Director', photo: '👩', internal: true },
         { name: 'Thomas Petit', role: 'SDR Lead', photo: '👨', internal: true }
       ],
-      company: 'Knowy (Internal)',
+      company: 'Knowr (Internal)',
       logo: '🏢',
       type: 'internal',
       meetingRole: 'Other',
@@ -143,7 +143,7 @@ export default function Analyse() {
         { name: 'Antoine Bernard', role: 'CSM', photo: '👨', internal: true },
         { name: 'Marie Lopez', role: 'CSM', photo: '👩', internal: true }
       ],
-      company: 'Knowy (Internal)',
+      company: 'Knowr (Internal)',
       logo: '🏢',
       type: 'internal',
       meetingRole: 'CSM',
@@ -261,9 +261,9 @@ export default function Analyse() {
           transition={{ duration: 0.6 }}
           className="mb-8"
         >
-          <h1 className="text-4xl font-semibold mb-2">Mémoire Organisationnelle</h1>
+          <h1 className="text-4xl font-bold mb-2">Mémoire Organisationnelle</h1>
           <p className="text-muted-foreground">
-            Tous vos meetings analysés et votre intelligence relationnelle consolidée
+            Tous vos meetings analysés et votre mémoire relationnelle consolidée
           </p>
         </motion.div>
 
@@ -385,7 +385,7 @@ export default function Analyse() {
                     <div className="text-3xl flex-shrink-0">{recording.logo}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-lg font-semibold truncate">{recording.title}</h3>
+                        <h3 className="text-lg font-bold truncate">{recording.title}</h3>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${getSentimentBg(recording.sentiment)} ${getSentimentColor(recording.sentiment)}`}>
                           {recording.sentiment === 'positive' ? 'Positif' : recording.sentiment === 'negative' ? 'Négatif' : 'Neutre'}
                         </span>
@@ -483,7 +483,7 @@ export default function Analyse() {
                 </button>
                 <button className="px-4 py-2 bg-primary hover:bg-accent text-white rounded-xl transition-colors flex items-center gap-2">
                   <Share2 className="size-4" />
-                  Partager via Knowy
+                  Partager via Knowr
                 </button>
               </div>
             </div>
@@ -494,7 +494,7 @@ export default function Analyse() {
                 <div className="flex items-center gap-4">
                   <div className="text-5xl">🎯</div>
                   <div>
-                    <h2 className="text-3xl font-semibold mb-2">Q1 Strategic Review</h2>
+                    <h2 className="text-3xl font-bold mb-2">Q1 Strategic Review</h2>
                     <p className="text-lg text-muted-foreground mb-3">Contentsquare</p>
                     <div className="flex items-center gap-4 text-sm">
                       <span className="flex items-center gap-2">
@@ -580,7 +580,7 @@ export default function Analyse() {
 
             {/* Temps de parole */}
             <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
-              <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
                 <BarChart3 className="size-6 text-primary" />
                 Répartition du temps de parole
               </h3>
@@ -613,7 +613,7 @@ export default function Analyse() {
 
             {/* Insights IA */}
             <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
-              <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
                 <Sparkles className="size-6 text-primary" />
                 Insights IA
               </h3>
@@ -647,7 +647,7 @@ export default function Analyse() {
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-semibold">{insight.title}</h4>
+                          <h4 className="font-bold">{insight.title}</h4>
                           <div className="flex items-center gap-2">
                             <span className="text-xs px-2 py-1 bg-background rounded">
                               {insight.timestamp}
@@ -667,7 +667,7 @@ export default function Analyse() {
 
             {/* Topics */}
             <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
-              <h3 className="text-xl font-semibold mb-6">Thèmes abordés</h3>
+              <h3 className="text-xl font-bold mb-6">Thèmes abordés</h3>
               <div className="space-y-4">
                 {analysisData.topics.map((topic, i) => (
                   <div key={i}>
@@ -695,7 +695,7 @@ export default function Analyse() {
 
             {/* Next Steps */}
             <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
-              <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
                 <Zap className="size-6 text-primary" />
                 Next Steps (détectés automatiquement)
               </h3>
@@ -739,7 +739,7 @@ export default function Analyse() {
 
             {/* Recommendations */}
             <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-5 border border-primary/10 md:p-8">
-              <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
                 <Lightbulb className="size-6 text-primary" />
                 Recommandations IA
               </h3>
@@ -757,14 +757,14 @@ export default function Analyse() {
             <div className="bg-gradient-to-br from-primary to-accent rounded-2xl p-5 text-white md:p-8">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-2xl font-semibold mb-2">Partagez cette analyse avec vos participants</h3>
+                  <h3 className="text-2xl font-bold mb-2">Partagez cette analyse avec vos participants</h3>
                   <p className="text-white/80">
-                    Créez de la valeur ajoutée et invitez vos contacts à découvrir Knowy
+                    Créez de la valeur ajoutée et invitez vos contacts à découvrir Knowr
                   </p>
                 </div>
                 <button className="px-6 py-3 bg-white text-primary rounded-xl hover:bg-white/90 transition-colors flex items-center gap-2 font-medium">
                   <Share2 className="size-5" />
-                  Partager via Knowy
+                  Partager via Knowr
                 </button>
               </div>
             </div>

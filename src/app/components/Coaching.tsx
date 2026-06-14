@@ -16,9 +16,9 @@ import {
   WifiOff,
   Sparkles
 } from 'lucide-react';
-import KnowyCard from './knowy/KnowyCard';
-import KnowyButton from './knowy/KnowyButton';
-import KnowyBadge from './knowy/KnowyBadge';
+import KnowrCard from './knowr/KnowrCard';
+import KnowrButton from './knowr/KnowrButton';
+import KnowrBadge from './knowr/KnowrBadge';
 
 export default function Coaching() {
   const [selectedOS, setSelectedOS] = useState<'mac' | 'windows'>('mac');
@@ -116,10 +116,10 @@ export default function Coaching() {
             transition={{ duration: 0.4, delay: 0.1 }}
             className="lg:col-span-2"
           >
-            <KnowyCard className="p-6">
+            <KnowrCard className="p-6">
               <div className="flex items-center gap-3 mb-6">
                 <Download className="size-6 text-primary" />
-                <h2 className="text-xl font-semibold">Plugin Knowy Coaching</h2>
+                <h2 className="text-xl font-bold">Plugin Knowr Coaching</h2>
               </div>
 
               <p className="text-sm text-muted-foreground mb-6">
@@ -151,10 +151,10 @@ export default function Coaching() {
                 </button>
               </div>
 
-              <KnowyButton onClick={handleDownload} className="w-full">
+              <KnowrButton onClick={handleDownload} className="w-full">
                 <Download className="size-4" />
                 Télécharger pour {selectedOS === 'mac' ? 'macOS' : 'Windows'}
-              </KnowyButton>
+              </KnowrButton>
 
               <div className="mt-4 p-3 bg-muted/30 rounded-lg">
                 <p className="text-xs text-muted-foreground">
@@ -162,7 +162,7 @@ export default function Coaching() {
                   Zoom 5.0+, Google Meet (navigateur Chrome), Microsoft Teams (app desktop)
                 </p>
               </div>
-            </KnowyCard>
+            </KnowrCard>
           </motion.div>
 
           {/* Connection Status */}
@@ -171,30 +171,30 @@ export default function Coaching() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.2 }}
           >
-            <KnowyCard className="p-6">
-              <h3 className="font-semibold mb-4">Statut</h3>
+            <KnowrCard className="p-6">
+              <h3 className="font-bold mb-4">Statut</h3>
 
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-muted-foreground">Connexion</span>
                     {connectionStatus === 'connected' && (
-                      <KnowyBadge variant="sage" className="gap-1">
+                      <KnowrBadge variant="sage" className="gap-1">
                         <Wifi className="size-3" />
                         Connecté
-                      </KnowyBadge>
+                      </KnowrBadge>
                     )}
                     {connectionStatus === 'disconnected' && (
-                      <KnowyBadge variant="coral" className="gap-1">
+                      <KnowrBadge variant="coral" className="gap-1">
                         <WifiOff className="size-3" />
                         Déconnecté
-                      </KnowyBadge>
+                      </KnowrBadge>
                     )}
                     {connectionStatus === 'syncing' && (
-                      <KnowyBadge variant="amber" className="gap-1">
+                      <KnowrBadge variant="amber" className="gap-1">
                         <Loader2 className="size-3 animate-spin" />
                         Synchro...
-                      </KnowyBadge>
+                      </KnowrBadge>
                     )}
                   </div>
                 </div>
@@ -223,7 +223,7 @@ export default function Coaching() {
                   </div>
                 </div>
               </div>
-            </KnowyCard>
+            </KnowrCard>
           </motion.div>
         </div>
 
@@ -233,17 +233,17 @@ export default function Coaching() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.3 }}
         >
-          <h2 className="text-2xl font-semibold mb-6">Capacités de votre coach IA</h2>
+          <h2 className="text-2xl font-bold mb-6">Capacités de votre coach IA</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {features.map((feature, index) => (
-              <KnowyCard key={index} className="p-6">
+              <KnowrCard key={index} className="p-6">
                 <div className="flex items-start gap-4 mb-4">
                   <div className={`size-12 ${feature.bgColor} rounded-xl flex items-center justify-center`}>
                     <feature.icon className={`size-6 ${feature.color}`} />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-semibold mb-1">{feature.title}</h3>
+                    <h3 className="font-bold mb-1">{feature.title}</h3>
                     <p className="text-sm text-muted-foreground">{feature.description}</p>
                   </div>
                 </div>
@@ -256,7 +256,7 @@ export default function Coaching() {
                     </li>
                   ))}
                 </ul>
-              </KnowyCard>
+              </KnowrCard>
             ))}
           </div>
         </motion.div>
@@ -268,8 +268,8 @@ export default function Coaching() {
           transition={{ duration: 0.4, delay: 0.4 }}
           className="mt-8"
         >
-          <KnowyCard className="p-6 bg-gradient-to-br from-primary/5 to-accent/5 border-primary/10">
-            <h3 className="font-semibold mb-4 flex items-center gap-2">
+          <KnowrCard className="p-6 bg-gradient-to-br from-primary/5 to-accent/5 border-primary/10">
+            <h3 className="font-bold mb-4 flex items-center gap-2">
               <Zap className="size-5 text-primary" />
               Comment ça fonctionne ?
             </h3>
@@ -302,7 +302,7 @@ export default function Coaching() {
                 </div>
               </div>
             </div>
-          </KnowyCard>
+          </KnowrCard>
         </motion.div>
           </div>
 
@@ -318,7 +318,7 @@ export default function Coaching() {
                 <div className="bg-primary/10 border-b border-primary/20 p-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Sparkles className="size-4 text-primary" />
-                    <span className="text-xs font-bold text-primary">Knowy Coach</span>
+                    <span className="text-xs font-bold text-primary">Knowr Coach</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="size-2 rounded-full bg-success animate-pulse" />

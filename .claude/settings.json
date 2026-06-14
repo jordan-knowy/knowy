@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(grep -n \"--violet\\\\|--sage\\\\|--coral\\\\|--amber\\\\|--night\\\\|--bg\\\\|--border\\\\|var\\(--\" \"/Users/jordanchekroun/Documents/2- Professionnel/1_ Années/4- 2026/13-knowy/Knowr 7 juin 2026/src/app/components/Dashboard.tsx\")",
+      "mcp__mcp-knowy__apply_migration",
+      "mcp__mcp-knowy__execute_sql",
+      "Bash(supabase functions *)"
+    ]
+  }
+}

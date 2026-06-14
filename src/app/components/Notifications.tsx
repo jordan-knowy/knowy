@@ -14,7 +14,7 @@ import {
   FileText,
   Users,
 } from 'lucide-react';
-import { useNotifications, type KnowyNotification } from '../../hooks/useNotifications';
+import { useNotifications, type KnowrNotification } from '../../hooks/useNotifications';
 import { useState } from 'react';
 
 function relativeTime(dateStr: string): string {
@@ -30,7 +30,7 @@ function relativeTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
 
-const typeIcon: Record<KnowyNotification['type'], React.ElementType> = {
+const typeIcon: Record<KnowrNotification['type'], React.ElementType> = {
   brief_ready: FileText,
   meeting_soon: Calendar,
   no_brief: AlertCircle,
@@ -70,7 +70,7 @@ export default function Notifications() {
   const [isOpen, setIsOpen] = useState(false);
   const { notifications, loading, unreadCount, markRead, markAllRead, dismiss, reload } = useNotifications();
 
-  async function handleClick(n: KnowyNotification) {
+  async function handleClick(n: KnowrNotification) {
     await markRead(n.id);
     if (n.link) navigate(n.link);
     setIsOpen(false);
@@ -107,7 +107,7 @@ export default function Notifications() {
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
                 <div>
-                  <h3 className="font-semibold">Notifications</h3>
+                  <h3 className="font-bold">Notifications</h3>
                   <p className="text-xs text-muted-foreground">
                     {loading ? 'Chargement…' : unreadCount === 0 ? 'Tout est lu' : `${unreadCount} non lue${unreadCount > 1 ? 's' : ''}`}
                   </p>

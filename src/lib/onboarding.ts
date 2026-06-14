@@ -47,7 +47,7 @@ export async function requireOnboardingContext(): Promise<OnboardingContext> {
 
   const organizationId = await getActiveOrganizationId();
   if (!organizationId) {
-    throw new Error("Aucun workspace Knowy n'est associé à ce compte.");
+    throw new Error("Aucun workspace Knowr n'est associé à ce compte.");
   }
 
   return { user, organizationId };

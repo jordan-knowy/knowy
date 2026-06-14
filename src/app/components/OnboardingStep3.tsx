@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Building2, CheckCircle2, Database, Lock, RefreshCw, Sparkles } from 'lucide-react';
-import KnowyButton from './knowy/KnowyButton';
+import KnowrButton from './knowr/KnowrButton';
 import { requireOnboardingContext, updateOnboardingContext } from '../../lib/onboarding';
 
 const crmProviders = [
@@ -104,10 +104,10 @@ export default function OnboardingStep3() {
           <button onClick={() => navigate('/onboarding/step2')} className="text-sm text-muted-foreground hover:text-foreground">
             Retour
           </button>
-          <KnowyButton variant="primary" size="lg" onClick={handleContinue}>
+          <KnowrButton variant="primary" size="lg" onClick={handleContinue}>
             <CheckCircle2 className="size-4" />
             Compris, continuer
-          </KnowyButton>
+          </KnowrButton>
         </div>
       </div>
     </div>

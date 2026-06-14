@@ -91,7 +91,7 @@ export default function MeetingCard({ meeting, delay = 0 }: MeetingCardProps) {
             <div className="text-4xl">{meeting.logo}</div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-2">
-                <h3 className="text-xl font-semibold">{meeting.title}</h3>
+                <h3 className="text-xl font-bold">{meeting.title}</h3>
                 {needsPrep && (
                   <span className="relative flex size-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
@@ -142,7 +142,7 @@ export default function MeetingCard({ meeting, delay = 0 }: MeetingCardProps) {
       <div className="p-6 bg-muted/20 border-b border-border">
         <div className="flex items-center gap-2 mb-4">
           <Brain className="size-5 text-primary" />
-          <h4 className="font-semibold">Intelligence Cognitive</h4>
+          <h4 className="font-bold">Intelligence Cognitive</h4>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -186,7 +186,7 @@ export default function MeetingCard({ meeting, delay = 0 }: MeetingCardProps) {
         <div className="p-6 border-b border-border">
           <div className="flex items-center gap-2 mb-4">
             <Sparkles className="size-5 text-accent" />
-            <h4 className="font-semibold">Intelligence Contextuelle</h4>
+            <h4 className="font-bold">Intelligence Contextuelle</h4>
           </div>
 
           <div className="space-y-3">

@@ -1,7 +1,7 @@
 import { ButtonHTMLAttributes, ReactNode } from 'react';
 import { motion } from 'motion/react';
 
-interface KnowyButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface KnowrButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   children: ReactNode;
@@ -9,7 +9,7 @@ interface KnowyButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
 }
 
-export default function KnowyButton({
+export default function KnowrButton({
   variant = 'primary',
   size = 'md',
   children,
@@ -18,7 +18,7 @@ export default function KnowyButton({
   className = '',
   disabled,
   ...props
-}: KnowyButtonProps) {
+}: KnowrButtonProps) {
   const baseStyles = 'inline-flex items-center justify-center gap-2 font-semibold transition-all duration-150 ease-out disabled:opacity-50 disabled:cursor-not-allowed';
 
   const variantStyles = {

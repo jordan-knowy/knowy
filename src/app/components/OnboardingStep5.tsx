@@ -154,7 +154,7 @@ export default function OnboardingStep5() {
                   <div className="size-full bg-primary/20 rounded-2xl" />
                 </motion.div>
               </div>
-              <h1 className="mb-4">Knowy construit votre intelligence relationnelle</h1>
+              <h1 className="mb-4">Knowr construit votre mémoire relationnelle</h1>
               <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
                 Nous analysons vos données pour générer votre premier brief. Quelques instants...
               </p>

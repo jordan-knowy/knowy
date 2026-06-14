@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { getActiveOrganizationId } from '../lib/api/org';
 
-export interface KnowyNotification {
+export interface KnowrNotification {
   id: string;
   type: 'brief_ready' | 'meeting_soon' | 'no_brief' | 'contact_alert' | 'deal_risk' | 'sync_done' | 'team_update' | 'system';
   priority: 'urgent' | 'important' | 'info';
@@ -16,7 +16,7 @@ export interface KnowyNotification {
 }
 
 export function useNotifications() {
-  const [notifications, setNotifications] = useState<KnowyNotification[]>([]);
+  const [notifications, setNotifications] = useState<KnowrNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const userIdRef = useRef<string | null>(null);
   const orgIdRef = useRef<string | null>(null);
@@ -34,7 +34,7 @@ export function useNotifications() {
       .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
       .order('created_at', { ascending: false })
       .limit(50);
-    setNotifications((data as KnowyNotification[]) || []);
+    setNotifications((data as KnowrNotification[]) || []);
   }, []);
 
   /** Full load: resolve user/org, generate once per session, then fetch */

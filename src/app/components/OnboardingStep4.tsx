@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 import { useNavigate } from 'react-router';
 import { useEffect, useState } from 'react';
 import { AlertCircle, Bell, Mail, Smartphone, Clock, Sparkles, CheckCircle2 } from 'lucide-react';
-import KnowyButton from './knowy/KnowyButton';
+import KnowrButton from './knowr/KnowrButton';
 import { supabase } from '../../lib/supabase';
 import { requireOnboardingContext, updateOnboardingContext } from '../../lib/onboarding';
 
@@ -369,7 +369,7 @@ export default function OnboardingStep4() {
             Retour
           </button>
 
-          <KnowyButton
+          <KnowrButton
             variant="primary"
             size="lg"
             onClick={handleContinue}
@@ -377,7 +377,7 @@ export default function OnboardingStep4() {
             disabled={saving}
           >
             Continuer
-          </KnowyButton>
+          </KnowrButton>
         </motion.div>
       </div>
     </div>

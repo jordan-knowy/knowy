@@ -5,13 +5,14 @@ import {
   LayoutDashboard,
   Calendar,
   Settings,
-  CreditCard,
   ChevronDown,
-  Network,
+  Users,
+  Building2,
   Zap
 } from 'lucide-react';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { supabase } from '../../lib/supabase';
+import OnboardingCard from './knowr/OnboardingCard';
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -44,23 +45,26 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
     return () => { mounted = false; };
   }, []);
 
-  const dashboardItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' }
-  ];
-
-  const journeyItems = [
-    { id: 'meetings', label: 'Réunions', icon: Calendar, path: '/meetings' },
-    { id: 'relations', label: 'Relations', icon: Network, path: '/relations' },
+  const mainItems = [
+    { id: 'dashboard', label: 'Home',      icon: LayoutDashboard, path: '/dashboard' },
+    { id: 'meetings',  label: 'Réunions',  icon: Calendar,        path: '/meetings'  },
+    { id: 'companies', label: 'Comptes',   icon: Building2,       path: '/companies' },
+    { id: 'contacts',  label: 'Personnes', icon: Users,           path: '/contacts'  },
   ];
 
   const bottomItems = [
     { id: 'settings', label: 'Paramètres', icon: Settings, path: '/account' },
-    { id: 'subscription', label: 'Abonnement', icon: CreditCard, path: '/subscription' }
   ];
 
   const isActive = (path: string) => {
-    if (path === '/relations') {
-      return location.pathname === '/relations' || location.pathname.startsWith('/relation/');
+    if (path === '/contacts') {
+      return location.pathname === '/contacts'
+        || location.pathname.startsWith('/contact/')
+        || location.pathname === '/relations'
+        || location.pathname.startsWith('/relation/');
+    }
+    if (path === '/companies') {
+      return location.pathname === '/companies' || location.pathname.startsWith('/company/');
     }
     if (path === '/meetings') {
       return location.pathname === '/meetings' || location.pathname.startsWith('/meeting/');
@@ -86,19 +90,18 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-black italic text-foreground">
-            Know<span className="text-primary">y</span>
+            Know<span className="text-primary">r</span>
           </h1>
           <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-            Relational Intelligence
+            OS Relationnel
           </p>
         </div>
       </div>
 
       {/* Main navigation */}
       <div className="flex-1 overflow-y-auto py-6 px-3">
-        {/* Dashboard */}
         <nav className="space-y-1">
-          {dashboardItems.map((item) => (
+          {mainItems.map((item) => (
             <motion.button
               key={item.id}
               onClick={() => go(item.path)}
@@ -114,38 +117,22 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
               <span className="flex-1 text-left text-sm font-semibold">{item.label}</span>
             </motion.button>
           ))}
+
+          {/* Coach — V2, désactivé */}
+          <div className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg opacity-35 cursor-not-allowed select-none">
+            <Zap className="size-5 text-muted-foreground" />
+            <span className="flex-1 text-left text-sm font-semibold text-muted-foreground">Coach</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+              V2
+            </span>
+          </div>
         </nav>
 
-        {/* Journey items */}
-        <div className="mt-6 pt-6 border-t border-sidebar-border">
-          <nav className="space-y-1">
-            {journeyItems.map((item) => (
-              <motion.button
-                key={item.id}
-                onClick={() => go(item.path)}
-                whileHover={{ x: 2 }}
-                whileTap={{ scale: 0.98 }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
-                  isActive(item.path)
-                    ? 'bg-primary text-white shadow-sm'
-                    : 'text-muted-foreground hover:bg-lavender-100 hover:text-foreground'
-                }`}
-              >
-                <item.icon className="size-5" />
-                <span className="flex-1 text-left text-sm font-semibold">{item.label}</span>
-              </motion.button>
-            ))}
-
-            {/* Coaching — V2, désactivé */}
-            <div className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg opacity-40 cursor-not-allowed select-none">
-              <Zap className="size-5 text-muted-foreground" />
-              <span className="flex-1 text-left text-sm font-semibold text-muted-foreground">Coaching</span>
-              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                Soon
-              </span>
-            </div>
-          </nav>
-        </div>
+        {/* Prise en main — onboarding 5 gestes clés (réf. maquette) */}
+        <OnboardingCard
+          onGo={go}
+          sourcesConnected={connectors.google || connectors.linkedin || connectors.hubspot}
+        />
 
         <div className="mt-6 pt-6 border-t border-sidebar-border">
           <nav className="space-y-1">

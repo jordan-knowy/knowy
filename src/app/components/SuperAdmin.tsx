@@ -6,8 +6,8 @@ import {
   RefreshCw, Eye, Clock, Network, CheckCircle2, XCircle, Globe,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import KnowyCard from './knowy/KnowyCard';
-import KnowyBadge from './knowy/KnowyBadge';
+import KnowrCard from './knowr/KnowrCard';
+import KnowrBadge from './knowr/KnowrBadge';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface PlatformStats {
@@ -80,7 +80,7 @@ function KpiCard({
   icon: React.ElementType; color?: string; trend?: 'up' | 'down' | 'flat';
 }) {
   return (
-    <KnowyCard className="p-5">
+    <KnowrCard className="p-5">
       <div className="flex items-start justify-between mb-3">
         <div className={`size-10 rounded-xl bg-primary/10 flex items-center justify-center`}>
           <Icon className={`size-5 ${color}`} />
@@ -98,7 +98,7 @@ function KpiCard({
       <div className="text-3xl font-black mb-1">{value}</div>
       <div className="text-sm font-medium text-foreground">{label}</div>
       {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
-    </KnowyCard>
+    </KnowrCard>
   );
 }
 
@@ -128,9 +128,9 @@ function NetworkGraph({ orgs }: { orgs: OrgRow[] }) {
   return (
     <div className="relative bg-muted/20 rounded-2xl overflow-hidden" style={{ height: 320 }}>
       <svg width="100%" height="100%" viewBox="0 0 600 320">
-        {/* Central node — Knowy platform */}
+        {/* Central node — Knowr platform */}
         <circle cx={300} cy={160} r={28} fill="hsl(var(--primary))" opacity={0.9} />
-        <text x={300} y={164} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">Knowy</text>
+        <text x={300} y={164} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">Knowr</text>
 
         {orgs.slice(0, 8).map((org, i) => {
           const angle = (i / Math.min(orgs.length, 8)) * 2 * Math.PI - Math.PI / 2;
@@ -405,8 +405,8 @@ export default function SuperAdmin() {
     return (
       <div className="flex min-h-full items-center justify-center flex-col gap-4">
         <Shield className="size-16 text-destructive opacity-50" />
-        <h2 className="text-xl font-semibold">Accès refusé</h2>
-        <p className="text-muted-foreground">Cette page est réservée aux super admins Knowy.</p>
+        <h2 className="text-xl font-bold">Accès refusé</h2>
+        <p className="text-muted-foreground">Cette page est réservée aux super admins Knowr.</p>
       </div>
     );
   }
@@ -424,7 +424,7 @@ export default function SuperAdmin() {
               </div>
               <div>
                 <h1 className="text-2xl font-black">Super Admin</h1>
-                <p className="text-sm text-muted-foreground">Vision 360° · Knowy Platform</p>
+                <p className="text-sm text-muted-foreground">Vision 360° · Knowr Platform</p>
               </div>
             </div>
             <button
@@ -494,10 +494,10 @@ export default function SuperAdmin() {
 
             {/* Time series */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <KnowyCard className="p-5">
+              <KnowrCard className="p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <Users className="size-4 text-primary" />
-                  <h3 className="font-semibold">Inscriptions — 14 derniers jours</h3>
+                  <h3 className="font-bold">Inscriptions — 14 derniers jours</h3>
                 </div>
                 <MiniBarChart data={signupSeries} color="hsl(var(--primary))" />
                 <div className="flex justify-between mt-2">
@@ -505,12 +505,12 @@ export default function SuperAdmin() {
                     <span key={d.date} className="text-xs text-muted-foreground">{d.date}</span>
                   ))}
                 </div>
-              </KnowyCard>
+              </KnowrCard>
 
-              <KnowyCard className="p-5">
+              <KnowrCard className="p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <Calendar className="size-4 text-accent" />
-                  <h3 className="font-semibold">Réunions créées — 14 derniers jours</h3>
+                  <h3 className="font-bold">Réunions créées — 14 derniers jours</h3>
                 </div>
                 <MiniBarChart data={meetingSeries} color="hsl(var(--accent))" />
                 <div className="flex justify-between mt-2">
@@ -518,12 +518,12 @@ export default function SuperAdmin() {
                     <span key={d.date} className="text-xs text-muted-foreground">{d.date}</span>
                   ))}
                 </div>
-              </KnowyCard>
+              </KnowrCard>
             </div>
 
             {/* Health indicators */}
-            <KnowyCard className="p-5">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <KnowrCard className="p-5">
+              <h3 className="font-bold mb-4 flex items-center gap-2">
                 <Activity className="size-4 text-primary" />
                 Indicateurs de santé plateforme
               </h3>
@@ -572,16 +572,16 @@ export default function SuperAdmin() {
                   );
                 })}
               </div>
-            </KnowyCard>
+            </KnowrCard>
           </motion.div>
         )}
 
         {/* ── TAB: ORGS ─────────────────────────────────────────────────────── */}
         {activeTab === 'orgs' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <KnowyCard className="overflow-hidden">
+            <KnowrCard className="overflow-hidden">
               <div className="p-4 border-b border-border flex items-center justify-between">
-                <h3 className="font-semibold">{orgs.length} organisations</h3>
+                <h3 className="font-bold">{orgs.length} organisations</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -600,7 +600,7 @@ export default function SuperAdmin() {
                           <div className="text-xs text-muted-foreground">{org.slug}</div>
                         </td>
                         <td className="px-4 py-3">
-                          <KnowyBadge variant="default" size="sm">{org.memberCount}</KnowyBadge>
+                          <KnowrBadge variant="default" size="sm">{org.memberCount}</KnowrBadge>
                         </td>
                         <td className="px-4 py-3 font-mono">{org.meetingCount}</td>
                         <td className="px-4 py-3 font-mono">{org.contactCount}</td>
@@ -626,16 +626,16 @@ export default function SuperAdmin() {
                   </tbody>
                 </table>
               </div>
-            </KnowyCard>
+            </KnowrCard>
           </motion.div>
         )}
 
         {/* ── TAB: USERS ────────────────────────────────────────────────────── */}
         {activeTab === 'users' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <KnowyCard className="overflow-hidden">
+            <KnowrCard className="overflow-hidden">
               <div className="p-4 border-b border-border">
-                <h3 className="font-semibold">{users.length} utilisateurs</h3>
+                <h3 className="font-bold">{users.length} utilisateurs</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -662,7 +662,7 @@ export default function SuperAdmin() {
                         </td>
                         <td className="px-4 py-3">
                           {u.orgName
-                            ? <KnowyBadge variant="default" size="sm">{u.orgName}</KnowyBadge>
+                            ? <KnowrBadge variant="default" size="sm">{u.orgName}</KnowrBadge>
                             : <span className="text-muted-foreground text-xs">Aucune</span>
                           }
                         </td>
@@ -675,23 +675,23 @@ export default function SuperAdmin() {
                   </tbody>
                 </table>
               </div>
-            </KnowyCard>
+            </KnowrCard>
           </motion.div>
         )}
 
         {/* ── TAB: NETWORK ──────────────────────────────────────────────────── */}
         {activeTab === 'network' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-            <KnowyCard className="p-5">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <KnowrCard className="p-5">
+              <h3 className="font-bold mb-4 flex items-center gap-2">
                 <Network className="size-4 text-primary" />
                 Carte des organisations
               </h3>
               <NetworkGraph orgs={orgs} />
-            </KnowyCard>
+            </KnowrCard>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <KnowyCard className="p-5">
+              <KnowrCard className="p-5">
                 <div className="text-2xl font-black text-primary mb-1">
                   {orgs.filter(o => o.hasGoogle).length}
                 </div>
@@ -699,8 +699,8 @@ export default function SuperAdmin() {
                 <div className="text-xs text-muted-foreground mt-1">
                   {stats ? `${Math.round(orgs.filter(o => o.hasGoogle).length / Math.max(orgs.length, 1) * 100)}% du total` : '—'}
                 </div>
-              </KnowyCard>
-              <KnowyCard className="p-5">
+              </KnowrCard>
+              <KnowrCard className="p-5">
                 <div className="text-2xl font-black text-primary mb-1">
                   {orgs.reduce((a, o) => a + o.memberCount, 0)}
                 </div>
@@ -708,8 +708,8 @@ export default function SuperAdmin() {
                 <div className="text-xs text-muted-foreground mt-1">
                   moy. {orgs.length > 0 ? (orgs.reduce((a, o) => a + o.memberCount, 0) / orgs.length).toFixed(1) : '—'} / org
                 </div>
-              </KnowyCard>
-              <KnowyCard className="p-5">
+              </KnowrCard>
+              <KnowrCard className="p-5">
                 <div className="text-2xl font-black text-primary mb-1">
                   {orgs.reduce((a, o) => a + o.briefCount, 0)}
                 </div>
@@ -717,7 +717,7 @@ export default function SuperAdmin() {
                 <div className="text-xs text-muted-foreground mt-1">
                   moy. {orgs.length > 0 ? (orgs.reduce((a, o) => a + o.briefCount, 0) / orgs.length).toFixed(1) : '—'} / org
                 </div>
-              </KnowyCard>
+              </KnowrCard>
             </div>
           </motion.div>
         )}
@@ -727,13 +727,13 @@ export default function SuperAdmin() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
 
             {!engagement || engagement.totalBriefOpens === 0 ? (
-              <KnowyCard className="p-12 text-center">
+              <KnowrCard className="p-12 text-center">
                 <Eye className="size-12 text-muted-foreground/30 mx-auto mb-4" />
                 <p className="text-lg font-semibold mb-2">Aucune donnée d'engagement</p>
                 <p className="text-sm text-muted-foreground">
                   Les métriques apparaîtront dès que des utilisateurs ouvriront des briefs ou des profils.
                 </p>
-              </KnowyCard>
+              </KnowrCard>
             ) : (<>
 
               {/* KPIs globaux */}
@@ -772,7 +772,7 @@ export default function SuperAdmin() {
                     sub: 'par session fiche',
                   },
                 ].map(kpi => (
-                  <KnowyCard key={kpi.label} className="p-5">
+                  <KnowrCard key={kpi.label} className="p-5">
                     <div className="flex items-start justify-between mb-3">
                       <div className="size-9 rounded-xl bg-primary/10 flex items-center justify-center">
                         <kpi.icon className={`size-4 ${kpi.color}`} />
@@ -787,14 +787,14 @@ export default function SuperAdmin() {
                     <div className="mt-3 h-1.5 bg-muted rounded-full overflow-hidden">
                       <div className="h-full bg-primary rounded-full" style={{ width: `${kpi.pct}%` }} />
                     </div>
-                  </KnowyCard>
+                  </KnowrCard>
                 ))}
               </div>
 
               {/* Distribution onglets brief — global */}
               {Object.keys(engagement.tabDistribution).length > 0 && (
-                <KnowyCard className="p-5">
-                  <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <KnowrCard className="p-5">
+                  <h3 className="font-bold mb-4 flex items-center gap-2">
                     <BarChart3 className="size-4 text-primary" />
                     Temps passé par onglet (brief) — global
                   </h3>
@@ -824,13 +824,13 @@ export default function SuperAdmin() {
                         });
                     })()}
                   </div>
-                </KnowyCard>
+                </KnowrCard>
               )}
 
               {/* Tableau par utilisateur */}
-              <KnowyCard className="overflow-hidden">
+              <KnowrCard className="overflow-hidden">
                 <div className="p-4 border-b border-border flex items-center justify-between">
-                  <h3 className="font-semibold flex items-center gap-2">
+                  <h3 className="font-bold flex items-center gap-2">
                     <Users className="size-4 text-primary" />
                     Engagement par utilisateur
                   </h3>
@@ -937,14 +937,14 @@ export default function SuperAdmin() {
                     </tbody>
                   </table>
                 </div>
-              </KnowyCard>
+              </KnowrCard>
 
               {/* Email tracking — placeholder */}
-              <KnowyCard className="p-5 opacity-60">
+              <KnowrCard className="p-5 opacity-60">
                 <div className="flex items-center gap-3 mb-4">
                   <Mail className="size-5 text-muted-foreground" />
-                  <h3 className="font-semibold">Tracking email brief</h3>
-                  <KnowyBadge variant="muted">Disponible avec système d'envoi</KnowyBadge>
+                  <h3 className="font-bold">Tracking email brief</h3>
+                  <KnowrBadge variant="muted">Disponible avec système d'envoi</KnowrBadge>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
                   {['Briefs envoyés / mail', 'Emails ouverts', 'Taux d\'ouverture', 'Consultés via mail'].map(label => (
@@ -954,7 +954,7 @@ export default function SuperAdmin() {
                     </div>
                   ))}
                 </div>
-              </KnowyCard>
+              </KnowrCard>
 
             </>)}
           </motion.div>

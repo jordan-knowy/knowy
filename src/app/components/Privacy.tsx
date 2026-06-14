@@ -20,16 +20,16 @@ export default function Privacy() {
         <div className="space-y-8 text-sm leading-7">
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">1. Responsable du traitement</h2>
+            <h2 className="text-xl font-bold mb-3">1. Responsable du traitement</h2>
             <p>
-              <strong>Knowy SAS</strong><br />
+              <strong>Knowr SAS</strong><br />
               Siège social : Paris, France 🇫🇷<br />
               Email DPO : <a href="mailto:privacy@knowy.ai" className="text-primary hover:underline">privacy@knowy.ai</a>
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">2. Données collectées</h2>
+            <h2 className="text-xl font-bold mb-3">2. Données collectées</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead>
@@ -71,7 +71,7 @@ export default function Privacy() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">3. Base légale des traitements</h2>
+            <h2 className="text-xl font-bold mb-3">3. Base légale des traitements</h2>
             <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
               <li><strong className="text-foreground">Exécution du contrat</strong> : traitement nécessaire à la fourniture du service</li>
               <li><strong className="text-foreground">Consentement</strong> : collecte de données OAuth (calendrier, emails, LinkedIn)</li>
@@ -80,7 +80,7 @@ export default function Privacy() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">4. Durée de conservation</h2>
+            <h2 className="text-xl font-bold mb-3">4. Durée de conservation</h2>
             <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
               <li>Données de compte : durée de vie du compte + 3 ans</li>
               <li>Données d'analyse : 12 mois glissants</li>
@@ -90,9 +90,9 @@ export default function Privacy() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">5. Partage des données</h2>
+            <h2 className="text-xl font-bold mb-3">5. Partage des données</h2>
             <p className="text-muted-foreground mb-3">
-              Knowy ne vend jamais vos données. Nous travaillons avec des sous-traitants sélectionnés :
+              Knowr ne vend jamais vos données. Nous travaillons avec des sous-traitants sélectionnés :
             </p>
             <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
               <li><strong className="text-foreground">Supabase</strong> (hébergement base de données — UE)</li>
@@ -102,7 +102,7 @@ export default function Privacy() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">6. Vos droits (RGPD)</h2>
+            <h2 className="text-xl font-bold mb-3">6. Vos droits (RGPD)</h2>
             <p className="text-muted-foreground mb-3">Conformément au Règlement Général sur la Protection des Données (RGPD), vous disposez des droits suivants :</p>
             <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
               <li><strong className="text-foreground">Droit d'accès</strong> : obtenir une copie de vos données</li>
@@ -119,7 +119,7 @@ export default function Privacy() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">7. Cookies</h2>
+            <h2 className="text-xl font-bold mb-3">7. Cookies</h2>
             <p className="text-muted-foreground">
               Pour plus d'informations sur notre utilisation des cookies, consultez notre{' '}
               <a href="/cookies" className="text-primary hover:underline">Politique cookies</a>.
@@ -127,16 +127,16 @@ export default function Privacy() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">8. Sécurité</h2>
+            <h2 className="text-xl font-bold mb-3">8. Sécurité</h2>
             <p className="text-muted-foreground">
-              Knowy met en œuvre des mesures techniques et organisationnelles adaptées pour protéger vos données :
+              Knowr met en œuvre des mesures techniques et organisationnelles adaptées pour protéger vos données :
               chiffrement en transit (TLS), chiffrement au repos, contrôle d'accès basé sur les rôles (RBAC),
               journalisation des accès, et Row Level Security (RLS) au niveau de la base de données.
             </p>
           </section>
 
           <section className="pt-6 border-t border-border">
-            <p className="text-muted-foreground">Knowy SAS — Paris, France 🇫🇷</p>
+            <p className="text-muted-foreground">Knowr SAS — Paris, France 🇫🇷</p>
             <p className="text-muted-foreground">Contact DPO : <a href="mailto:privacy@knowy.ai" className="text-primary hover:underline">privacy@knowy.ai</a></p>
           </section>
         </div>

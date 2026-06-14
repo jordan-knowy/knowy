@@ -32,6 +32,7 @@ import {
   Link,
   ChevronDown,
 } from 'lucide-react';
+import PageHeader from './knowr/PageHeader';
 
 // ── Official logos (inline SVG) ────────────────────────────────────────
 
@@ -80,7 +81,7 @@ const AVAILABLE_CONNECTIONS = [
   { id: 'linkedin', name: 'LinkedIn',          subtitle: 'Réseau · Profils professionnels',      logo: <LinkedInLogo /> },
 ];
 
-// ── iOS toggle — couleur primaire Knowy #6E50C8 ────────────────────────
+// ── iOS toggle — couleur primaire Knowr #6E50C8 ────────────────────────
 function IOSToggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
     <button
@@ -485,12 +486,10 @@ export default function AccountSettings() {
     <div className="size-full bg-background overflow-auto">
       <div className="max-w-7xl mx-auto px-4 py-5 md:px-8 md:py-8">
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h1 className="text-4xl font-semibold mb-2">Paramètres</h1>
-              <p className="text-muted-foreground">Gérez votre profil et vos connexions.</p>
-            </div>
+        <PageHeader
+          title="Paramètres"
+          subtitle="Gérez votre profil et vos connexions."
+          actions={
             <button
               onClick={handleLogout}
               disabled={loggingOut}
@@ -499,9 +498,8 @@ export default function AccountSettings() {
               <LogOut className="size-4" />
               {loggingOut ? 'Déconnexion…' : 'Se déconnecter'}
             </button>
-          </div>
-        </motion.div>
-        <div className="mb-8" />
+          }
+        />
 
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
@@ -526,7 +524,7 @@ export default function AccountSettings() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-6">
 
             <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
-              <h2 className="text-xl font-semibold mb-6">Profil utilisateur</h2>
+              <h2 className="text-xl font-bold mb-6">Profil utilisateur</h2>
 
               <div className="flex flex-col gap-5 mb-8 sm:flex-row sm:items-start sm:gap-8">
                 {profile?.avatarUrl ? (
@@ -537,7 +535,7 @@ export default function AccountSettings() {
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-2xl font-semibold mb-1">{profile?.fullName ?? '—'}</h3>
+                  <h3 className="text-2xl font-bold mb-1">{profile?.fullName ?? '—'}</h3>
                   <p className="text-lg text-muted-foreground mb-4">
                     {profile?.roleTitle ?? ''}{profile?.companyName ? ` chez ${profile.companyName}` : ''}
                   </p>
@@ -550,7 +548,7 @@ export default function AccountSettings() {
               </div>
 
               <div className="border-t border-border pt-6">
-                <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+                <h3 className="text-base font-bold mb-4 flex items-center gap-2">
                   <User className="size-4 text-primary" />Modifier le nom
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
@@ -585,12 +583,12 @@ export default function AccountSettings() {
 
               {/* LinkedIn URL */}
               <div className="border-t border-border pt-6 mt-6">
-                <h3 className="text-base font-semibold mb-1 flex items-center gap-2">
+                <h3 className="text-base font-bold mb-1 flex items-center gap-2">
                   <LinkedInLogo />
                   Profil LinkedIn
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Votre URL LinkedIn permet à Knowy d'enrichir votre réseau et de contextualiser vos échanges professionnels.
+                  Votre URL LinkedIn permet à Knowr d'enrichir votre réseau et de contextualiser vos échanges professionnels.
                 </p>
                 <div className="flex gap-3">
                   <div className="flex-1 relative">
@@ -668,17 +666,17 @@ export default function AccountSettings() {
                   <div className="flex items-center gap-3">
                     <Shield className="size-6 text-primary" />
                     <div>
-                      <h3 className="font-semibold">Paramètres administrateur</h3>
+                      <h3 className="font-bold">Paramètres administrateur</h3>
                       <p className="text-sm text-muted-foreground">Accessibles aux administrateurs de l'organisation uniquement.</p>
                     </div>
                   </div>
                 </div>
                 <div className="bg-card rounded-2xl p-8 border border-border">
-                  <h2 className="text-xl font-semibold mb-6">Informations de l'organisation</h2>
+                  <h2 className="text-xl font-bold mb-6">Informations de l'organisation</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm text-muted-foreground mb-2">Nom de l'organisation</label>
-                      <input type="text" defaultValue="Knowy" className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                      <input type="text" defaultValue="Knowr" className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" />
                     </div>
                     <div>
                       <label className="block text-sm text-muted-foreground mb-2">Site web</label>
@@ -696,7 +694,7 @@ export default function AccountSettings() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-6">
 
             <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
-              <h3 className="text-lg font-semibold mb-2">Comptes connectés</h3>
+              <h3 className="text-lg font-bold mb-2">Comptes connectés</h3>
               <p className="text-sm text-muted-foreground mb-6">
                 Connectez vos comptes pour synchroniser vos emails, calendriers et contacts.
               </p>
@@ -834,7 +832,7 @@ export default function AccountSettings() {
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm mb-1">LinkedIn connecté</p>
                       <p className="text-xs text-muted-foreground mb-3">
-                        Knowy utilise vos données LinkedIn pour enrichir les profils de votre réseau à partir des informations publiques.
+                        Knowr utilise vos données LinkedIn pour enrichir les profils de votre réseau à partir des informations publiques.
                         L'accès aux messages LinkedIn n'est pas disponible via l'API officielle.
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs mb-3">
@@ -860,12 +858,12 @@ export default function AccountSettings() {
 
             {/* CRM — V2 */}
             <div className="bg-card rounded-2xl p-5 border border-border md:p-8 opacity-60">
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-3">
+              <h3 className="text-lg font-bold mb-2 flex items-center gap-3">
                 <Globe className="size-5 text-primary" />
                 Connexions CRM
                 <span className="px-2.5 py-0.5 text-xs font-semibold bg-muted border border-border rounded-full text-muted-foreground">Disponible en V2</span>
               </h3>
-              <p className="text-sm text-muted-foreground mb-6">L'intégration CRM arrivera dans la prochaine version de Knowy.</p>
+              <p className="text-sm text-muted-foreground mb-6">L'intégration CRM arrivera dans la prochaine version de Knowr.</p>
               <div className="space-y-3">
                 {CRM_LIST.map((crm) => (
                   <div key={crm.name} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
@@ -886,7 +884,7 @@ export default function AccountSettings() {
 
             {/* Sync settings */}
             <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
-              <h3 className="text-lg font-semibold mb-2">Paramètres de synchronisation</h3>
+              <h3 className="text-lg font-bold mb-2">Paramètres de synchronisation</h3>
               <p className="text-xs text-muted-foreground mb-6">Préférences persistées en base de données.</p>
               <div className="space-y-3">
                 {[
@@ -915,7 +913,7 @@ export default function AccountSettings() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-6">
 
             <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
-              <h2 className="text-xl font-semibold mb-1 flex items-center gap-2">
+              <h2 className="text-xl font-bold mb-1 flex items-center gap-2">
                 <Lock className="size-5 text-primary" />Mot de passe
               </h2>
 

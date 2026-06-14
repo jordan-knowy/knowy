@@ -442,7 +442,7 @@ function computeScore(s: Stats, prevScore?: number): {
 }
 
 // ── LLM system prompt ─────────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `Tu es le moteur d'intelligence cognitive de Knowy.
+const SYSTEM_PROMPT = `Tu es le moteur d'intelligence cognitive de Knowr.
 À partir de données comportementales (métadonnées uniquement — RGPD-safe, jamais le contenu des emails),
 tu génères des profils cognitifs précis, actionnables et scientifiquement fondés.
 
@@ -691,7 +691,7 @@ Instructions spécifiques :
         'Authorization': `Bearer ${Deno.env.get('OPENROUTER_API_KEY')}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://knowy.ai',
-        'X-Title': 'Knowy Contact Enrichment',
+        'X-Title': 'Knowr Contact Enrichment',
       },
       body: JSON.stringify({
         model: MODEL,

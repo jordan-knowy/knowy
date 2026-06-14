@@ -25,9 +25,9 @@ import {
   ExternalLink,
   Plus
 } from 'lucide-react';
-import KnowyCard from './knowy/KnowyCard';
-import KnowyButton from './knowy/KnowyButton';
-import KnowyBadge from './knowy/KnowyBadge';
+import KnowrCard from './knowr/KnowrCard';
+import KnowrButton from './knowr/KnowrButton';
+import KnowrBadge from './knowr/KnowrBadge';
 import { getContact, getCognitiveProfile } from '../../lib/api/contacts';
 import { getActiveOrganizationId } from '../../lib/api/org';
 import { supabase } from '../../lib/supabase';
@@ -290,12 +290,12 @@ export default function RelationDetail() {
     {
       label: 'Score intensité',
       value: cogScore ? `${cogScore.score_intensite}/100` : '—',
-      source: 'Knowy',
+      source: 'Knowr',
     },
     {
       label: 'Score réciprocité',
       value: cogScore ? `${cogScore.score_reciprocite}/100` : '—',
-      source: 'Knowy',
+      source: 'Knowr',
     },
     {
       label: 'Taux de réponse',
@@ -423,9 +423,9 @@ export default function RelationDetail() {
         <div className="text-center">
           <p className="text-2xl font-bold mb-2">Contact introuvable</p>
           <p className="text-muted-foreground mb-6">Ce contact n'existe pas ou vous n'y avez pas accès.</p>
-          <KnowyButton variant="primary" onClick={() => navigate('/relations')}>
+          <KnowrButton variant="primary" onClick={() => navigate('/relations')}>
             Retour aux contacts
-          </KnowyButton>
+          </KnowrButton>
         </div>
       </div>
     );
@@ -454,14 +454,14 @@ export default function RelationDetail() {
             <span>Retour aux contacts</span>
           </button>
           <div className="flex items-center gap-3">
-            <KnowyButton
+            <KnowrButton
               variant="primary"
               size="md"
               icon={<Sparkles className="size-4" />}
               onClick={() => id && navigate(`/contact/${id}`)}
             >
               Voir la fiche enrichie
-            </KnowyButton>
+            </KnowrButton>
           </div>
         </motion.div>
 
@@ -471,7 +471,7 @@ export default function RelationDetail() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
         >
-          <KnowyCard className={`p-6 mb-4 border-l-4 ${phaseConfig.borderColor}`}>
+          <KnowrCard className={`p-6 mb-4 border-l-4 ${phaseConfig.borderColor}`}>
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
               {/* Left - Identity */}
               <div>
@@ -528,12 +528,12 @@ export default function RelationDetail() {
 
                 <div className="flex items-center gap-2 mb-2">
                   <PhaseIcon className={`size-3 ${phaseConfig.color}`} />
-                  <KnowyBadge
+                  <KnowrBadge
                     variant={contact.phase === 'growth' ? 'sage' : contact.phase === 'decline' ? 'coral' : 'muted'}
                     size="sm"
                   >
                     {phaseConfig.label}
-                  </KnowyBadge>
+                  </KnowrBadge>
                 </div>
                 <p className="text-xs text-muted-foreground mb-4">depuis {contact.phaseDuration}</p>
 
@@ -573,20 +573,20 @@ export default function RelationDetail() {
                 <div>
                   <p className="text-xs text-muted-foreground mb-2">Sources</p>
                   <div className="flex flex-wrap gap-1.5">
-                    <KnowyBadge variant={contact.sources.gmail ? 'sage' : 'muted'} size="sm">
+                    <KnowrBadge variant={contact.sources.gmail ? 'sage' : 'muted'} size="sm">
                       Gmail {contact.sources.gmail && '✓'}
-                    </KnowyBadge>
-                    <KnowyBadge variant={contact.sources.calendar ? 'sage' : 'muted'} size="sm">
+                    </KnowrBadge>
+                    <KnowrBadge variant={contact.sources.calendar ? 'sage' : 'muted'} size="sm">
                       Calendar {contact.sources.calendar && '✓'}
-                    </KnowyBadge>
-                    <KnowyBadge variant={contact.sources.linkedin ? 'sage' : 'muted'} size="sm">
+                    </KnowrBadge>
+                    <KnowrBadge variant={contact.sources.linkedin ? 'sage' : 'muted'} size="sm">
                       LinkedIn {contact.sources.linkedin && '✓'}
-                    </KnowyBadge>
+                    </KnowrBadge>
                   </div>
                 </div>
               </div>
             </div>
-          </KnowyCard>
+          </KnowrCard>
         </motion.div>
 
         {/* MÉMOIRE KNOWY */}
@@ -596,10 +596,10 @@ export default function RelationDetail() {
           transition={{ duration: 0.4, delay: 0.15 }}
           className="mb-4"
         >
-          <KnowyCard className="p-6 bg-gradient-to-br from-primary/5 to-accent/5 border-primary/10">
+          <KnowrCard className="p-6 bg-gradient-to-br from-primary/5 to-accent/5 border-primary/10">
             <div className="flex items-center gap-2 mb-2">
               <Sparkles className="size-5 text-primary" />
-              <h2 className="text-lg font-bold">Mémoire Knowy · {contact.name}</h2>
+              <h2 className="text-lg font-bold">Mémoire Knowr · {contact.name}</h2>
             </div>
 
             {memoryData.length === 0 ? (
@@ -607,7 +607,7 @@ export default function RelationDetail() {
                 <Sparkles className="size-10 mx-auto mb-3 text-primary/30" />
                 <p className="text-sm text-muted-foreground mb-1">Aucun brief généré pour ce contact</p>
                 <p className="text-xs text-muted-foreground">
-                  Planifiez une réunion pour générer votre premier brief Knowy.
+                  Planifiez une réunion pour générer votre premier brief Knowr.
                 </p>
               </div>
             ) : (
@@ -643,7 +643,7 @@ export default function RelationDetail() {
                               </div>
                             )}
                           </div>
-                          <KnowyBadge variant={scoreVariant} size="sm">{score}%</KnowyBadge>
+                          <KnowrBadge variant={scoreVariant} size="sm">{score}%</KnowrBadge>
                         </div>
                       </div>
                     );
@@ -651,7 +651,7 @@ export default function RelationDetail() {
                 </div>
               </>
             )}
-          </KnowyCard>
+          </KnowrCard>
         </motion.div>
 
         {/* 2-Column Layout */}
@@ -667,7 +667,7 @@ export default function RelationDetail() {
                 transition={{ duration: 0.4, delay: 0.2 }}
               >
                 {displayAlerts.map((alert, i) => (
-                  <KnowyCard
+                  <KnowrCard
                     key={i}
                     className={`p-3 mb-2 border-l-4 ${
                       alert.severity === 'success' ? 'border-success bg-success/5' :
@@ -678,12 +678,12 @@ export default function RelationDetail() {
                     <div className="flex items-start gap-2">
                       <AlertCircle className={`size-4 flex-shrink-0 mt-0.5 ${alert.severity === 'success' ? 'text-success' : alert.severity === 'warning' ? 'text-amber-600' : 'text-destructive'}`} />
                       <div className="flex-1">
-                        <h3 className="font-semibold text-sm mb-0.5">{alert.title}</h3>
+                        <h3 className="font-bold text-sm mb-0.5">{alert.title}</h3>
                         <p className="text-xs text-muted-foreground mb-0.5">{alert.message}</p>
                         <p className="text-xs text-muted-foreground opacity-70">{alert.date}</p>
                       </div>
                     </div>
-                  </KnowyCard>
+                  </KnowrCard>
                 ))}
               </motion.div>
             )}
@@ -695,7 +695,7 @@ export default function RelationDetail() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.3 }}
               >
-                <KnowyCard className="p-4">
+                <KnowrCard className="p-4">
                   <h2 className="text-lg font-bold mb-4">Statistiques relationnelles</h2>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     {stats.map((stat, i) => (
@@ -706,7 +706,7 @@ export default function RelationDetail() {
                       </div>
                     ))}
                   </div>
-                </KnowyCard>
+                </KnowrCard>
               </motion.div>
             )}
 
@@ -717,7 +717,7 @@ export default function RelationDetail() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.5 }}
               >
-                <KnowyCard className="p-4">
+                <KnowrCard className="p-4">
                   <h2 className="text-lg font-bold mb-4">Profil interactionnel</h2>
                   <div className="space-y-4">
                     {interactionProfile.axes.map((axis, i) => (
@@ -730,7 +730,7 @@ export default function RelationDetail() {
                           <div className="absolute top-0 left-0 h-full bg-primary rounded-full" style={{ width: `${axis.value}%` }} />
                         </div>
                         <div className="flex items-center justify-between mt-1.5">
-                          <KnowyBadge variant="muted" size="sm">{axis.level}</KnowyBadge>
+                          <KnowrBadge variant="muted" size="sm">{axis.level}</KnowrBadge>
                           <span className="text-xs text-muted-foreground">{axis.confidence}%</span>
                         </div>
                       </div>
@@ -741,9 +741,9 @@ export default function RelationDetail() {
                       <p className="text-xs font-medium mb-2 text-muted-foreground">Modes d'interaction</p>
                       <div className="flex flex-wrap gap-2">
                         {interactionProfile.modes.map((mode, i) => (
-                          <KnowyBadge key={i} variant="primary" size="sm">
+                          <KnowrBadge key={i} variant="primary" size="sm">
                             {mode.name} · {mode.probability}%
-                          </KnowyBadge>
+                          </KnowrBadge>
                         ))}
                       </div>
                     </div>
@@ -751,7 +751,7 @@ export default function RelationDetail() {
                   <p className="text-xs text-muted-foreground mt-3">
                     Confiance globale: {interactionProfile.confidence}%
                   </p>
-                </KnowyCard>
+                </KnowrCard>
               </motion.div>
             )}
 
@@ -761,7 +761,7 @@ export default function RelationDetail() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.6 }}
             >
-              <KnowyCard className="p-4">
+              <KnowrCard className="p-4">
                 <button
                   onClick={() => toggleBlock('behavioral')}
                   className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
@@ -778,18 +778,18 @@ export default function RelationDetail() {
                     <div className="grid grid-cols-2 gap-3 pt-2">
                       {behavioralInsights.map((insight, i) => (
                         <div key={i} className="p-3 bg-muted/20 rounded-lg">
-                          <h3 className="font-semibold text-sm mb-1">{insight.type}</h3>
+                          <h3 className="font-bold text-sm mb-1">{insight.type}</h3>
                           <p className="text-xs text-muted-foreground mb-2">{insight.insight}</p>
                           <div className="flex items-center justify-between">
                             <p className="text-xs text-muted-foreground opacity-70">{insight.source}</p>
-                            <KnowyBadge variant="muted" size="sm">{insight.confidence}%</KnowyBadge>
+                            <KnowrBadge variant="muted" size="sm">{insight.confidence}%</KnowrBadge>
                           </div>
                         </div>
                       ))}
                     </div>
                   )
                 )}
-              </KnowyCard>
+              </KnowrCard>
             </motion.div>
 
             {/* Career Path */}
@@ -798,7 +798,7 @@ export default function RelationDetail() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.7 }}
             >
-              <KnowyCard className="p-4">
+              <KnowrCard className="p-4">
                 <button
                   onClick={() => toggleBlock('career')}
                   className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
@@ -822,16 +822,16 @@ export default function RelationDetail() {
                           <div className="flex-1 pb-6">
                             <div className="flex items-start justify-between mb-2">
                               <div>
-                                <h3 className="font-semibold">{job.title}</h3>
+                                <h3 className="font-bold">{job.title}</h3>
                                 <p className="text-sm text-muted-foreground">{job.company}</p>
                               </div>
-                              {job.isCurrent && <KnowyBadge variant="primary" size="sm">Poste actuel</KnowyBadge>}
+                              {job.isCurrent && <KnowrBadge variant="primary" size="sm">Poste actuel</KnowrBadge>}
                             </div>
                             <p className="text-sm text-muted-foreground mb-2">{job.duration}</p>
                             <div className="flex gap-2 flex-wrap">
-                              <KnowyBadge variant="muted" size="sm">{job.sector}</KnowyBadge>
+                              <KnowrBadge variant="muted" size="sm">{job.sector}</KnowrBadge>
                               {job.badges.map((badge: string, j: number) => (
-                                <KnowyBadge key={j} variant="blue" size="sm">{badge}</KnowyBadge>
+                                <KnowrBadge key={j} variant="blue" size="sm">{badge}</KnowrBadge>
                               ))}
                             </div>
                           </div>
@@ -840,7 +840,7 @@ export default function RelationDetail() {
                     </div>
                   )
                 )}
-              </KnowyCard>
+              </KnowrCard>
             </motion.div>
 
             {/* Exchange History */}
@@ -849,7 +849,7 @@ export default function RelationDetail() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.8 }}
             >
-              <KnowyCard className="p-4">
+              <KnowrCard className="p-4">
                 <button
                   onClick={() => toggleBlock('history')}
                   className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
@@ -873,8 +873,8 @@ export default function RelationDetail() {
                               <p className="text-sm text-muted-foreground">{item.date}</p>
                             </div>
                             <div className="flex gap-2 flex-wrap">
-                              <KnowyBadge variant="muted" size="sm">{item.duration}</KnowyBadge>
-                              {item.hasBrief && <KnowyBadge variant="primary" size="sm">Brief disponible</KnowyBadge>}
+                              <KnowrBadge variant="muted" size="sm">{item.duration}</KnowrBadge>
+                              {item.hasBrief && <KnowrBadge variant="primary" size="sm">Brief disponible</KnowrBadge>}
                               <button
                                 onClick={() => navigate(`/meeting/${item.meetingId}`)}
                                 className="text-xs text-primary hover:underline ml-1"
@@ -888,7 +888,7 @@ export default function RelationDetail() {
                     </div>
                   )
                 )}
-              </KnowyCard>
+              </KnowrCard>
             </motion.div>
 
             {/* Topics & Objections */}
@@ -897,7 +897,7 @@ export default function RelationDetail() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.9 }}
             >
-              <KnowyCard className="p-4">
+              <KnowrCard className="p-4">
                 <button
                   onClick={() => toggleBlock('topics')}
                   className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
@@ -908,21 +908,21 @@ export default function RelationDetail() {
                 {openBlocks.topics && (
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <h3 className="font-semibold mb-4">Sujets abordés</h3>
+                      <h3 className="font-bold mb-4">Sujets abordés</h3>
                       {topics.length === 0 ? (
                         <p className="text-sm text-muted-foreground">Aucun sujet détecté.</p>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           {topics.map((topic, i) => (
-                            <KnowyBadge key={i} variant="blue" size="md">
+                            <KnowrBadge key={i} variant="blue" size="md">
                               {topic.name} ×{topic.count}
-                            </KnowyBadge>
+                            </KnowrBadge>
                           ))}
                         </div>
                       )}
                     </div>
                     <div>
-                      <h3 className="font-semibold mb-4">Objections identifiées</h3>
+                      <h3 className="font-bold mb-4">Objections identifiées</h3>
                       {objections.length === 0 ? (
                         <p className="text-sm text-muted-foreground">Aucune objection enregistrée.</p>
                       ) : (
@@ -931,9 +931,9 @@ export default function RelationDetail() {
                             <div key={i} className="p-3 bg-muted/20 rounded-lg">
                               <div className="flex items-start justify-between mb-2">
                                 <p className="font-medium text-sm">{obj.objection}</p>
-                                <KnowyBadge variant={obj.status === 'resolved' ? 'sage' : 'coral'} size="sm">
+                                <KnowrBadge variant={obj.status === 'resolved' ? 'sage' : 'coral'} size="sm">
                                   {obj.status === 'resolved' ? 'Résolue' : 'Active'}
-                                </KnowyBadge>
+                                </KnowrBadge>
                               </div>
                               <p className="text-xs text-muted-foreground">
                                 {obj.firstMentioned} · {obj.mentions} mention{obj.mentions > 1 ? 's' : ''}
@@ -945,7 +945,7 @@ export default function RelationDetail() {
                     </div>
                   </div>
                 )}
-              </KnowyCard>
+              </KnowrCard>
             </motion.div>
 
             {/* Company Context */}
@@ -954,7 +954,7 @@ export default function RelationDetail() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 1.0 }}
             >
-              <KnowyCard className="p-4">
+              <KnowrCard className="p-4">
                 <button
                   onClick={() => toggleBlock('company')}
                   className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
@@ -969,22 +969,22 @@ export default function RelationDetail() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <KnowyBadge variant="sage" size="md">
+                      <KnowrBadge variant="sage" size="md">
                         Momentum {companyContext.momentum === 'favorable' ? 'favorable 🟢' : 'neutre ⚪'}
-                      </KnowyBadge>
+                      </KnowrBadge>
                       <div className="p-4 bg-success/5 border border-success/20 rounded-xl">
                         <p className="font-semibold mb-1">{companyContext.news}</p>
                         <p className="text-sm text-muted-foreground">{companyContext.newsDate}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {companyContext.signals.map((sig, i) => (
-                          <KnowyBadge key={i} variant="blue" size="sm">{sig}</KnowyBadge>
+                          <KnowrBadge key={i} variant="blue" size="sm">{sig}</KnowrBadge>
                         ))}
                       </div>
                     </div>
                   )
                 )}
-              </KnowyCard>
+              </KnowrCard>
             </motion.div>
 
             {/* Shared Network */}
@@ -993,7 +993,7 @@ export default function RelationDetail() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 1.1 }}
             >
-              <KnowyCard className="p-4">
+              <KnowrCard className="p-4">
                 <button
                   onClick={() => toggleBlock('network')}
                   className="w-full flex items-center justify-between mb-3 hover:text-primary transition-colors"
@@ -1019,13 +1019,13 @@ export default function RelationDetail() {
                               <p className="text-sm text-muted-foreground capitalize">{person.role.replace(/_/g, ' ')}</p>
                             </div>
                           </div>
-                          <KnowyBadge variant="muted" size="sm">Force {Math.round(person.strength * 100)}%</KnowyBadge>
+                          <KnowrBadge variant="muted" size="sm">Force {Math.round(person.strength * 100)}%</KnowrBadge>
                         </div>
                       ))}
                     </div>
                   )
                 )}
-              </KnowyCard>
+              </KnowrCard>
             </motion.div>
 
             {/* Action Recommendation */}
@@ -1036,7 +1036,7 @@ export default function RelationDetail() {
                 transition={{ duration: 0.4, delay: 1.2 }}
                 className="mb-6"
               >
-                <KnowyCard className="p-4 bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
+                <KnowrCard className="p-4 bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
                   <h2 className="text-base font-bold mb-3">Recommandation d'action</h2>
                   <p className="text-sm text-muted-foreground">
                     {contact.phase === 'growth'
@@ -1047,7 +1047,7 @@ export default function RelationDetail() {
                     {contact.nextRecommended > 0 &&
                       ` Prochain contact recommandé dans ${contact.nextRecommended} jours.`}
                   </p>
-                </KnowyCard>
+                </KnowrCard>
               </motion.div>
             )}
 
@@ -1056,7 +1056,7 @@ export default function RelationDetail() {
 
           {/* RIGHT COLUMN — Activity Feed */}
           <div className="sticky top-6 self-start h-fit">
-            <KnowyCard className="p-4">
+            <KnowrCard className="p-4">
               <h2 className="font-bold mb-4 flex items-center gap-2">
                 <Zap className="size-4 text-primary" />
                 Activité récente
@@ -1095,14 +1095,14 @@ export default function RelationDetail() {
                         </div>
                         <p className="text-sm font-medium mb-2">{item.title}</p>
                         {item.hasBrief && (
-                          <KnowyButton
+                          <KnowrButton
                             variant="ghost"
                             size="sm"
                             onClick={() => navigate(`/meeting/${item.meetingId}`)}
                             className="w-full"
                           >
                             Voir la réunion →
-                          </KnowyButton>
+                          </KnowrButton>
                         )}
                       </div>
                     </div>
@@ -1112,14 +1112,14 @@ export default function RelationDetail() {
 
               {/* Actions */}
               <div className="mt-4 pt-4 border-t border-border space-y-2">
-                <KnowyButton variant="primary" size="sm" className="w-full" icon={<Mail className="size-4" />}>
+                <KnowrButton variant="primary" size="sm" className="w-full" icon={<Mail className="size-4" />}>
                   Envoyer un email
-                </KnowyButton>
-                <KnowyButton variant="secondary" size="sm" className="w-full" icon={<Calendar className="size-4" />}>
+                </KnowrButton>
+                <KnowrButton variant="secondary" size="sm" className="w-full" icon={<Calendar className="size-4" />}>
                   Planifier réunion
-                </KnowyButton>
+                </KnowrButton>
               </div>
-            </KnowyCard>
+            </KnowrCard>
           </div>
           {/* END RIGHT COLUMN */}
 

@@ -42,7 +42,7 @@ export default function Organization() {
   const [licenceTotal, setLicenceTotal] = useState(0);
   const { profile } = useCurrentProfile();
 
-  const orgName = profile?.companyName && profile.companyName !== 'Workspace Knowy'
+  const orgName = profile?.companyName && profile.companyName !== 'Workspace Knowr'
     ? profile.companyName
     : 'Mon Organisation';
 
@@ -140,7 +140,7 @@ export default function Organization() {
                 🎯
               </div>
               <div>
-                <h1 className="text-4xl font-semibold mb-2">{orgName}</h1>
+                <h1 className="text-4xl font-bold mb-2">{orgName}</h1>
                 <p className="text-muted-foreground">Cockpit relationnel organisationnel</p>
               </div>
             </div>
@@ -196,11 +196,11 @@ export default function Organization() {
           transition={{ duration: 0.6, delay: 0.1 }}
           className="mb-8"
         >
-          <h2 className="text-2xl font-semibold mb-4">Meeting Prioritization & Alerts</h2>
+          <h2 className="text-2xl font-bold mb-4">Meeting Prioritization & Alerts</h2>
           {alerts.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-5 text-center md:p-8">
               <AlertTriangle className="mx-auto mb-3 size-7 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">Aucune alerte pour le moment — les alertes apparaîtront dès que Knowy détecte des risques relationnels sur vos réunions.</p>
+              <p className="text-sm text-muted-foreground">Aucune alerte pour le moment — les alertes apparaîtront dès que Knowr détecte des risques relationnels sur vos réunions.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -240,7 +240,7 @@ export default function Organization() {
           className="mb-8"
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-semibold">Team Overview</h2>
+            <h2 className="text-2xl font-bold">Team Overview</h2>
             <button className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-accent transition-colors flex items-center gap-2">
               <UserPlus className="size-4" />
               Inviter un membre
@@ -273,7 +273,7 @@ export default function Organization() {
                 <div className="flex items-start gap-4 mb-4">
                   <div className="text-4xl">{member.photo}</div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold mb-1 truncate">{member.name}</h3>
+                    <h3 className="font-bold mb-1 truncate">{member.name}</h3>
                     <p className="text-sm text-muted-foreground truncate">{member.role}</p>
                     <div className="flex gap-2 mt-2">
                       <span className={`text-xs px-2 py-1 rounded-lg border ${departmentColors[member.department]}`}>
@@ -319,7 +319,7 @@ export default function Organization() {
           transition={{ duration: 0.6, delay: 0.4 }}
           className="mb-8"
         >
-          <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
+          <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
             <Sparkles className="size-6 text-primary" />
             Organizational Insights
           </h2>
@@ -356,12 +356,12 @@ export default function Organization() {
           transition={{ duration: 0.6, delay: 0.5 }}
           className="mb-8"
         >
-          <h2 className="text-2xl font-semibold mb-4">Team Activity & Coverage</h2>
+          <h2 className="text-2xl font-bold mb-4">Team Activity & Coverage</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-card rounded-2xl p-6 border border-border">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold">Réunions par équipe</h3>
+                <h3 className="font-bold">Réunions par équipe</h3>
                 <BarChart3 className="size-5 text-primary" />
               </div>
               <div className="space-y-3">
@@ -397,7 +397,7 @@ export default function Organization() {
 
             <div className="bg-card rounded-2xl p-6 border border-border">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold">Couverture relationnelle</h3>
+                <h3 className="font-bold">Couverture relationnelle</h3>
                 <Target className="size-5 text-success" />
               </div>
               <div className="space-y-3">
@@ -433,7 +433,7 @@ export default function Organization() {
 
             <div className="bg-card rounded-2xl p-6 border border-border">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold">Répartition comptes</h3>
+                <h3 className="font-bold">Répartition comptes</h3>
                 <Building2 className="size-5 text-accent" />
               </div>
               <div className="space-y-3">
@@ -462,7 +462,7 @@ export default function Organization() {
           className="mb-8"
         >
           <div className="bg-card rounded-2xl p-5 border border-border md:p-8">
-            <h2 className="text-2xl font-semibold mb-6">Inviter des membres de l'équipe</h2>
+            <h2 className="text-2xl font-bold mb-6">Inviter des membres de l'équipe</h2>
 
             <div className="flex gap-3 mb-6">
               <input

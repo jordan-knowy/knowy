@@ -102,6 +102,80 @@
   --font-mono: "JetBrains Mono", "Courier New", monospace;
 }
 
+/* ============================================================
+   ALIASES CHARTE — noms courts de la maquette knowr-platform
+   (spec-16). Permettent var(--violet), var(--night)… dans les
+   composants au lieu des couleurs hardcodées. Source unique de
+   vérité = les tokens @theme ci-dessus.
+   ============================================================ */
+:root {
+  /* Fonds & sombres */
+  --bg:      var(--color-lavender-50);
+  --bg2:     var(--color-lavender-100);
+  --bg3:     var(--color-lavender-200);
+  --white:   #FFFFFF;
+  --night:   var(--color-violet-night);       /* #1A1040 */
+  --night2:  var(--color-violet-night-deep);  /* #2A1E60 */
+
+  /* Violet */
+  --violet:   var(--color-violet-primary);    /* #6E50C8 */
+  --violet-d: var(--color-violet-dark);        /* #5A3EAA */
+  --violet-l: var(--color-lavender-200);       /* #D4C5F5 */
+  --violet-s: rgba(110, 80, 200, 0.08);
+  --violet-m: rgba(110, 80, 200, 0.15);
+  --violet-x: rgba(110, 80, 200, 0.18);
+
+  /* Rampe texte violet-teintée */
+  --t1: var(--color-text-primary);    /* #1A1040 */
+  --t2: var(--color-text-secondary);  /* #5A4880 */
+  --t3: var(--color-text-tertiary);   /* #9082B8 */
+  --t4: var(--color-text-disabled);   /* #C4B8E0 */
+
+  /* Couleurs sémantiques */
+  --sage:    var(--color-sage);      /* #2EA86A */
+  --sage-s:  var(--color-sage-bg);
+  --sage-l:  #96DDB8;
+  --amber:   var(--color-amber);     /* #C97A20 */
+  --amber-s: var(--color-amber-bg);
+  --amber-l: #F0C07A;
+  --coral:   var(--color-coral);     /* #D94F63 */
+  --coral-s: var(--color-coral-bg);
+  --coral-l: #F0A0AD;
+  --blue:    var(--color-blue-info); /* #3D6FCC */
+  --blue-s:  var(--color-blue-info-bg);
+  --blue-l:  #9DBAF5;
+  --teal:    #2896A8;
+  --teal-s:  #E2F4F7;
+  --teal-l:  #8FD2DD;
+
+  /* Bordures */
+  --border-charte: rgba(110, 80, 200, 0.10);
+  --border-m:      rgba(110, 80, 200, 0.18);
+  --border-s:      rgba(110, 80, 200, 0.28);
+
+  /* Ombres */
+  --sh-xs: var(--shadow-xs);
+  --sh-sm: var(--shadow-sm);
+  --sh-md: var(--shadow-md);
+  --sh-lg: var(--shadow-lg);
+
+  /* Rayons */
+  --r-sm:  var(--radius-sm);
+  --r-md:  var(--radius-md);
+  --r-lg:  var(--radius-lg);
+  --r-xl:  var(--radius-xl);
+  --r-2xl: var(--radius-2xl);
+  --r-f:   var(--radius-pill);
+
+  /* Polices */
+  --font: var(--font-sans);
+  --mono: var(--font-mono);
+
+  /* Easings (maquette) */
+  --ease:      cubic-bezier(.4, 0, .2, 1);
+  --overshoot: cubic-bezier(.22, .68, 0, 1.2);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { motion } from 'motion/react';
 
-interface KnowyCardProps {
+interface KnowrCardProps {
   children: ReactNode;
   hover?: boolean;
   className?: string;
@@ -9,13 +9,13 @@ interface KnowyCardProps {
   delay?: number;
 }
 
-export default function KnowyCard({
+export default function KnowrCard({
   children,
   hover = false,
   className = '',
   onClick,
   delay = 0
-}: KnowyCardProps) {
+}: KnowrCardProps) {
   const baseStyles = 'bg-card border border-border transition-all duration-200';
   const hoverStyles = hover ? 'hover:border-primary/30 hover:shadow-sm hover:-translate-y-0.5 cursor-pointer' : '';
 

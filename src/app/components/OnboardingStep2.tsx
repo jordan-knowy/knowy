@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertCircle, Calendar, CheckCircle2, Lock, Mail, RefreshCw, Sparkles } from 'lucide-react';
-import KnowyButton from './knowy/KnowyButton';
+import KnowrButton from './knowr/KnowrButton';
 import { supabase } from '../../lib/supabase';
 import {
   getConnectedIdentityProviders,
@@ -133,7 +133,7 @@ export default function OnboardingStep2() {
           </div>
           <h1 className="mb-4">Connectez vos échanges</h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Les emails, calendriers et participants sont la matière première du score comportemental Knowy.
+            Les emails, calendriers et participants sont la matière première du score comportemental Knowr.
           </p>
         </motion.div>
 
@@ -172,9 +172,9 @@ export default function OnboardingStep2() {
                         <p className="text-sm font-medium text-success">Connecté</p>
                       </div>
                     ) : (
-                      <KnowyButton variant="primary" size="md" onClick={() => handleConnect(provider)} loading={pending === provider.id}>
+                      <KnowrButton variant="primary" size="md" onClick={() => handleConnect(provider)} loading={pending === provider.id}>
                         Connecter
-                      </KnowyButton>
+                      </KnowrButton>
                     )}
                   </div>
                 </div>
@@ -187,7 +187,7 @@ export default function OnboardingStep2() {
           <div className="flex items-start gap-3">
             <Lock className="size-5 text-primary mt-0.5" />
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Knowy utilise ces accès pour extraire des signaux de contexte. La lecture complète et l'ingestion des messages seront contrôlées par vos préférences de confidentialité à l'étape suivante.
+              Knowr utilise ces accès pour extraire des signaux de contexte. La lecture complète et l'ingestion des messages seront contrôlées par vos préférences de confidentialité à l'étape suivante.
             </p>
           </div>
         </div>
@@ -204,13 +204,13 @@ export default function OnboardingStep2() {
             Retour
           </button>
           <div className="flex items-center gap-3">
-            <KnowyButton variant="secondary" size="md" onClick={refreshConnections}>
+            <KnowrButton variant="secondary" size="md" onClick={refreshConnections}>
               <RefreshCw className="size-4" />
               Rafraîchir
-            </KnowyButton>
-            <KnowyButton variant="primary" size="lg" onClick={handleContinue}>
+            </KnowrButton>
+            <KnowrButton variant="primary" size="lg" onClick={handleContinue}>
               Continuer
-            </KnowyButton>
+            </KnowrButton>
           </div>
         </div>
       </div>

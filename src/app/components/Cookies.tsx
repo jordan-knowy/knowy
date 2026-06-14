@@ -47,7 +47,7 @@ const navigate = useNavigate();
         <div className="space-y-8 text-sm leading-7">
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">Qu'est-ce qu'un cookie ?</h2>
+            <h2 className="text-xl font-bold mb-3">Qu'est-ce qu'un cookie ?</h2>
             <p className="text-muted-foreground">
               Un cookie est un petit fichier texte déposé sur votre appareil lors de la visite d'un site web.
               Il permet de mémoriser des informations relatives à votre navigation afin d'améliorer votre expérience.
@@ -55,7 +55,7 @@ const navigate = useNavigate();
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">Cookies utilisés par Knowy</h2>
+            <h2 className="text-xl font-bold mb-3">Cookies utilisés par Knowr</h2>
             <div className="space-y-3 sm:hidden">
               {cookieRows.map((row) => (
                 <div key={row.name} className="rounded-xl border border-border bg-card p-4">
@@ -93,21 +93,21 @@ const navigate = useNavigate();
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">Cookies tiers</h2>
+            <h2 className="text-xl font-bold mb-3">Cookies tiers</h2>
             <p className="text-muted-foreground mb-3">
-              Knowy peut utiliser des cookies provenant de services tiers :
+              Knowr peut utiliser des cookies provenant de services tiers :
             </p>
             <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
               <li><strong className="text-foreground">Google</strong> : authentication OAuth (Google Sign-In)</li>
               <li><strong className="text-foreground">Supabase</strong> : gestion de session et authentification</li>
             </ul>
             <p className="mt-3 text-muted-foreground">
-              Ces services ont leurs propres politiques de cookies. Knowy ne dépose <strong className="text-foreground">aucun cookie publicitaire</strong>.
+              Ces services ont leurs propres politiques de cookies. Knowr ne dépose <strong className="text-foreground">aucun cookie publicitaire</strong>.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">Gestion de vos préférences</h2>
+            <h2 className="text-xl font-bold mb-3">Gestion de vos préférences</h2>
             <p className="text-muted-foreground mb-3">
               Les cookies essentiels sont nécessaires au fonctionnement du service et ne peuvent pas être désactivés.
               Pour les autres catégories, vous pouvez gérer vos préférences :
@@ -122,7 +122,7 @@ const navigate = useNavigate();
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">Consentement</h2>
+            <h2 className="text-xl font-bold mb-3">Consentement</h2>
             <p className="text-muted-foreground">
               Conformément à la réglementation CNIL et au RGPD, votre consentement est requis avant le dépôt
               de cookies non essentiels. Une bannière de consentement vous est présentée lors de votre première
@@ -131,7 +131,7 @@ const navigate = useNavigate();
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">Contact</h2>
+            <h2 className="text-xl font-bold mb-3">Contact</h2>
             <p className="text-muted-foreground">
               Pour toute question sur notre utilisation des cookies :{' '}
               <a href="mailto:privacy@knowy.ai" className="text-primary hover:underline">privacy@knowy.ai</a>
@@ -139,7 +139,7 @@ const navigate = useNavigate();
           </section>
 
           <section className="pt-6 border-t border-border">
-            <p className="text-muted-foreground">Knowy SAS — Paris, France 🇫🇷</p>
+            <p className="text-muted-foreground">Knowr SAS — Paris, France 🇫🇷</p>
           </section>
         </div>
       </div>

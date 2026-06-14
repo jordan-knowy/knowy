@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowRight, Brain, CalendarCheck, CheckCircle2, Mail, Network, ShieldCheck, Sparkles, Users, MapPin } from 'lucide-react';
-import logoKnowy from '../../imports/Pre_sentation1.jpg';
+import logoKnowr from '../../imports/Pre_sentation1.jpg';
 import relationPreview from '../../imports/Capture_d_e_cran_2026-05-21_a__13.09.57.png';
 import pricingPreview from '../../imports/Capture_d_e_cran_2026-05-25_a__14.17.20.png';
 import { Button } from './design-system/Button';
@@ -13,7 +13,7 @@ const sources = ['Gmail', 'Outlook', 'LinkedIn', 'Calendar', 'Zoom text', 'Teams
 const productShots = [
   {
     title: 'La relation, enfin visible.',
-    text: 'Score relationnel, stakeholders actifs, momentum: Knowy transforme le bruit des échanges en signaux lisibles.',
+    text: 'Score relationnel, stakeholders actifs, momentum: Knowr transforme le bruit des échanges en signaux lisibles.',
     image: relationPreview,
   },
   {
@@ -51,7 +51,7 @@ export default function LandingPage() {
               onClick={() => navigate('/')}
               className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <img src={logoKnowy} alt="Knowy" className="h-10 w-auto" />
+              <img src={logoKnowr} alt="Knowr" className="h-10 w-auto" />
             </button>
 
             <div className="flex items-center gap-2">
@@ -68,15 +68,15 @@ export default function LandingPage() {
             <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
               <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm font-semibold text-primary">
                 <Sparkles className="size-4" />
-                L'intelligence relationnelle avant la réunion
+                L'mémoire relationnelle avant la réunion
               </p>
 
-              <h1 className="text-4xl font-semibold leading-tight tracking-normal sm:text-5xl md:text-7xl">
+              <h1 className="text-4xl font-bold leading-tight tracking-normal sm:text-5xl md:text-7xl">
                 Sachez qui vous avez en face.
               </h1>
 
               <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground sm:text-xl sm:leading-9">
-                Knowy lit les signaux autorisés de vos échanges et prépare une fiche claire: comportement,
+                Knowr lit les signaux autorisés de vos échanges et prépare une fiche claire: comportement,
                 influence, risques, stratégie de conversation.
               </p>
 
@@ -100,7 +100,7 @@ export default function LandingPage() {
 
             <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.08 }}>
               <div className="rounded-lg border border-border bg-card p-3 shadow-xl">
-                <img src={relationPreview} alt="Capture Knowy montrant l'évolution relationnelle" className="aspect-[1.35] w-full rounded-md object-cover" />
+                <img src={relationPreview} alt="Capture Knowr montrant l'évolution relationnelle" className="aspect-[1.35] w-full rounded-md object-cover" />
               </div>
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {[
@@ -121,7 +121,7 @@ export default function LandingPage() {
 
       <section className="mx-auto max-w-7xl px-6 py-16 lg:px-10">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-semibold sm:text-4xl md:text-6xl">Pas un CRM. Une lecture de la pièce.</h2>
+          <h2 className="text-3xl font-bold sm:text-4xl md:text-6xl">Pas un CRM. Une lecture de la pièce.</h2>
           <p className="mt-5 text-lg leading-8 text-muted-foreground">
             La donnée utile n'est pas seulement dans les champs. Elle est dans les silences, les objections,
             les habitudes de réponse et les relations entre les personnes.
@@ -136,7 +136,7 @@ export default function LandingPage() {
           ].map(([Icon, title, text]) => (
             <article key={String(title)} className="rounded-lg border border-border bg-card p-6">
               <Icon className="mb-4 size-6 text-primary" />
-              <h3 className="text-lg font-semibold">{String(title)}</h3>
+              <h3 className="text-lg font-bold">{String(title)}</h3>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">{String(text)}</p>
             </article>
           ))}
@@ -147,7 +147,7 @@ export default function LandingPage() {
         <section key={shot.title} className={`border-t border-border ${index % 2 === 1 ? 'bg-muted/30' : 'bg-background'}`}>
           <div className="mx-auto grid max-w-7xl items-center gap-10 px-6 py-16 lg:grid-cols-2 lg:px-10">
             <div className={index % 2 === 1 ? 'lg:order-2' : ''}>
-              <h2 className="text-3xl font-semibold sm:text-4xl md:text-5xl">{shot.title}</h2>
+              <h2 className="text-3xl font-bold sm:text-4xl md:text-5xl">{shot.title}</h2>
               <p className="mt-5 text-lg leading-8 text-muted-foreground">{shot.text}</p>
               <div className="mt-7 grid gap-3">
                 {[
@@ -173,9 +173,9 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-6 py-16 lg:px-10">
           <div className="grid gap-8 lg:grid-cols-[0.75fr_1.25fr]">
             <div>
-              <h2 className="text-3xl font-semibold sm:text-4xl">Un contexte IA, propre dès le départ.</h2>
+              <h2 className="text-3xl font-bold sm:text-4xl">Un contexte IA, propre dès le départ.</h2>
               <p className="mt-4 text-muted-foreground">
-                Knowy structure votre profil, votre offre, votre site et vos connecteurs pour donner au moteur une base claire.
+                Knowr structure votre profil, votre offre, votre site et vos connecteurs pour donner au moteur une base claire.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -198,9 +198,9 @@ export default function LandingPage() {
 
       <section className="border-t border-border bg-violet-night text-white">
         <div className="mx-auto max-w-4xl px-6 py-16 text-center lg:px-10">
-          <h2 className="text-3xl font-semibold sm:text-4xl md:text-6xl">Entrez préparé. Sortez aligné.</h2>
+          <h2 className="text-3xl font-bold sm:text-4xl md:text-6xl">Entrez préparé. Sortez aligné.</h2>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-white/70">
-            Créez votre profil, connectez vos sources, puis laissez Knowy construire votre mémoire relationnelle.
+            Créez votre profil, connectez vos sources, puis laissez Knowr construire votre mémoire relationnelle.
           </p>
           <Button className="mt-8" size="lg" onClick={goToApp} icon={<ArrowRight className="size-5" />}>
             Commencer
@@ -227,14 +227,14 @@ export default function LandingPage() {
                 Paris, France
               </p>
               <p className="text-xs text-muted-foreground leading-5">
-                Intelligence relationnelle pour professionnels B2B.
+                Mémoire relationnelle pour professionnels B2B.
                 Connaissez vos contacts avant d'entrer en réunion.
               </p>
             </div>
 
             {/* Produit */}
             <div>
-              <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider text-muted-foreground">Produit</h4>
+              <h4 className="font-bold mb-4 text-sm uppercase tracking-wider text-muted-foreground">Produit</h4>
               <ul className="space-y-2.5">
                 {[
                   ['Commencer gratuitement', '/signin'],
@@ -256,7 +256,7 @@ export default function LandingPage() {
 
             {/* Légal */}
             <div>
-              <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider text-muted-foreground">Légal</h4>
+              <h4 className="font-bold mb-4 text-sm uppercase tracking-wider text-muted-foreground">Légal</h4>
               <ul className="space-y-2.5">
                 {[
                   ['CGU', '/cgu'],
@@ -278,7 +278,7 @@ export default function LandingPage() {
 
             {/* Contact */}
             <div>
-              <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider text-muted-foreground">Contact</h4>
+              <h4 className="font-bold mb-4 text-sm uppercase tracking-wider text-muted-foreground">Contact</h4>
               <ul className="space-y-2.5">
                 <li>
                   <a href="mailto:contact@knowy.ai" className="text-sm text-muted-foreground hover:text-primary transition-colors">
@@ -310,7 +310,7 @@ export default function LandingPage() {
           {/* Bottom bar */}
           <div className="mt-10 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs text-muted-foreground">
-              © 2026 Knowy SAS · Tous droits réservés · 🇫🇷 Paris, France
+              © 2026 Knowr SAS · Tous droits réservés · 🇫🇷 Paris, France
             </p>
             <div className="flex items-center gap-6 text-xs text-muted-foreground">
               <button onClick={() => navigate('/cgu')} className="hover:text-primary transition-colors">CGU</button>

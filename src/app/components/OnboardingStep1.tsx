@@ -11,7 +11,7 @@ import {
   Sparkles,
   User,
 } from 'lucide-react';
-import KnowyButton from './knowy/KnowyButton';
+import KnowrButton from './knowr/KnowrButton';
 import { supabase } from '../../lib/supabase';
 import {
   getConnectedIdentityProviders,
@@ -251,7 +251,7 @@ export default function OnboardingStep1() {
           </div>
           <h1 className="mb-4">Créons votre profil</h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Knowy construit le contexte que le LLM utilisera pour comprendre qui vous êtes, ce que vous vendez et comment préparer vos échanges.
+            Knowr construit le contexte que le LLM utilisera pour comprendre qui vous êtes, ce que vous vendez et comment préparer vos échanges.
           </p>
         </motion.div>
 
@@ -271,12 +271,12 @@ export default function OnboardingStep1() {
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-3">
-                    <KnowyButton variant="primary" size="md" onClick={handleLinkedInConnect} loading={isConnectingLinkedIn}>
+                    <KnowrButton variant="primary" size="md" onClick={handleLinkedInConnect} loading={isConnectingLinkedIn}>
                       Connecter LinkedIn
-                    </KnowyButton>
-                    <KnowyButton variant="secondary" size="md" onClick={refreshUser}>
+                    </KnowrButton>
+                    <KnowrButton variant="secondary" size="md" onClick={refreshUser}>
                       Rafraîchir
-                    </KnowyButton>
+                    </KnowrButton>
                   </div>
                 )}
               </div>
@@ -301,15 +301,15 @@ export default function OnboardingStep1() {
                 onChange={(event) => setWebsiteUrl(event.target.value)}
                 className="flex-1 px-4 py-3 bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
               />
-              <KnowyButton variant="secondary" size="md" onClick={handleAnalyzeWebsite} loading={isAnalyzingWebsite} disabled={!websiteUrl.trim()}>
+              <KnowrButton variant="secondary" size="md" onClick={handleAnalyzeWebsite} loading={isAnalyzingWebsite} disabled={!websiteUrl.trim()}>
                 {websiteData ? <CheckCircle2 className="size-4" /> : <Sparkles className="size-4" />}
                 {websiteData ? 'Réanalyser' : 'Analyser'}
-              </KnowyButton>
+              </KnowrButton>
             </div>
             {websiteData && (
               <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 text-sm text-muted-foreground">
                 <p className="font-medium text-foreground mb-2">{websiteData.title ?? 'Site analysé'}</p>
-                <p>{pickAnalysisValue(websiteData, ['summary', 'description', 'positioning']) || 'Analyse enregistrée pour le moteur Knowy.'}</p>
+                <p>{pickAnalysisValue(websiteData, ['summary', 'description', 'positioning']) || 'Analyse enregistrée pour le moteur Knowr.'}</p>
               </div>
             )}
           </section>
@@ -318,7 +318,7 @@ export default function OnboardingStep1() {
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-2 text-sm font-medium">
                 Entreprise
-                <input value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Knowy" className="w-full px-4 py-3 bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm" />
+                <input value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Knowr" className="w-full px-4 py-3 bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm" />
               </label>
               <label className="space-y-2 text-sm font-medium">
                 Votre poste
@@ -328,7 +328,7 @@ export default function OnboardingStep1() {
             <label className="block space-y-2 text-sm font-medium">
               Décrivez ce que vous vendez
               <textarea
-                placeholder="Ex: Plateforme d'intelligence relationnelle qui prépare chaque réunion importante."
+                placeholder="Ex: Plateforme d'mémoire relationnelle qui prépare chaque réunion importante."
                 value={productDescription}
                 onChange={(event) => setProductDescription(event.target.value.slice(0, 140))}
                 rows={3}
@@ -357,9 +357,9 @@ export default function OnboardingStep1() {
             </div>
           )}
 
-          <KnowyButton variant="primary" size="lg" onClick={handleContinue} disabled={!canContinue || saving} loading={saving} className="w-full">
+          <KnowrButton variant="primary" size="lg" onClick={handleContinue} disabled={!canContinue || saving} loading={saving} className="w-full">
             Sauvegarder et continuer
-          </KnowyButton>
+          </KnowrButton>
         </div>
       </div>
     </div>

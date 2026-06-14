@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Users, Network, Calendar, Shield, Linkedin, Mail } from 'lucide-react';
-import logoKnowy from '../../imports/Pre_sentation1.jpg';
+import logoKnowr from '../../imports/Pre_sentation1.jpg';
 import { supabase } from '../../lib/supabase';
 
 // After OAuth, OnboardingRoute/ProtectedApp will decide where to go
@@ -105,15 +105,15 @@ export default function SignIn() {
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="inline-flex items-center gap-2 mb-8">
-              <img src={logoKnowy} alt="Knowy" className="h-12" />
+              <img src={logoKnowr} alt="Knowr" className="h-12" />
             </div>
 
-            <h1 className="text-5xl font-semibold mb-6 leading-tight">
+            <h1 className="text-5xl font-bold mb-6 leading-tight">
               Comprenez chaque réunion avant d'y entrer.
             </h1>
 
             <p className="text-xl text-muted-foreground mb-12">
-              Knowy transforme vos réunions en intelligence relationnelle structurée.
+              Knowr transforme vos réunions en mémoire relationnelle structurée.
             </p>
 
             <div className="grid grid-cols-2 gap-4">
@@ -163,13 +163,13 @@ export default function SignIn() {
         >
           {/* Mobile logo */}
           <div className="lg:hidden mb-8">
-            <img src={logoKnowy} alt="Knowy" className="h-12" />
+            <img src={logoKnowr} alt="Knowr" className="h-12" />
           </div>
 
           <div className="bg-card rounded-3xl p-5 border border-border shadow-lg shadow-primary/5 sm:p-8">
-            <h2 className="text-3xl font-semibold mb-2">Bienvenue</h2>
+            <h2 className="text-3xl font-bold mb-2">Bienvenue</h2>
             <p className="text-muted-foreground mb-8">
-              Connectez-vous pour accéder à votre intelligence relationnelle.
+              Connectez-vous pour accéder à votre mémoire relationnelle.
             </p>
 
             <div className="space-y-3">

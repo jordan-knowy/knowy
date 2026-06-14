@@ -238,7 +238,7 @@ export default function Team() {
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-4xl font-semibold mb-2">Team</h1>
+              <h1 className="text-4xl font-bold mb-2">Team</h1>
               <p className="text-muted-foreground">
                 {teamMembers.length} membres dans votre équipe
               </p>
@@ -267,7 +267,7 @@ export default function Team() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               {/* Your Profile */}
               <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-6 border border-primary/10">
-                <h3 className="text-lg font-semibold mb-4">Votre profil</h3>
+                <h3 className="text-lg font-bold mb-4">Votre profil</h3>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="text-4xl">👨‍💼</div>
                   <div>
@@ -290,7 +290,7 @@ export default function Team() {
 
               {/* Their Profile */}
               <div className="bg-card rounded-2xl p-6 border border-border">
-                <h3 className="text-lg font-semibold mb-4">Profil de {selectedMember.name.split(' ')[0]}</h3>
+                <h3 className="text-lg font-bold mb-4">Profil de {selectedMember.name.split(' ')[0]}</h3>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="text-4xl">{selectedMember.photo}</div>
                   <div>
@@ -322,7 +322,7 @@ export default function Team() {
                       <div className="inline-flex items-center justify-center size-24 bg-success/20 rounded-full mb-4">
                         <span className="text-4xl font-bold text-success">{analysis.compatibility}%</span>
                       </div>
-                      <h3 className="text-2xl font-semibold mb-2">Compatibilité Relationnelle</h3>
+                      <h3 className="text-2xl font-bold mb-2">Compatibilité Relationnelle</h3>
                       <p className="text-muted-foreground">
                         {analysis.compatibility >= 80 ? 'Excellente synergie' :
                          analysis.compatibility >= 70 ? 'Bonne complémentarité' :
@@ -337,7 +337,7 @@ export default function Team() {
                     <div className="bg-card rounded-2xl p-6 border border-border">
                       <div className="flex items-center gap-2 mb-4">
                         <CheckCircle2 className="size-6 text-success" />
-                        <h3 className="text-lg font-semibold">Forces</h3>
+                        <h3 className="text-lg font-bold">Forces</h3>
                       </div>
                       <ul className="space-y-3">
                         {analysis.strengths.map((strength: string, i: number) => (
@@ -353,7 +353,7 @@ export default function Team() {
                     <div className="bg-card rounded-2xl p-6 border border-border">
                       <div className="flex items-center gap-2 mb-4">
                         <AlertCircle className="size-6 text-warning" />
-                        <h3 className="text-lg font-semibold">Risques</h3>
+                        <h3 className="text-lg font-bold">Risques</h3>
                       </div>
                       <ul className="space-y-3">
                         {analysis.risks.map((risk: string, i: number) => (
@@ -369,7 +369,7 @@ export default function Team() {
                     <div className="bg-card rounded-2xl p-6 border border-border">
                       <div className="flex items-center gap-2 mb-4">
                         <Lightbulb className="size-6 text-primary" />
-                        <h3 className="text-lg font-semibold">Recommandations</h3>
+                        <h3 className="text-lg font-bold">Recommandations</h3>
                       </div>
                       <ul className="space-y-3">
                         {analysis.recommendations.map((rec: string, i: number) => (
@@ -400,7 +400,7 @@ export default function Team() {
                   <div className="text-4xl">{member.photo}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold truncate">{member.name}</h3>
+                      <h3 className="font-bold truncate">{member.name}</h3>
                       {member.isAdmin && (
                         <Shield className="size-4 text-primary flex-shrink-0" title="Admin" />
                       )}

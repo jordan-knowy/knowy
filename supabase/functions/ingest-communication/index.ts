@@ -10,9 +10,93 @@
  *   - Support multi-contacts (cap 50 contacts / appel)
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
 
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1';
+
+// Domaines email personnels — ne deviennent jamais des comptes (spec-32)
+const PERSONAL_DOMAINS = new Set([
+  'gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'yahoo.fr', 'free.fr',
+  'orange.fr', 'wanadoo.fr', 'icloud.com', 'me.com', 'live.com', 'protonmail.com',
+  'laposte.net', 'sfr.fr', 'gmx.com', 'aol.com', 'msn.com', 'bbox.fr',
+]);
+
+/**
+ * Détection automatique des comptes (spec-28/32) — regroupe les contacts par
+ * domaine email pro (repli sur company_name), crée les comptes manquants et
+ * relie les contacts via company_id. Idempotent : dédup par domaine puis nom.
+ */
+async function detectCompanies(supabase: any, organizationId: string): Promise<{ created: number; linked: number }> {
+  const { data: contacts } = await supabase
+    .from('contacts')
+    .select('id, email, company_id')
+    .eq('organization_id', organizationId)
+    .is('merged_into_contact_id', null);
+  if (!contacts?.length) return { created: 0, linked: 0 };
+
+  const { data: existing } = await supabase
+    .from('companies')
+    .select('id, name, domain')
+    .eq('organization_id', organizationId);
+
+  const byDomain = new Map<string, string>();
+  for (const c of existing ?? []) {
+    if (c.domain) byDomain.set(String(c.domain).toLowerCase(), c.id);
+  }
+
+  // Nom lisible dérivé du domaine (optee.io → Optee)
+  const nameFromDomain = (d: string) => {
+    const root = d.split('.')[0].replace(/[-_]/g, ' ');
+    return root.charAt(0).toUpperCase() + root.slice(1);
+  };
+
+  // Regroupement par domaine email professionnel (les domaines perso sont ignorés)
+  type Group = { name: string; domain: string; contactIds: string[] };
+  const groups = new Map<string, Group>();
+  for (const ct of contacts as any[]) {
+    const domain = ct.email?.split('@')[1]?.toLowerCase() ?? null;
+    if (!domain || PERSONAL_DOMAINS.has(domain)) continue;
+    if (!groups.has(domain)) groups.set(domain, { name: nameFromDomain(domain), domain, contactIds: [] });
+    groups.get(domain)!.contactIds.push(ct.id);
+  }
+
+  let created = 0, linked = 0;
+  for (const g of groups.values()) {
+    let companyId = byDomain.get(g.domain);
+    if (!companyId) {
+      const { data: ins } = await supabase
+        .from('companies')
+        .insert({ organization_id: organizationId, name: g.name, domain: g.domain })
+        .select('id')
+        .single();
+      if (ins) {
+        companyId = ins.id;
+        created++;
+        byDomain.set(g.domain, companyId);
+      }
+    }
+    if (companyId) {
+      const { error } = await supabase
+        .from('contacts')
+        .update({ company_id: companyId })
+        .in('id', g.contactIds)
+        .is('company_id', null);
+      if (!error) linked += g.contactIds.length;
+    }
+  }
+  return { created, linked };
+}
 
 // ── Google token refresh ───────────────────────────────────────────────────
 async function refreshGoogleToken(
@@ -409,6 +493,14 @@ Deno.serve(async (req) => {
     .eq('user_id', user.id)
     .eq('provider', 'google');
 
+  // Détection automatique des comptes à partir des contacts ingérés (best-effort)
+  let companyDetection = { created: 0, linked: 0 };
+  try {
+    companyDetection = await detectCompanies(supabase, organizationId);
+  } catch (e) {
+    console.error('detectCompanies error:', e instanceof Error ? e.message : String(e));
+  }
+
   return jsonResponse({
     success: true,
     stats: {
@@ -416,6 +508,8 @@ Deno.serve(async (req) => {
       messages: totalMessages,
       threads: totalThreads,
       errors: errors.length,
+      companiesCreated: companyDetection.created,
+      companiesLinked: companyDetection.linked,
     },
     contactStats,
     errors: errors.slice(0, 5),

@@ -1,15 +1,13 @@
 import { motion } from 'motion/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useMeetings } from '../../hooks/useMeetings';
 import {
   Calendar,
   Search,
   Filter,
-  ChevronDown,
   Video,
   MapPin,
-  Users,
   Star,
   Clock,
   Sparkles,
@@ -22,9 +20,10 @@ import {
   X,
   RefreshCw,
 } from 'lucide-react';
-import KnowyCard from './knowy/KnowyCard';
-import KnowyBadge from './knowy/KnowyBadge';
-import KnowyButton from './knowy/KnowyButton';
+import KnowrCard from './knowr/KnowrCard';
+import KnowrBadge from './knowr/KnowrBadge';
+import KnowrButton from './knowr/KnowrButton';
+import PageHeader from './knowr/PageHeader';
 import { supabase } from '../../lib/supabase';
 import { getActiveOrganizationId } from '../../lib/api/org';
 
@@ -45,12 +44,13 @@ interface Meeting {
   hasDecisionMaker: boolean;
   isExternal: boolean;
   crmSynced: boolean;
+  crmUrl?: string;
   isPast: boolean;
 }
 
 export default function Meetings() {
   const navigate = useNavigate();
-  const { meetings: domainMeetings, loading, reload } = useMeetings();
+  const { meetings: domainMeetings, reload } = useMeetings();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTime, setFilterTime] = useState<'all' | 'future' | 'past'>('all');
   const [filterType, setFilterType] = useState<'all' | 'external' | 'internal'>('all');
@@ -131,6 +131,7 @@ export default function Meetings() {
         hasDecisionMaker: (m as any).has_decision_maker ?? false,
         isExternal: (m as any).is_external ?? true,
         crmSynced: false,
+        crmUrl: undefined,
         isPast: m.startsAt.slice(0, 10) < today,
       };
     }),
@@ -138,7 +139,6 @@ export default function Meetings() {
 
   // Filtrage
   const filteredMeetings = allMeetings.filter(meeting => {
-    // Recherche
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       if (
@@ -149,20 +149,13 @@ export default function Meetings() {
         return false;
       }
     }
-
-    // Filtre temps
     if (filterTime === 'future' && meeting.isPast) return false;
     if (filterTime === 'past' && !meeting.isPast) return false;
-
-    // Filtre type
     if (filterType === 'external' && !meeting.isExternal) return false;
     if (filterType === 'internal' && meeting.isExternal) return false;
-
-    // Filtre brief
     if (filterBrief === 'ready' && meeting.briefStatus !== 'ready') return false;
     if (filterBrief === 'to_generate' && meeting.briefStatus !== 'to_generate') return false;
     if (filterBrief === 'consulted' && meeting.briefStatus !== 'consulted') return false;
-
     return true;
   });
 
@@ -177,11 +170,11 @@ export default function Meetings() {
 
   const getBriefStatusConfig = (status: Meeting['briefStatus']) => {
     const configs = {
-      ready: { badge: 'Brief prêt', variant: 'sage' as const, icon: CheckCircle2 },
-      generating: { badge: 'En génération', variant: 'amber' as const, icon: Loader2 },
-      to_generate: { badge: 'À générer', variant: 'muted' as const, icon: Sparkles },
-      insufficient: { badge: 'Données insuffisantes', variant: 'coral' as const, icon: AlertCircle },
-      consulted: { badge: 'Consulté', variant: 'violet' as const, icon: CheckCircle2 }
+      ready:        { badge: 'Brief prêt',            variant: 'sage'   as const, icon: CheckCircle2 },
+      generating:   { badge: 'En génération',         variant: 'amber'  as const, icon: Loader2      },
+      to_generate:  { badge: 'À générer',             variant: 'muted'  as const, icon: Sparkles     },
+      insufficient: { badge: 'Données insuffisantes', variant: 'coral'  as const, icon: AlertCircle  },
+      consulted:    { badge: 'Consulté',              variant: 'violet' as const, icon: CheckCircle2 },
     };
     return configs[status];
   };
@@ -214,11 +207,11 @@ export default function Meetings() {
     const isSynced = meetingSyncs[meeting.id] !== undefined ? meetingSyncs[meeting.id] : meeting.crmSynced;
 
     return (
-      <KnowyCard
+      <KnowrCard
         hover
         delay={delay}
         onClick={() => navigate(`/meeting/${meeting.id}`)}
-        className="p-6 cursor-pointer"
+        className="p-6 cursor-pointer rounded-2xl"
       >
         <div className="flex items-start gap-6">
           {/* Date/Time */}
@@ -243,9 +236,10 @@ export default function Meetings() {
             {/* Header */}
             <div className="flex items-start justify-between gap-4 mb-3">
               <div className="flex items-start gap-3 flex-1 min-w-0">
-                {/* Logo entreprise */}
-                <div className="size-10 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-white text-base"
-                  style={{ background: meeting.company === 'Optee' ? '#6E50C8' : meeting.company === 'Limayrac' ? '#0B8878' : '#9082B8' }}>
+                <div
+                  className="size-10 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-white text-base"
+                  style={{ background: meeting.company === 'Optee' ? '#6E50C8' : meeting.company === 'Limayrac' ? '#0B8878' : '#9082B8' }}
+                >
                   {meeting.logo}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -253,7 +247,6 @@ export default function Meetings() {
                   <p className="text-sm text-muted-foreground font-medium">{meeting.company}</p>
                 </div>
               </div>
-              {/* Score relationnel + Catégorie */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 {meeting.relationScore > 0 && (
                   <div className="flex flex-col items-center" title="Score relationnel moyen des participants">
@@ -265,17 +258,20 @@ export default function Meetings() {
                     <span className="text-[9px] text-muted-foreground mt-0.5">Score</span>
                   </div>
                 )}
-                <KnowyBadge variant={meeting.isExternal ? 'violet' : 'muted'} size="sm">
+                <KnowrBadge variant={meeting.isExternal ? 'violet' : 'muted'} size="sm">
                   {meeting.category}
-                </KnowyBadge>
+                </KnowrBadge>
               </div>
             </div>
 
-            {/* Participants en chips */}
+            {/* Participants en chips — rounded-full */}
             {meeting.participants.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-3">
                 {meeting.participants.slice(0, 4).map((p, i) => (
-                  <div key={i} className="flex items-center gap-1.5 px-2 py-1 bg-muted/50 rounded-lg border border-border">
+                  <div
+                    key={i}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-muted/50 rounded-full border border-border"
+                  >
                     <div className="size-5 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[9px] font-bold flex-shrink-0">
                       {p.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
                     </div>
@@ -283,7 +279,7 @@ export default function Meetings() {
                   </div>
                 ))}
                 {meeting.participants.length > 4 && (
-                  <div className="flex items-center px-2 py-1 bg-muted/30 rounded-lg border border-border">
+                  <div className="flex items-center px-2.5 py-1 bg-muted/30 rounded-full border border-border">
                     <span className="text-xs text-muted-foreground">+{meeting.participants.length - 4}</span>
                   </div>
                 )}
@@ -318,23 +314,23 @@ export default function Meetings() {
                 </div>
               )}
 
-              <KnowyBadge variant="blue" size="sm">
+              <KnowrBadge variant="blue" size="sm">
                 {meeting.category}
-              </KnowyBadge>
+              </KnowrBadge>
             </div>
 
             {/* Footer */}
             <div className="flex items-center justify-between pt-4 border-t border-border">
               <div className="flex items-center gap-2">
                 <StatusIcon className={`size-4 ${statusConfig.badge === 'En génération' ? 'animate-spin' : ''}`} />
-                <KnowyBadge variant={statusConfig.variant} size="md">
+                <KnowrBadge variant={statusConfig.variant} size="md">
                   {statusConfig.badge}
-                </KnowyBadge>
+                </KnowrBadge>
               </div>
 
               <div className="flex items-center gap-2">
                 {meeting.crmUrl && (
-                  <KnowyButton
+                  <KnowrButton
                     variant="ghost"
                     size="sm"
                     icon={<ArrowUpRight className="size-4" />}
@@ -344,12 +340,12 @@ export default function Meetings() {
                     }}
                   >
                     Voir dans CRM
-                  </KnowyButton>
+                  </KnowrButton>
                 )}
                 {meeting.isPast ? (
                   <button
                     onClick={(e) => toggleMeetingSync(meeting.id, isSynced, e)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium transition-all ${
                       isSynced
                         ? 'bg-success/10 text-success border-2 border-success hover:bg-success/20'
                         : 'bg-muted/50 text-muted-foreground border-2 border-border hover:bg-muted'
@@ -361,14 +357,14 @@ export default function Meetings() {
                 ) : (
                   <>
                     {meeting.briefStatus === 'ready' && (
-                      <KnowyButton variant="primary" size="sm" icon={<Sparkles className="size-4" />}>
+                      <KnowrButton variant="primary" size="sm" icon={<Sparkles className="size-4" />}>
                         Voir le brief
-                      </KnowyButton>
+                      </KnowrButton>
                     )}
                     {meeting.briefStatus === 'to_generate' && (
-                      <KnowyButton variant="secondary" size="sm" icon={<Sparkles className="size-4" />}>
+                      <KnowrButton variant="secondary" size="sm" icon={<Sparkles className="size-4" />}>
                         Générer le brief
-                      </KnowyButton>
+                      </KnowrButton>
                     )}
                   </>
                 )}
@@ -376,12 +372,12 @@ export default function Meetings() {
             </div>
           </div>
         </div>
-      </KnowyCard>
+      </KnowrCard>
     );
   };
 
   return (
-    <div className="size-full bg-background overflow-auto">
+    <div className="size-full overflow-auto" style={{ background: 'var(--color-background)' }}>
       <div className="max-w-7xl mx-auto px-4 py-5 md:px-8 md:py-8">
         {/* Header */}
         <motion.div
@@ -390,39 +386,43 @@ export default function Meetings() {
           transition={{ duration: 0.6 }}
           className="mb-8"
         >
-          <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="mb-2">Réunions</h1>
-              <p className="text-muted-foreground">
-                {sortedMeetings.length} réunion{sortedMeetings.length > 1 ? 's' : ''}
-                {activeFiltersCount > 0 && ` • ${activeFiltersCount} filtre${activeFiltersCount > 1 ? 's' : ''} actif${activeFiltersCount > 1 ? 's' : ''}`}
-              </p>
-            </div>
+          <PageHeader
+            title="Réunions"
+            subtitle={`${sortedMeetings.length} réunion${sortedMeetings.length > 1 ? 's' : ''}${activeFiltersCount > 0 ? ` • ${activeFiltersCount} filtre${activeFiltersCount > 1 ? 's' : ''} actif${activeFiltersCount > 1 ? 's' : ''}` : ''}`}
+            actions={
+              <>
+                <KnowrButton
+                  variant="secondary"
+                  size="md"
+                  icon={syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                  onClick={handleGoogleCalendarSync}
+                  disabled={syncing}
+                >
+                  {syncing ? 'Synchronisation...' : 'Sync Google Calendar'}
+                </KnowrButton>
+                <KnowrButton
+                  variant="secondary"
+                  size="md"
+                  icon={<TrendingUp className="size-4" />}
+                  onClick={() => {}}
+                >
+                  Statistiques
+                </KnowrButton>
+                <KnowrButton
+                  variant="primary"
+                  size="md"
+                  icon={<Sparkles className="size-4" />}
+                  onClick={() => navigate('/brief-externe')}
+                >
+                  Brief externe
+                </KnowrButton>
+              </>
+            }
+          />
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <KnowyButton
-                variant="secondary"
-                size="md"
-                icon={syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-                onClick={handleGoogleCalendarSync}
-                disabled={syncing}
-              >
-                {syncing ? 'Synchronisation...' : 'Sync Google Calendar'}
-              </KnowyButton>
-              <KnowyButton
-                variant="secondary"
-                size="md"
-                icon={<TrendingUp className="size-4" />}
-                onClick={() => {}}
-              >
-                Statistiques
-              </KnowyButton>
-            </div>
-          </div>
-
-          {/* Sync result banner */}
+          {/* Sync result banner — rounded-2xl */}
           {syncResult && (
-            <div className={`mb-4 p-4 rounded-xl border flex items-start gap-3 ${
+            <div className={`mb-4 p-4 rounded-2xl border flex items-start gap-3 ${
               syncResult.error
                 ? 'bg-destructive/10 border-destructive/20 text-destructive'
                 : 'bg-success/10 border-success/20 text-success'
@@ -458,7 +458,7 @@ export default function Meetings() {
             </div>
           )}
 
-          {/* Search */}
+          {/* Search — rounded-2xl */}
           <div className="mb-4">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
@@ -467,21 +467,25 @@ export default function Meetings() {
                 placeholder="Rechercher par titre, entreprise, participant..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/30 transition-all"
+                className="w-full pl-12 pr-4 py-3 bg-card border border-border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/30 transition-all"
               />
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <KnowyButton
-              variant={showFilters ? 'primary' : 'secondary'}
-              size="sm"
-              icon={<Filter className="size-4" />}
+          {/* Filters — pill segmented controls rounded-full */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+            {/* Bouton Filtres — rounded-full */}
+            <button
               onClick={() => setShowFilters(!showFilters)}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
+                showFilters
+                  ? 'bg-primary text-white border-primary'
+                  : 'bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/30'
+              }`}
             >
+              <Filter className="size-4" />
               Filtres {activeFiltersCount > 0 && `(${activeFiltersCount})`}
-            </KnowyButton>
+            </button>
 
             {showFilters && (
               <motion.div
@@ -489,19 +493,19 @@ export default function Meetings() {
                 animate={{ opacity: 1, x: 0 }}
                 className="flex flex-wrap items-center gap-3"
               >
-                {/* Temps */}
-                <div className="flex max-w-full items-center gap-2 overflow-x-auto bg-card border border-border rounded-xl p-1">
+                {/* Filtre Temps */}
+                <div className="flex items-center gap-1 rounded-full p-1 bg-card border border-border">
                   {[
-                    { value: 'all', label: 'Toutes' },
+                    { value: 'all',    label: 'Toutes'  },
                     { value: 'future', label: 'À venir' },
-                    { value: 'past', label: 'Passées' }
+                    { value: 'past',   label: 'Passées' },
                   ].map((option) => (
                     <button
                       key={option.value}
-                      onClick={() => setFilterTime(option.value as any)}
-                      className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                      onClick={() => setFilterTime(option.value as 'all' | 'future' | 'past')}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
                         filterTime === option.value
-                          ? 'bg-primary text-primary-foreground'
+                          ? 'bg-primary text-white shadow-sm'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -510,19 +514,19 @@ export default function Meetings() {
                   ))}
                 </div>
 
-                {/* Type */}
-                <div className="flex max-w-full items-center gap-2 overflow-x-auto bg-card border border-border rounded-xl p-1">
+                {/* Filtre Type */}
+                <div className="flex items-center gap-1 rounded-full p-1 bg-card border border-border">
                   {[
-                    { value: 'all', label: 'Tous types' },
-                    { value: 'external', label: 'Externes' },
-                    { value: 'internal', label: 'Internes' }
+                    { value: 'all',      label: 'Tous types' },
+                    { value: 'external', label: 'Externes'   },
+                    { value: 'internal', label: 'Internes'   },
                   ].map((option) => (
                     <button
                       key={option.value}
-                      onClick={() => setFilterType(option.value as any)}
-                      className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                      onClick={() => setFilterType(option.value as 'all' | 'external' | 'internal')}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
                         filterType === option.value
-                          ? 'bg-primary text-primary-foreground'
+                          ? 'bg-primary text-white shadow-sm'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -531,20 +535,20 @@ export default function Meetings() {
                   ))}
                 </div>
 
-                {/* Brief Status */}
-                <div className="flex max-w-full items-center gap-2 overflow-x-auto bg-card border border-border rounded-xl p-1">
+                {/* Filtre Brief */}
+                <div className="flex items-center gap-1 rounded-full p-1 bg-card border border-border">
                   {[
-                    { value: 'all', label: 'Tous briefs' },
-                    { value: 'ready', label: 'Prêts' },
-                    { value: 'to_generate', label: 'À générer' },
-                    { value: 'consulted', label: 'Consultés' }
+                    { value: 'all',         label: 'Tous briefs' },
+                    { value: 'ready',       label: 'Prêts'       },
+                    { value: 'to_generate', label: 'À générer'   },
+                    { value: 'consulted',   label: 'Consultés'   },
                   ].map((option) => (
                     <button
                       key={option.value}
-                      onClick={() => setFilterBrief(option.value as any)}
-                      className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                      onClick={() => setFilterBrief(option.value as 'all' | 'ready' | 'to_generate' | 'consulted')}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
                         filterBrief === option.value
-                          ? 'bg-primary text-primary-foreground'
+                          ? 'bg-primary text-white shadow-sm'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -560,7 +564,7 @@ export default function Meetings() {
                       setFilterType('all');
                       setFilterBrief('all');
                     }}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm text-muted-foreground hover:text-foreground border border-transparent hover:border-border transition-all"
                   >
                     <X className="size-4" />
                     Réinitialiser
@@ -611,14 +615,14 @@ export default function Meetings() {
             <div className="size-20 bg-muted/30 rounded-full flex items-center justify-center mx-auto mb-4">
               <Search className="size-10 text-muted-foreground" />
             </div>
-            <h3 className="text-xl font-semibold mb-2">Aucune réunion trouvée</h3>
+            <h3 className="text-xl font-bold mb-2">Aucune réunion trouvée</h3>
             <p className="text-muted-foreground mb-6">
               {searchQuery
                 ? `Aucun résultat pour "${searchQuery}"`
                 : 'Aucune réunion ne correspond aux filtres sélectionnés'}
             </p>
             {(searchQuery || activeFiltersCount > 0) && (
-              <KnowyButton
+              <KnowrButton
                 variant="secondary"
                 size="md"
                 onClick={() => {
@@ -629,7 +633,7 @@ export default function Meetings() {
                 }}
               >
                 Réinitialiser les filtres
-              </KnowyButton>
+              </KnowrButton>
             )}
           </motion.div>
         )}

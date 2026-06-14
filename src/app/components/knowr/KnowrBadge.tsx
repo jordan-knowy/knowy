@@ -1,18 +1,18 @@
 import { ReactNode } from 'react';
 
-interface KnowyBadgeProps {
+interface KnowrBadgeProps {
   children: ReactNode;
   variant?: 'violet' | 'sage' | 'amber' | 'coral' | 'blue' | 'muted';
   size?: 'sm' | 'md';
   className?: string;
 }
 
-export default function KnowyBadge({
+export default function KnowrBadge({
   children,
   variant = 'violet',
   size = 'md',
   className = ''
-}: KnowyBadgeProps) {
+}: KnowrBadgeProps) {
   const variantStyles = {
     violet: 'bg-lavender-100 text-primary border-[rgba(110,80,200,0.18)]',
     sage: 'bg-[#E4F5ED] text-sage border-sage/20',
