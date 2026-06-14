@@ -2,7 +2,6 @@ import { motion } from 'motion/react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Users, Network, Calendar, Shield, Linkedin, Mail } from 'lucide-react';
-import logoKnowr from '../../imports/Pre_sentation1.jpg';
 import { supabase } from '../../lib/supabase';
 
 // After OAuth, OnboardingRoute/ProtectedApp will decide where to go
@@ -105,7 +104,9 @@ export default function SignIn() {
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="inline-flex items-center gap-2 mb-8">
-              <img src={logoKnowr} alt="Knowr" className="h-12" />
+              <h1 className="text-3xl font-black italic text-foreground">
+                Know<span className="text-primary">r</span>
+              </h1>
             </div>
 
             <h1 className="text-5xl font-bold mb-6 leading-tight">
@@ -163,7 +164,9 @@ export default function SignIn() {
         >
           {/* Mobile logo */}
           <div className="lg:hidden mb-8">
-            <img src={logoKnowr} alt="Knowr" className="h-12" />
+            <h1 className="text-3xl font-black italic text-foreground">
+              Know<span className="text-primary">r</span>
+            </h1>
           </div>
 
           <div className="bg-card rounded-3xl p-5 border border-border shadow-lg shadow-primary/5 sm:p-8">
