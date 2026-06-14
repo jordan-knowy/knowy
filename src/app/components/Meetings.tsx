@@ -205,15 +205,120 @@ export default function Meetings() {
     const statusConfig = getBriefStatusConfig(meeting.briefStatus);
     const StatusIcon = statusConfig.icon;
     const isSynced = meetingSyncs[meeting.id] !== undefined ? meetingSyncs[meeting.id] : meeting.crmSynced;
+    const durationLabel = meeting.durationMin && meeting.durationMin > 0
+      ? meeting.durationMin >= 60
+        ? `${Math.floor(meeting.durationMin / 60)}h${meeting.durationMin % 60 > 0 ? String(meeting.durationMin % 60).padStart(2, '0') : ''}`
+        : `${meeting.durationMin} min`
+      : null;
 
     return (
       <KnowrCard
         hover
         delay={delay}
         onClick={() => navigate(`/meeting/${meeting.id}`)}
-        className="p-6 cursor-pointer rounded-2xl"
+        className="p-4 sm:p-6 cursor-pointer rounded-2xl"
       >
-        <div className="flex items-start gap-6">
+        {/* ── MOBILE layout (< sm) ──────────────────────────────── */}
+        <div className="flex flex-col gap-3 sm:hidden">
+          {/* Row 1 : logo + titre + score */}
+          <div className="flex items-start gap-3">
+            <div
+              className="size-10 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-white text-base"
+              style={{ background: meeting.company === 'Optee' ? '#6E50C8' : meeting.company === 'Limayrac' ? '#0B8878' : '#9082B8' }}
+            >
+              {meeting.logo}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-bold leading-tight line-clamp-2 mb-0.5">{meeting.title}</h3>
+              <p className="text-xs text-muted-foreground font-medium">{meeting.company}</p>
+            </div>
+            {meeting.relationScore > 0 && (
+              <div className={`flex items-center justify-center size-9 rounded-full flex-shrink-0 ${getRelationScoreBg(meeting.relationScore)}`}>
+                <span className={`font-mono font-bold text-xs ${getRelationScoreColor(meeting.relationScore)}`}>
+                  {meeting.relationScore}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Row 2 : date · heure · durée · format */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">
+              {new Date(meeting.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </span>
+            <span className="font-mono">{meeting.time}</span>
+            {durationLabel && (
+              <span className="flex items-center gap-1">
+                <Clock className="size-3" />
+                {durationLabel}
+              </span>
+            )}
+            <span className="flex items-center gap-1">
+              {meeting.format === 'video' ? <Video className="size-3" /> : <MapPin className="size-3" />}
+              {meeting.format === 'video' ? 'Visio' : (meeting.location ?? 'Présentiel')}
+            </span>
+            {meeting.hasDecisionMaker && (
+              <span className="flex items-center gap-1 text-primary font-semibold">
+                <Star className="size-3 fill-primary" />
+                Décideur
+              </span>
+            )}
+          </div>
+
+          {/* Row 3 : participants */}
+          {meeting.participants.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {meeting.participants.slice(0, 3).map((p, i) => (
+                <div key={i} className="flex items-center gap-1 px-2 py-0.5 bg-muted/50 rounded-full border border-border">
+                  <div className="size-4 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[8px] font-bold flex-shrink-0">
+                    {p.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                  </div>
+                  <span className="text-[11px] font-medium truncate max-w-[80px]">{p.name}</span>
+                </div>
+              ))}
+              {meeting.participants.length > 3 && (
+                <div className="flex items-center px-2 py-0.5 bg-muted/30 rounded-full border border-border">
+                  <span className="text-[11px] text-muted-foreground">+{meeting.participants.length - 3}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Row 4 : footer */}
+          <div className="flex items-center justify-between pt-3 border-t border-border">
+            <div className="flex items-center gap-1.5">
+              <StatusIcon className={`size-3.5 ${statusConfig.badge === 'En génération' ? 'animate-spin' : ''}`} />
+              <KnowrBadge variant={statusConfig.variant} size="sm">{statusConfig.badge}</KnowrBadge>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {meeting.isPast ? (
+                <button
+                  onClick={(e) => toggleMeetingSync(meeting.id, isSynced, e)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                    isSynced
+                      ? 'bg-success/10 text-success border border-success'
+                      : 'bg-muted/50 text-muted-foreground border border-border'
+                  }`}
+                >
+                  <Database className="size-3.5" />
+                  {isSynced ? 'Synchronisé' : 'Sync'}
+                </button>
+              ) : (
+                <>
+                  {meeting.briefStatus === 'ready' && (
+                    <KnowrButton variant="primary" size="sm" icon={<Sparkles className="size-3.5" />}>Brief</KnowrButton>
+                  )}
+                  {meeting.briefStatus === 'to_generate' && (
+                    <KnowrButton variant="secondary" size="sm" icon={<Sparkles className="size-3.5" />}>Générer</KnowrButton>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── DESKTOP layout (>= sm) ───────────────────────────── */}
+        <div className="hidden sm:flex items-start gap-6">
           {/* Date/Time */}
           <div className="flex flex-col items-center min-w-[80px]">
             <div className="text-xs text-muted-foreground uppercase mb-1">
@@ -228,12 +333,10 @@ export default function Meetings() {
             <div className="text-sm font-mono font-semibold">{meeting.time}</div>
           </div>
 
-          {/* Divider */}
           <div className="h-auto w-px bg-border" />
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            {/* Header */}
             <div className="flex items-start justify-between gap-4 mb-3">
               <div className="flex items-start gap-3 flex-1 min-w-0">
                 <div
@@ -264,14 +367,10 @@ export default function Meetings() {
               </div>
             </div>
 
-            {/* Participants en chips — rounded-full */}
             {meeting.participants.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-3">
                 {meeting.participants.slice(0, 4).map((p, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-muted/50 rounded-full border border-border"
-                  >
+                  <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 bg-muted/50 rounded-full border border-border">
                     <div className="size-5 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[9px] font-bold flex-shrink-0">
                       {p.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
                     </div>
@@ -286,58 +385,37 @@ export default function Meetings() {
               </div>
             )}
 
-            {/* Info Row */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground mb-3">
               <div className="flex items-center gap-1.5">
-                {meeting.format === 'video' ? (
-                  <Video className="size-3.5" />
-                ) : (
-                  <MapPin className="size-3.5" />
-                )}
+                {meeting.format === 'video' ? <Video className="size-3.5" /> : <MapPin className="size-3.5" />}
                 <span>{meeting.format === 'video' ? 'Visio' : (meeting.location ?? 'Présentiel')}</span>
               </div>
-
-              {meeting.durationMin && meeting.durationMin > 0 && (
+              {durationLabel && (
                 <div className="flex items-center gap-1.5">
                   <Clock className="size-3.5" />
-                  <span>{meeting.durationMin >= 60
-                    ? `${Math.floor(meeting.durationMin / 60)}h${meeting.durationMin % 60 > 0 ? String(meeting.durationMin % 60).padStart(2, '0') : ''}`
-                    : `${meeting.durationMin} min`
-                  }</span>
+                  <span>{durationLabel}</span>
                 </div>
               )}
-
               {meeting.hasDecisionMaker && (
                 <div className="flex items-center gap-1 text-primary font-semibold">
                   <Star className="size-3.5 fill-primary" />
                   <span>Décideur présent</span>
                 </div>
               )}
-
-              <KnowrBadge variant="blue" size="sm">
-                {meeting.category}
-              </KnowrBadge>
+              <KnowrBadge variant="blue" size="sm">{meeting.category}</KnowrBadge>
             </div>
 
-            {/* Footer */}
             <div className="flex items-center justify-between pt-4 border-t border-border">
               <div className="flex items-center gap-2">
                 <StatusIcon className={`size-4 ${statusConfig.badge === 'En génération' ? 'animate-spin' : ''}`} />
-                <KnowrBadge variant={statusConfig.variant} size="md">
-                  {statusConfig.badge}
-                </KnowrBadge>
+                <KnowrBadge variant={statusConfig.variant} size="md">{statusConfig.badge}</KnowrBadge>
               </div>
-
               <div className="flex items-center gap-2">
                 {meeting.crmUrl && (
                   <KnowrButton
-                    variant="ghost"
-                    size="sm"
+                    variant="ghost" size="sm"
                     icon={<ArrowUpRight className="size-4" />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.open(meeting.crmUrl, '_blank');
-                    }}
+                    onClick={(e) => { e.stopPropagation(); window.open(meeting.crmUrl, '_blank'); }}
                   >
                     Voir dans CRM
                   </KnowrButton>
@@ -357,14 +435,10 @@ export default function Meetings() {
                 ) : (
                   <>
                     {meeting.briefStatus === 'ready' && (
-                      <KnowrButton variant="primary" size="sm" icon={<Sparkles className="size-4" />}>
-                        Voir le brief
-                      </KnowrButton>
+                      <KnowrButton variant="primary" size="sm" icon={<Sparkles className="size-4" />}>Voir le brief</KnowrButton>
                     )}
                     {meeting.briefStatus === 'to_generate' && (
-                      <KnowrButton variant="secondary" size="sm" icon={<Sparkles className="size-4" />}>
-                        Générer le brief
-                      </KnowrButton>
+                      <KnowrButton variant="secondary" size="sm" icon={<Sparkles className="size-4" />}>Générer le brief</KnowrButton>
                     )}
                   </>
                 )}
@@ -398,13 +472,15 @@ export default function Meetings() {
                   onClick={handleGoogleCalendarSync}
                   disabled={syncing}
                 >
-                  {syncing ? 'Synchronisation...' : 'Sync Google Calendar'}
+                  <span className="hidden sm:inline">{syncing ? 'Synchronisation...' : 'Sync Google Calendar'}</span>
+                  <span className="sm:hidden">{syncing ? '...' : 'Sync'}</span>
                 </KnowrButton>
                 <KnowrButton
                   variant="secondary"
                   size="md"
                   icon={<TrendingUp className="size-4" />}
                   onClick={() => {}}
+                  className="hidden sm:inline-flex"
                 >
                   Statistiques
                 </KnowrButton>
@@ -414,7 +490,8 @@ export default function Meetings() {
                   icon={<Sparkles className="size-4" />}
                   onClick={() => navigate('/brief-externe')}
                 >
-                  Brief externe
+                  <span className="hidden sm:inline">Brief externe</span>
+                  <span className="sm:hidden">Brief</span>
                 </KnowrButton>
               </>
             }
@@ -472,12 +549,11 @@ export default function Meetings() {
             </div>
           </div>
 
-          {/* Filters — pill segmented controls rounded-full */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
-            {/* Bouton Filtres — rounded-full */}
+          {/* Filters */}
+          <div className="flex flex-col gap-3">
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
+              className={`self-start inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
                 showFilters
                   ? 'bg-primary text-white border-primary'
                   : 'bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/30'
@@ -489,87 +565,85 @@ export default function Meetings() {
 
             {showFilters && (
               <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="flex flex-wrap items-center gap-3"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0"
               >
-                {/* Filtre Temps */}
-                <div className="flex items-center gap-1 rounded-full p-1 bg-card border border-border">
-                  {[
-                    { value: 'all',    label: 'Toutes'  },
-                    { value: 'future', label: 'À venir' },
-                    { value: 'past',   label: 'Passées' },
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => setFilterTime(option.value as 'all' | 'future' | 'past')}
-                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
-                        filterTime === option.value
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
+                <div className="flex items-center gap-3 min-w-max sm:flex-wrap sm:min-w-0">
+                  {/* Filtre Temps */}
+                  <div className="flex items-center gap-1 rounded-full p-1 bg-card border border-border">
+                    {[
+                      { value: 'all',    label: 'Toutes'  },
+                      { value: 'future', label: 'À venir' },
+                      { value: 'past',   label: 'Passées' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => setFilterTime(option.value as 'all' | 'future' | 'past')}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+                          filterTime === option.value
+                            ? 'bg-primary text-white shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
 
-                {/* Filtre Type */}
-                <div className="flex items-center gap-1 rounded-full p-1 bg-card border border-border">
-                  {[
-                    { value: 'all',      label: 'Tous types' },
-                    { value: 'external', label: 'Externes'   },
-                    { value: 'internal', label: 'Internes'   },
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => setFilterType(option.value as 'all' | 'external' | 'internal')}
-                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
-                        filterType === option.value
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
+                  {/* Filtre Type */}
+                  <div className="flex items-center gap-1 rounded-full p-1 bg-card border border-border">
+                    {[
+                      { value: 'all',      label: 'Tous types' },
+                      { value: 'external', label: 'Externes'   },
+                      { value: 'internal', label: 'Internes'   },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => setFilterType(option.value as 'all' | 'external' | 'internal')}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+                          filterType === option.value
+                            ? 'bg-primary text-white shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
 
-                {/* Filtre Brief */}
-                <div className="flex items-center gap-1 rounded-full p-1 bg-card border border-border">
-                  {[
-                    { value: 'all',         label: 'Tous briefs' },
-                    { value: 'ready',       label: 'Prêts'       },
-                    { value: 'to_generate', label: 'À générer'   },
-                    { value: 'consulted',   label: 'Consultés'   },
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => setFilterBrief(option.value as 'all' | 'ready' | 'to_generate' | 'consulted')}
-                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
-                        filterBrief === option.value
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
+                  {/* Filtre Brief */}
+                  <div className="flex items-center gap-1 rounded-full p-1 bg-card border border-border">
+                    {[
+                      { value: 'all',         label: 'Tous briefs' },
+                      { value: 'ready',       label: 'Prêts'       },
+                      { value: 'to_generate', label: 'À générer'   },
+                      { value: 'consulted',   label: 'Consultés'   },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => setFilterBrief(option.value as 'all' | 'ready' | 'to_generate' | 'consulted')}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+                          filterBrief === option.value
+                            ? 'bg-primary text-white shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
 
-                {activeFiltersCount > 0 && (
-                  <button
-                    onClick={() => {
-                      setFilterTime('all');
-                      setFilterType('all');
-                      setFilterBrief('all');
-                    }}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm text-muted-foreground hover:text-foreground border border-transparent hover:border-border transition-all"
-                  >
-                    <X className="size-4" />
-                    Réinitialiser
-                  </button>
-                )}
+                  {activeFiltersCount > 0 && (
+                    <button
+                      onClick={() => { setFilterTime('all'); setFilterType('all'); setFilterBrief('all'); }}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm text-muted-foreground hover:text-foreground border border-transparent hover:border-border transition-all whitespace-nowrap"
+                    >
+                      <X className="size-4" />
+                      Réinitialiser
+                    </button>
+                  )}
+                </div>
               </motion.div>
             )}
           </div>
