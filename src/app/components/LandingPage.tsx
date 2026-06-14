@@ -2,7 +2,6 @@ import { motion } from 'motion/react';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowRight, Brain, CalendarCheck, CheckCircle2, Mail, Network, ShieldCheck, Sparkles, Users, MapPin } from 'lucide-react';
-import logoKnowr from '../../imports/Pre_sentation1.jpg';
 import relationPreview from '../../imports/Capture_d_e_cran_2026-05-21_a__13.09.57.png';
 import pricingPreview from '../../imports/Capture_d_e_cran_2026-05-25_a__14.17.20.png';
 import { Button } from './design-system/Button';
@@ -51,7 +50,9 @@ export default function LandingPage() {
               onClick={() => navigate('/')}
               className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <img src={logoKnowr} alt="Knowr" className="h-10 w-auto" />
+              <h1 className="text-2xl font-black italic text-foreground">
+                Know<span className="text-primary">r</span>
+              </h1>
             </button>
 
             <div className="flex items-center gap-2">
