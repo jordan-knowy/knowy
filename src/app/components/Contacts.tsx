@@ -35,6 +35,8 @@ interface SuggestedContact {
   domain: string;
   count: number;
   lastSeen: string;
+  lastSubject: string;
+  lastSnippet: string;
 }
 
 interface Contact {
@@ -750,7 +752,7 @@ export default function Contacts() {
                     <p className="font-semibold text-sm text-foreground">
                       {suggestions.filter(s => !dismissed.has(s.email)).length} suggestion{suggestions.filter(s => !dismissed.has(s.email)).length > 1 ? 's' : ''} détectée{suggestions.filter(s => !dismissed.has(s.email)).length > 1 ? 's' : ''} dans Gmail
                     </p>
-                    <p className="text-xs text-muted-foreground">Ces interlocuteurs échangent régulièrement avec vous mais ne sont pas encore dans Knowr.</p>
+                    <p className="text-xs text-muted-foreground">Interlocuteurs fréquents détectés dans vos 1000 derniers emails — pas encore dans Knowr.</p>
                   </div>
                 </div>
                 {suggestionsOpen ? <ChevronUp className="size-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="size-4 text-muted-foreground flex-shrink-0" />}
@@ -782,12 +784,22 @@ export default function Contacts() {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold truncate">{s.name}</p>
                             <p className="text-xs text-muted-foreground truncate">{s.email}</p>
-                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
                               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                                 {s.count} échange{s.count > 1 ? 's' : ''}
                               </span>
                               <span className="text-[10px] text-muted-foreground">{whenText}</span>
                             </div>
+                            {s.lastSubject && (
+                              <p className="text-[11px] text-foreground/70 font-medium truncate mt-1.5">
+                                ✉ {s.lastSubject}
+                              </p>
+                            )}
+                            {s.lastSnippet && (
+                              <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5 leading-relaxed">
+                                {s.lastSnippet}
+                              </p>
+                            )}
                           </div>
                           {/* Actions */}
                           <div className="flex flex-col gap-1.5 flex-shrink-0">
