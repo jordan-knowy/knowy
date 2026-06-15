@@ -22,10 +22,20 @@ import {
   CheckCircle2,
   AlertCircle,
   Brain,
+  UserPlus,
+  ChevronUp,
 } from 'lucide-react';
 import PageHeader from './knowr/PageHeader';
 import { supabase } from '../../lib/supabase';
 import { getActiveOrganizationId } from '../../lib/api/org';
+
+interface SuggestedContact {
+  email: string;
+  name: string;
+  domain: string;
+  count: number;
+  lastSeen: string;
+}
 
 interface Contact {
   id: string;
@@ -388,6 +398,12 @@ export default function Contacts() {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [orgId, setOrgId] = useState<string>('');
+  const [suggestions, setSuggestions] = useState<SuggestedContact[]>([]);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(true);
+  const [importingEmails, setImportingEmails] = useState<Set<string>>(new Set());
+  const [suggestionError, setSuggestionError] = useState<string | null>(null);
 
   useEffect(() => {
     loadContacts();
@@ -508,6 +524,62 @@ export default function Contacts() {
     }
   }
 
+  async function discoverContacts() {
+    if (!supabase || loadingSuggestions) return;
+    setLoadingSuggestions(true);
+    setSuggestionError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Non authentifié');
+      const resolvedOrgId = orgId || await getActiveOrganizationId();
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/discover-contacts`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          organizationId: resolvedOrgId,
+          providerToken: session.provider_token,
+          lookbackDays: 90,
+          minExchanges: 2,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur lors de la découverte');
+      setSuggestions(data.suggestions ?? []);
+      setSuggestionsOpen(true);
+    } catch (e: any) {
+      setSuggestionError(e.message ?? 'Erreur inattendue');
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  }
+
+  async function importSuggestion(s: SuggestedContact) {
+    if (!supabase || importingEmails.has(s.email)) return;
+    setImportingEmails(prev => new Set(prev).add(s.email));
+    try {
+      const resolvedOrgId = orgId || await getActiveOrganizationId();
+      const displayName = s.name.split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      const { error } = await supabase.from('contacts').insert({
+        organization_id: resolvedOrgId,
+        full_name: displayName,
+        email: s.email,
+        source_summary: { source: 'gmail_discovery', domain: s.domain, exchange_count: s.count },
+        enrichment_status: 'pending',
+      });
+      if (error) throw error;
+      setDismissed(prev => new Set(prev).add(s.email));
+      loadContacts();
+    } catch (e: any) {
+      console.error('Import error:', e.message);
+    } finally {
+      setImportingEmails(prev => { const n = new Set(prev); n.delete(s.email); return n; });
+    }
+  }
+
   const sorted = useMemo(() => {
     let result = [...contacts];
     if (searchQuery) {
@@ -599,14 +671,24 @@ export default function Contacts() {
                   className="px-4 py-2 bg-muted hover:bg-muted/70 rounded-xl flex items-center gap-2 text-sm transition-colors"
                 >
                   <RefreshCw className="size-4" />
-                  Actualiser
+                  <span className="hidden sm:inline">Actualiser</span>
+                </button>
+                <button
+                  onClick={discoverContacts}
+                  disabled={loadingSuggestions}
+                  className="px-4 py-2 bg-card border border-border hover:bg-muted/50 rounded-xl flex items-center gap-2 text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {loadingSuggestions ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4 text-primary" />}
+                  <span className="hidden sm:inline">{loadingSuggestions ? 'Scan en cours…' : 'Découvrir via Gmail'}</span>
+                  <span className="sm:hidden">{loadingSuggestions ? '…' : 'Gmail'}</span>
                 </button>
                 <button
                   onClick={() => setShowAddModal(true)}
                   className="px-4 py-2 bg-primary text-white hover:bg-accent rounded-xl flex items-center gap-2 text-sm font-medium transition-colors"
                 >
                   <Plus className="size-4" />
-                  Ajouter un contact
+                  <span className="hidden sm:inline">Ajouter un contact</span>
+                  <span className="sm:hidden">Ajouter</span>
                 </button>
               </>
             }
@@ -645,6 +727,98 @@ export default function Contacts() {
             </div>
           </div>
         </motion.div>
+
+        {/* ── Suggestions Gmail ──────────────────────────────────────────── */}
+        <AnimatePresence>
+          {(suggestions.length > 0 || suggestionError) && (
+            <motion.div
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="mb-6 rounded-2xl border border-primary/20 bg-primary/5 overflow-hidden"
+            >
+              {/* Header du bandeau */}
+              <button
+                onClick={() => setSuggestionsOpen(v => !v)}
+                className="w-full flex items-center justify-between px-5 py-4 hover:bg-primary/10 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="size-8 rounded-lg bg-primary/15 flex items-center justify-center">
+                    <UserPlus className="size-4 text-primary" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-sm text-foreground">
+                      {suggestions.filter(s => !dismissed.has(s.email)).length} suggestion{suggestions.filter(s => !dismissed.has(s.email)).length > 1 ? 's' : ''} détectée{suggestions.filter(s => !dismissed.has(s.email)).length > 1 ? 's' : ''} dans Gmail
+                    </p>
+                    <p className="text-xs text-muted-foreground">Ces interlocuteurs échangent régulièrement avec vous mais ne sont pas encore dans Knowr.</p>
+                  </div>
+                </div>
+                {suggestionsOpen ? <ChevronUp className="size-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="size-4 text-muted-foreground flex-shrink-0" />}
+              </button>
+
+              {suggestionError && (
+                <div className="px-5 pb-4 flex items-center gap-2 text-sm text-destructive">
+                  <AlertCircle className="size-4 flex-shrink-0" />
+                  {suggestionError}
+                </div>
+              )}
+
+              {suggestionsOpen && !suggestionError && (
+                <div className="px-5 pb-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {suggestions.filter(s => !dismissed.has(s.email)).map(s => {
+                      const isImporting = importingEmails.has(s.email);
+                      const initials2 = s.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
+                      const daysSinceContact = Math.floor((Date.now() - new Date(s.lastSeen).getTime()) / 86400000);
+                      const whenText = daysSinceContact === 0 ? "Auj." : daysSinceContact === 1 ? 'Hier' : daysSinceContact < 7 ? `Il y a ${daysSinceContact}j` : daysSinceContact < 30 ? `Il y a ${Math.floor(daysSinceContact / 7)} sem.` : `Il y a ${Math.floor(daysSinceContact / 30)} mois`;
+
+                      return (
+                        <div key={s.email} className="flex items-start gap-3 p-3 bg-card rounded-xl border border-border">
+                          {/* Avatar */}
+                          <div className="size-9 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
+                            {initials2}
+                          </div>
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate">{s.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{s.email}</p>
+                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                {s.count} échange{s.count > 1 ? 's' : ''}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">{whenText}</span>
+                            </div>
+                          </div>
+                          {/* Actions */}
+                          <div className="flex flex-col gap-1.5 flex-shrink-0">
+                            <button
+                              onClick={() => importSuggestion(s)}
+                              disabled={isImporting}
+                              title="Importer ce contact"
+                              className="size-7 rounded-lg bg-primary text-white flex items-center justify-center hover:bg-accent transition-colors disabled:opacity-50"
+                            >
+                              {isImporting ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                            </button>
+                            <button
+                              onClick={() => setDismissed(prev => new Set(prev).add(s.email))}
+                              title="Ignorer"
+                              className="size-7 rounded-lg border border-border text-muted-foreground flex items-center justify-center hover:border-destructive hover:text-destructive transition-colors"
+                            >
+                              <X className="size-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {suggestions.filter(s => !dismissed.has(s.email)).length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">Toutes les suggestions ont été traitées.</p>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {loading ? (
           <div className="flex items-center justify-center py-24">
