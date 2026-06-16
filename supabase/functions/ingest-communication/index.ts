@@ -1,13 +1,14 @@
 /**
- * ingest-communication v2
- * Gmail ingestion pipeline — métadonnées uniquement (RGPD-safe)
+ * ingest-communication v3
+ * Pipeline d'ingestion email — métadonnées uniquement (RGPD-safe)
+ * Supporte Gmail (Google) et Outlook (Microsoft Graph) en parallèle.
  *
- * Architecture v2 :
- *   - messages.list API (plus efficace que threads.list)
- *   - Pagination complète avec nextPageToken → jusqu'à 1000+ emails
- *   - Fetch metadata en parallèle (batches de 10)
- *   - Lookback par défaut : 365 jours
- *   - Support multi-contacts (cap 50 contacts / appel)
+ * Architecture v3 :
+ *   - Détection automatique du provider via le paramètre `provider` (google|microsoft)
+ *   - Gmail : messages.list → batch metadata (From/To/Cc/Subject)
+ *   - Outlook : /me/messages Graph API → même schéma de données
+ *   - Même tables cibles : communication_threads, communication_messages
+ *   - Lookback par défaut : 365 jours, cap 50 contacts / appel
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -381,9 +382,15 @@ Deno.serve(async (req) => {
     contactEmails,
     lookbackDays = 365,
     maxMessagesPerContact = 1000,
+    provider = 'google', // 'google' | 'microsoft'
   } = body;
 
   if (!organizationId) return jsonResponse({ error: 'organizationId is required' }, 400);
+
+  // Routage Outlook
+  if (provider === 'microsoft') {
+    return handleOutlookIngest(req, supabase, user, body);
+  }
 
   // ── Resolve Google token — priorité : body token → token stocké en BDD ──
   // Fonctionne quel que soit le mode de connexion Supabase (email / LinkedIn / Google)
@@ -515,3 +522,214 @@ Deno.serve(async (req) => {
     errors: errors.slice(0, 5),
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// OUTLOOK / MICROSOFT GRAPH — pipeline d'ingestion emails
+// ══════════════════════════════════════════════════════════════════════════════
+
+const GRAPH_API = 'https://graph.microsoft.com/v1.0';
+
+async function graphGet(path: string, token: string): Promise<any> {
+  const res = await fetch(`${GRAPH_API}${path}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  if (res.status === 401) throw Object.assign(new Error('TOKEN_EXPIRED'), { code: 401 });
+  if (!res.ok) throw new Error(`Graph ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+// Récupère tous les messages échangés avec un contact (From ou To)
+async function listOutlookMessages(
+  contactEmails: string[],
+  token: string,
+  afterDate: string,
+  maxMessages: number,
+): Promise<any[]> {
+  const results: any[] = [];
+
+  for (const email of contactEmails) {
+    let url: string | null =
+      `/me/messages?$top=100` +
+      `&$select=id,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isDraft` +
+      `&$filter=isDraft eq false and (from/emailAddress/address eq '${encodeURIComponent(email)}' or toRecipients/any(r: r/emailAddress/address eq '${encodeURIComponent(email)}'))` +
+      `&$orderby=receivedDateTime desc`;
+
+    while (url && results.length < maxMessages) {
+      const data = await graphGet(url.startsWith('http') ? url.replace(GRAPH_API, '') : url, token);
+      const msgs: any[] = data.value ?? [];
+      // Filtre lookback
+      const filtered = msgs.filter((m: any) => {
+        const d = m.receivedDateTime || m.sentDateTime;
+        return d && d >= afterDate;
+      });
+      results.push(...filtered);
+      if (filtered.length < msgs.length) break; // plus vieux que lookback
+      url = data['@odata.nextLink'] ? data['@odata.nextLink'].replace(GRAPH_API, '') : null;
+    }
+  }
+
+  // Déduplique par id
+  const seen = new Set<string>();
+  return results.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; })
+    .slice(0, maxMessages);
+}
+
+async function processOutlookContact(
+  contactId: string,
+  contactEmail: string,
+  organizationId: string,
+  userEmail: string,
+  token: string,
+  supabase: any,
+  afterDate: string,
+  maxMessages: number,
+  secondaryEmails: string[] = [],
+): Promise<{ messages: number; threads: number }> {
+  const allEmails = [contactEmail, ...secondaryEmails.filter(Boolean)];
+  const msgs = await listOutlookMessages(allEmails, token, afterDate, maxMessages);
+  if (!msgs.length) return { messages: 0, threads: 0 };
+
+  // ── Threads (conversations) ───────────────────────────────────────────────
+  const convMap = new Map<string, { subject: string; firstDate: string }>();
+  for (const m of msgs) {
+    const cid = m.conversationId as string;
+    if (cid && !convMap.has(cid)) {
+      convMap.set(cid, {
+        subject: m.subject || '(Sans objet)',
+        firstDate: m.receivedDateTime || m.sentDateTime || new Date().toISOString(),
+      });
+    }
+  }
+
+  const threadRows = Array.from(convMap.entries()).map(([extId, v]) => ({
+    organization_id: organizationId,
+    provider: 'microsoft',
+    external_thread_id: extId,
+    subject: v.subject,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { data: upsertedThreads } = await supabase
+    .from('communication_threads')
+    .upsert(threadRows, { onConflict: 'organization_id,provider,external_thread_id' })
+    .select('id, external_thread_id');
+
+  const threadUUIDMap = new Map<string, string>();
+  for (const t of upsertedThreads ?? []) threadUUIDMap.set(t.external_thread_id, t.id);
+
+  // ── Messages ──────────────────────────────────────────────────────────────
+  const payloads: any[] = [];
+  for (const m of msgs) {
+    const threadUUID = threadUUIDMap.get(m.conversationId);
+    if (!threadUUID) continue;
+
+    const sentAt = m.receivedDateTime || m.sentDateTime;
+    if (!sentAt) continue;
+
+    const fromAddr = m.from?.emailAddress?.address?.toLowerCase() ?? '';
+    const outbound = fromAddr === userEmail.toLowerCase();
+
+    payloads.push({
+      organization_id: organizationId,
+      thread_id: threadUUID,
+      contact_id: contactId,
+      provider: 'microsoft',
+      external_message_id: m.id,
+      direction: outbound ? 'outbound' : 'inbound',
+      sent_at: sentAt,
+      subject: m.subject || null,
+      body_text: null, // NEVER store body — RGPD
+      metadata: {
+        response_time_hours: null,
+        outlook_categories: [],
+      },
+    });
+  }
+
+  // Upsert en chunks
+  let inserted = 0;
+  for (let i = 0; i < payloads.length; i += 100) {
+    const { data: rows } = await supabase
+      .from('communication_messages')
+      .upsert(payloads.slice(i, i + 100), { onConflict: 'organization_id,provider,external_message_id' })
+      .select('id');
+    inserted += (rows ?? []).length;
+  }
+
+  if (inserted > 0) {
+    await supabase.from('contacts')
+      .update({ enrichment_status: 'pending', updated_at: new Date().toISOString() })
+      .eq('id', contactId)
+      .eq('enrichment_status', 'done');
+  }
+
+  return { messages: inserted, threads: convMap.size };
+}
+
+// Handler Outlook — appelé quand provider === 'microsoft'
+export async function handleOutlookIngest(req: Request, supabase: any, user: any, body: any) {
+  const { organizationId, providerToken: bodyToken, contactEmails, lookbackDays = 365, maxMessagesPerContact = 1000 } = body;
+  if (!organizationId) return jsonResponse({ error: 'organizationId is required' }, 400);
+
+  let providerToken: string | null = bodyToken ?? null;
+  if (!providerToken) {
+    const { data: connector } = await supabase
+      .from('connectors')
+      .select('metadata, status')
+      .eq('organization_id', organizationId)
+      .eq('user_id', user.id)
+      .eq('provider', 'microsoft')
+      .maybeSingle();
+    if (!connector || connector.status === 'not_connected') {
+      return jsonResponse({ error: 'Outlook non connecté. Connectez votre compte Microsoft dans Paramètres.', code: 'NOT_CONNECTED' }, 400);
+    }
+    providerToken = (connector.metadata as any)?.access_token ?? null;
+    if (!providerToken) return jsonResponse({ error: 'Token Outlook introuvable ou expiré.', code: 'TOKEN_MISSING' }, 401);
+  }
+
+  const userEmail = user.email ?? '';
+  const afterDate = new Date(Date.now() - lookbackDays * 86400000).toISOString();
+
+  let targetContacts: Array<{ id: string; email: string; secondary_emails: string[] }> = [];
+  if (contactEmails?.length > 0) {
+    const { data } = await supabase.from('contacts').select('id, email, secondary_emails')
+      .eq('organization_id', organizationId).is('merged_into_contact_id', null).in('email', contactEmails);
+    targetContacts = (data ?? []).filter((c: any) => c.email);
+  } else {
+    const { data } = await supabase.from('contacts').select('id, email, secondary_emails')
+      .eq('organization_id', organizationId).is('merged_into_contact_id', null).not('email', 'is', null).limit(50);
+    targetContacts = (data ?? []).filter((c: any) => c.email);
+  }
+
+  if (!targetContacts.length) return jsonResponse({ success: true, message: 'No contacts found', stats: { contacts: 0, messages: 0, threads: 0 } });
+
+  let totalMessages = 0, totalThreads = 0;
+  const errors: string[] = [];
+  const contactStats: any[] = [];
+
+  for (const contact of targetContacts) {
+    try {
+      const result = await processOutlookContact(
+        contact.id, contact.email, organizationId, userEmail,
+        providerToken, supabase, afterDate, maxMessagesPerContact, contact.secondary_emails ?? [],
+      );
+      totalMessages += result.messages;
+      totalThreads += result.threads;
+      if (result.messages > 0) contactStats.push({ email: contact.email, ...result });
+    } catch (err: any) {
+      if (err?.code === 401 || err?.message === 'TOKEN_EXPIRED') {
+        await supabase.from('connectors')
+          .update({ status: 'expired', updated_at: new Date().toISOString() })
+          .eq('organization_id', organizationId).eq('user_id', user.id).eq('provider', 'microsoft');
+        return jsonResponse({ error: 'Outlook token expired. Please reconnect.', code: 'TOKEN_EXPIRED' }, 401);
+      }
+      errors.push(`${contact.email}: ${err?.message ?? String(err)}`);
+    }
+  }
+
+  await supabase.from('connectors')
+    .update({ status: 'connected', last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('organization_id', organizationId).eq('user_id', user.id).eq('provider', 'microsoft');
+
+  return jsonResponse({ success: true, stats: { contacts: targetContacts.length, messages: totalMessages, threads: totalThreads, errors: errors.length }, contactStats, errors: errors.slice(0, 5) });
+}
