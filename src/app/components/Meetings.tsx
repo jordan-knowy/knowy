@@ -68,36 +68,80 @@ export default function Meetings() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Non authentifié');
 
+      const orgId = await getActiveOrganizationId();
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const headers = { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' };
       const providerToken = session.provider_token;
-      if (!providerToken) {
-        setSyncResult({
-          error: 'Token Google expiré. Déconnectez-vous puis reconnectez-vous avec Google pour réactiver la synchronisation.'
-        });
+
+      // Détecte les providers connectés
+      const { data: connectors } = await supabase
+        .from('connectors')
+        .select('provider, status')
+        .eq('organization_id', orgId)
+        .eq('status', 'connected');
+
+      const connected = new Set((connectors ?? []).map((c: any) => c.provider as string));
+      const hasGoogle    = connected.has('google');
+      const hasMicrosoft = connected.has('microsoft');
+
+      if (!hasGoogle && !hasMicrosoft) {
+        setSyncResult({ error: 'Aucun compte connecté. Allez dans Paramètres → Connexions.' });
         return;
       }
 
-      const orgId = await getActiveOrganizationId();
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      let combinedStats = { total_events: 0, meeting_events: 0, created: 0, updated: 0, skipped: 0 };
 
-      const res = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId: orgId, providerToken }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setSyncResult({ error: data.error || 'Erreur de synchronisation' });
-      } else {
-        // Ingest Gmail metadata alongside calendar (best-effort)
+      // ── Google ────────────────────────────────────────────────────────────
+      if (hasGoogle && providerToken) {
+        const res = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ organizationId: orgId, providerToken }),
+        });
+        const data = await res.json();
+        if (res.ok && data.stats) {
+          combinedStats.total_events   += data.stats.total_events   ?? 0;
+          combinedStats.meeting_events += data.stats.meeting_events ?? 0;
+          combinedStats.created        += data.stats.created        ?? 0;
+          combinedStats.updated        += data.stats.updated        ?? 0;
+        }
         fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ organizationId: orgId, providerToken, lookbackDays: 90 }),
+          method: 'POST', headers,
+          body: JSON.stringify({ organizationId: orgId, providerToken, provider: 'google', lookbackDays: 90 }),
         }).catch(() => {});
-        setSyncResult({ stats: data.stats });
-        reload?.();
       }
+
+      // ── Microsoft / Outlook / Teams ───────────────────────────────────────
+      if (hasMicrosoft) {
+        const { data: msConnector } = await supabase
+          .from('connectors')
+          .select('metadata')
+          .eq('organization_id', orgId)
+          .eq('provider', 'microsoft')
+          .eq('status', 'connected')
+          .maybeSingle();
+        const msToken = (msConnector?.metadata as any)?.access_token ?? (!hasGoogle ? providerToken : null);
+
+        if (msToken) {
+          const res = await fetch(`${supabaseUrl}/functions/v1/sync-outlook-calendar`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: orgId, providerToken: msToken }),
+          });
+          const data = await res.json();
+          if (res.ok && data.stats) {
+            combinedStats.total_events   += data.stats.total_events   ?? 0;
+            combinedStats.meeting_events += data.stats.meeting_events ?? 0;
+            combinedStats.created        += data.stats.created        ?? 0;
+            combinedStats.updated        += data.stats.updated        ?? 0;
+          }
+          fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: orgId, providerToken: msToken, provider: 'microsoft', lookbackDays: 90 }),
+          }).catch(() => {});
+        }
+      }
+
+      setSyncResult({ stats: combinedStats });
+      reload?.();
     } catch (e: any) {
       setSyncResult({ error: e.message || 'Erreur inattendue' });
     } finally {
@@ -472,7 +516,7 @@ export default function Meetings() {
                   onClick={handleGoogleCalendarSync}
                   disabled={syncing}
                 >
-                  <span className="hidden sm:inline">{syncing ? 'Synchronisation...' : 'Sync Google Calendar'}</span>
+                  <span className="hidden sm:inline">{syncing ? 'Synchronisation...' : 'Synchroniser'}</span>
                   <span className="sm:hidden">{syncing ? '...' : 'Sync'}</span>
                 </KnowrButton>
                 <KnowrButton

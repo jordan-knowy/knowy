@@ -235,41 +235,88 @@ export default function Dashboard() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Non authentifié');
-      const providerToken = session.provider_token;
-      if (!providerToken) {
-        setSyncMsg({ type: 'error', text: 'Token Google expiré — déconnectez-vous et reconnectez-vous avec Google.' });
-        return;
-      }
       const orgId = await getActiveOrganizationId();
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const headers = { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' };
+      const providerToken = session.provider_token;
 
-      // 1. Sync Calendar
-      const calRes = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId: orgId, providerToken }),
-      });
-      const calData = await calRes.json();
-      if (!calRes.ok) throw new Error(calData.error || 'Erreur sync calendar');
+      // Détecte les providers connectés en base
+      const { data: connectors } = await supabase
+        .from('connectors')
+        .select('provider, status')
+        .eq('organization_id', orgId)
+        .eq('status', 'connected');
 
-      // 2. Ingest Gmail metadata (best-effort — don't fail if token lacks gmail scope)
-      try {
-        await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ organizationId: orgId, providerToken, lookbackDays: 90 }),
-        });
-      } catch {
-        // Gmail ingestion is best-effort — calendar sync success is enough
+      const connected = new Set((connectors ?? []).map((c: any) => c.provider as string));
+      const hasGoogle    = connected.has('google');
+      const hasMicrosoft = connected.has('microsoft');
+
+      if (!hasGoogle && !hasMicrosoft) {
+        setSyncMsg({ type: 'error', text: 'Aucun compte connecté. Allez dans Paramètres → Connexions.' });
+        return;
       }
 
-      setSyncMsg({ type: 'success', text: `✓ ${calData.stats?.created ?? 0} nouvelles réunions · Emails synchronisés` });
+      let totalCreated = 0;
+      const syncedProviders: string[] = [];
+
+      // ── Google : calendrier + emails ─────────────────────────────────────
+      if (hasGoogle && providerToken) {
+        const calRes = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ organizationId: orgId, providerToken }),
+        });
+        const calData = await calRes.json();
+        if (calRes.ok) {
+          totalCreated += calData.stats?.created ?? 0;
+          syncedProviders.push('Google');
+        }
+        // Emails Gmail — best-effort
+        fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ organizationId: orgId, providerToken, provider: 'google', lookbackDays: 90 }),
+        }).catch(() => {});
+      }
+
+      // ── Microsoft : calendrier Outlook/Teams + emails ─────────────────────
+      if (hasMicrosoft) {
+        // Le token Microsoft est stocké dans la table connectors (pas dans session si Google est la session active)
+        const { data: msConnector } = await supabase
+          .from('connectors')
+          .select('metadata')
+          .eq('organization_id', orgId)
+          .eq('provider', 'microsoft')
+          .eq('status', 'connected')
+          .maybeSingle();
+        const msToken = (msConnector?.metadata as any)?.access_token ?? (hasGoogle ? null : providerToken);
+
+        if (msToken) {
+          const calRes = await fetch(`${supabaseUrl}/functions/v1/sync-outlook-calendar`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: orgId, providerToken: msToken }),
+          });
+          const calData = await calRes.json();
+          if (calRes.ok) {
+            totalCreated += calData.stats?.created ?? 0;
+            syncedProviders.push('Outlook');
+          }
+          // Emails Outlook — best-effort
+          fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: orgId, providerToken: msToken, provider: 'microsoft', lookbackDays: 90 }),
+          }).catch(() => {});
+        }
+      }
+
+      setSyncMsg({
+        type: 'success',
+        text: `✓ ${totalCreated} nouvelles réunions · Emails synchronisés (${syncedProviders.join(' + ')})`,
+      });
       reloadMeetings?.();
     } catch (e: any) {
       setSyncMsg({ type: 'error', text: e.message });
     } finally {
       setSyncing(false);
-      setTimeout(() => setSyncMsg(null), 5000);
+      setTimeout(() => setSyncMsg(null), 6000);
     }
   }
 
@@ -718,7 +765,7 @@ export default function Dashboard() {
           <button onClick={handleCalendarSync} disabled={syncing}
             className="flex items-center gap-2 text-xs font-semibold text-primary hover:underline disabled:opacity-50 flex-shrink-0">
             {syncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCcw className="size-3.5" />}
-            {syncing ? 'Synchronisation…' : 'Sync Google Calendar'}
+            {syncing ? 'Synchronisation…' : 'Synchroniser'}
           </button>
         </div>
         {syncMsg && (
