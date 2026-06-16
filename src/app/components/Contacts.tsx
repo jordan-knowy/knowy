@@ -535,6 +535,31 @@ export default function Contacts() {
       if (!session) throw new Error('Non authentifié');
       const resolvedOrgId = orgId || await getActiveOrganizationId();
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+      // Détecte les providers connectés
+      const { data: connectors } = await supabase
+        .from('connectors')
+        .select('provider, metadata, status')
+        .eq('organization_id', resolvedOrgId)
+        .eq('status', 'connected');
+
+      const connected = new Map((connectors ?? []).map((c: any) => [c.provider as string, c]));
+      const hasGoogle    = connected.has('google');
+      const hasMicrosoft = connected.has('microsoft');
+
+      if (!hasGoogle && !hasMicrosoft) {
+        setSuggestionError('Aucun compte mail connecté. Allez dans Paramètres → Connexions.');
+        return;
+      }
+
+      // Tokens : Google → session.provider_token (si connecté via Google) sinon metadata
+      const googleToken = hasGoogle
+        ? ((connected.get('google')?.metadata as any)?.access_token ?? session.provider_token ?? null)
+        : null;
+      const microsoftToken = hasMicrosoft
+        ? ((connected.get('microsoft')?.metadata as any)?.access_token ?? (!hasGoogle ? session.provider_token : null))
+        : null;
+
       const res = await fetch(`${supabaseUrl}/functions/v1/discover-contacts`, {
         method: 'POST',
         headers: {
@@ -543,7 +568,8 @@ export default function Contacts() {
         },
         body: JSON.stringify({
           organizationId: resolvedOrgId,
-          providerToken: session.provider_token,
+          googleToken,
+          microsoftToken,
           lookbackDays: 90,
           minExchanges: 2,
         }),
@@ -569,7 +595,7 @@ export default function Contacts() {
         organization_id: resolvedOrgId,
         full_name: displayName,
         email: s.email,
-        source_summary: { source: 'gmail_discovery', domain: s.domain, exchange_count: s.count },
+        source_summary: { source: 'mail_discovery', domain: s.domain, exchange_count: s.count },
         enrichment_status: 'pending',
       });
       if (error) throw error;
@@ -681,8 +707,8 @@ export default function Contacts() {
                   className="px-4 py-2 bg-card border border-border hover:bg-muted/50 rounded-xl flex items-center gap-2 text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   {loadingSuggestions ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4 text-primary" />}
-                  <span className="hidden sm:inline">{loadingSuggestions ? 'Scan en cours…' : 'Découvrir via Gmail'}</span>
-                  <span className="sm:hidden">{loadingSuggestions ? '…' : 'Gmail'}</span>
+                  <span className="hidden sm:inline">{loadingSuggestions ? 'Scan en cours…' : 'Découvrir via Mail'}</span>
+                  <span className="sm:hidden">{loadingSuggestions ? '…' : 'Mail'}</span>
                 </button>
                 <button
                   onClick={() => setShowAddModal(true)}
@@ -750,9 +776,9 @@ export default function Contacts() {
                   </div>
                   <div className="text-left">
                     <p className="font-semibold text-sm text-foreground">
-                      {suggestions.filter(s => !dismissed.has(s.email)).length} suggestion{suggestions.filter(s => !dismissed.has(s.email)).length > 1 ? 's' : ''} détectée{suggestions.filter(s => !dismissed.has(s.email)).length > 1 ? 's' : ''} dans Gmail
+                      {suggestions.filter(s => !dismissed.has(s.email)).length} suggestion{suggestions.filter(s => !dismissed.has(s.email)).length > 1 ? 's' : ''} détectée{suggestions.filter(s => !dismissed.has(s.email)).length > 1 ? 's' : ''}
                     </p>
-                    <p className="text-xs text-muted-foreground">Interlocuteurs fréquents détectés dans vos 1000 derniers emails — pas encore dans Knowr.</p>
+                    <p className="text-xs text-muted-foreground">Interlocuteurs fréquents détectés dans vos emails (Gmail &amp; Outlook) — pas encore dans Knowr.</p>
                   </div>
                 </div>
                 {suggestionsOpen ? <ChevronUp className="size-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="size-4 text-muted-foreground flex-shrink-0" />}
