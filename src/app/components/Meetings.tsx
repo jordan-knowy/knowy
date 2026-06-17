@@ -92,21 +92,24 @@ export default function Meetings() {
       let combinedStats = { total_events: 0, meeting_events: 0, created: 0, updated: 0, skipped: 0 };
 
       // ── Google ────────────────────────────────────────────────────────────
-      if (hasGoogle && providerToken) {
-        const res = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
-          method: 'POST', headers,
-          body: JSON.stringify({ organizationId: orgId, providerToken }),
-        });
-        const data = await res.json();
-        if (res.ok && data.stats) {
-          combinedStats.total_events   += data.stats.total_events   ?? 0;
-          combinedStats.meeting_events += data.stats.meeting_events ?? 0;
-          combinedStats.created        += data.stats.created        ?? 0;
-          combinedStats.updated        += data.stats.updated        ?? 0;
+      if (hasGoogle) {
+        if (providerToken) {
+          const res = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: orgId, providerToken }),
+          });
+          const data = await res.json();
+          if (res.ok && data.stats) {
+            combinedStats.total_events   += data.stats.total_events   ?? 0;
+            combinedStats.meeting_events += data.stats.meeting_events ?? 0;
+            combinedStats.created        += data.stats.created        ?? 0;
+            combinedStats.updated        += data.stats.updated        ?? 0;
+          }
         }
+        // Emails : ingest résout le token depuis connectors.metadata (stocké par sync-google-calendar)
         fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
           method: 'POST', headers,
-          body: JSON.stringify({ organizationId: orgId, providerToken, provider: 'google', lookbackDays: 90 }),
+          body: JSON.stringify({ organizationId: orgId, providerToken: providerToken ?? null, provider: 'google', lookbackDays: 90 }),
         }).catch(() => {});
       }
 
@@ -133,11 +136,11 @@ export default function Meetings() {
             combinedStats.created        += data.stats.created        ?? 0;
             combinedStats.updated        += data.stats.updated        ?? 0;
           }
-          fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ organizationId: orgId, providerToken: msToken, provider: 'microsoft', lookbackDays: 90 }),
-          }).catch(() => {});
         }
+        fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ organizationId: orgId, providerToken: msToken ?? null, provider: 'microsoft', lookbackDays: 90 }),
+        }).catch(() => {});
       }
 
       setSyncResult({ stats: combinedStats });

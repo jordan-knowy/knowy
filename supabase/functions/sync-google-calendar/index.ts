@@ -187,13 +187,26 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Update connector last_synced_at and status
+  // Update connector — stocke aussi le token pour que ingest-communication puisse l'utiliser
+  const { data: existingConn } = await supabase
+    .from('connectors')
+    .select('metadata')
+    .eq('organization_id', organizationId)
+    .eq('user_id', user.id)
+    .eq('provider', 'google')
+    .maybeSingle();
+
   await supabase
     .from('connectors')
     .update({
       status: 'connected',
       last_synced_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      metadata: {
+        ...(existingConn?.metadata ?? {}),
+        access_token: providerToken,
+        token_stored_at: new Date().toISOString(),
+      },
     })
     .eq('organization_id', organizationId)
     .eq('user_id', user.id)

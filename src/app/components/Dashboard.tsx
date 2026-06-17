@@ -257,29 +257,35 @@ export default function Dashboard() {
       }
 
       let totalCreated = 0;
+      let totalEmails = 0;
       const syncedProviders: string[] = [];
 
-      // ── Google : calendrier + emails ─────────────────────────────────────
-      if (hasGoogle && providerToken) {
-        const calRes = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
-          method: 'POST', headers,
-          body: JSON.stringify({ organizationId: orgId, providerToken }),
-        });
-        const calData = await calRes.json();
-        if (calRes.ok) {
-          totalCreated += calData.stats?.created ?? 0;
-          syncedProviders.push('Google');
+      // ── Google : calendrier + emails ──────────────────────────────────────
+      if (hasGoogle) {
+        if (providerToken) {
+          // Calendrier — nécessite le token de session Google
+          const calRes = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: orgId, providerToken }),
+          });
+          const calData = await calRes.json();
+          if (calRes.ok) {
+            totalCreated += calData.stats?.created ?? 0;
+            syncedProviders.push('Google');
+          }
         }
-        // Emails Gmail — best-effort
-        fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+        // Emails Gmail — utilise le token stocké en base (mis à jour par sync-google-calendar)
+        // Pas conditionné à providerToken : ingest résout le token depuis connectors.metadata
+        const emailRes = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
           method: 'POST', headers,
-          body: JSON.stringify({ organizationId: orgId, providerToken, provider: 'google', lookbackDays: 90 }),
-        }).catch(() => {});
+          body: JSON.stringify({ organizationId: orgId, providerToken: providerToken ?? null, provider: 'google', lookbackDays: 90 }),
+        });
+        const emailData = await emailRes.json();
+        if (emailRes.ok) totalEmails += emailData.stats?.messages ?? 0;
       }
 
       // ── Microsoft : calendrier Outlook/Teams + emails ─────────────────────
       if (hasMicrosoft) {
-        // Le token Microsoft est stocké dans la table connectors (pas dans session si Google est la session active)
         const { data: msConnector } = await supabase
           .from('connectors')
           .select('metadata')
@@ -287,7 +293,8 @@ export default function Dashboard() {
           .eq('provider', 'microsoft')
           .eq('status', 'connected')
           .maybeSingle();
-        const msToken = (msConnector?.metadata as any)?.access_token ?? (hasGoogle ? null : providerToken);
+        // Token MS : metadata.access_token > session.provider_token si MS est le provider de session
+        const msToken = (msConnector?.metadata as any)?.access_token ?? (!hasGoogle ? providerToken : null);
 
         if (msToken) {
           const calRes = await fetch(`${supabaseUrl}/functions/v1/sync-outlook-calendar`, {
@@ -299,17 +306,20 @@ export default function Dashboard() {
             totalCreated += calData.stats?.created ?? 0;
             syncedProviders.push('Outlook');
           }
-          // Emails Outlook — best-effort
-          fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ organizationId: orgId, providerToken: msToken, provider: 'microsoft', lookbackDays: 90 }),
-          }).catch(() => {});
         }
+        // Emails Outlook — ingest résout le token depuis connectors si msToken est null
+        const emailRes = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ organizationId: orgId, providerToken: msToken ?? null, provider: 'microsoft', lookbackDays: 90 }),
+        });
+        const emailData = await emailRes.json();
+        if (emailRes.ok) totalEmails += emailData.stats?.messages ?? 0;
       }
 
+      const emailPart = totalEmails > 0 ? ` · ${totalEmails} email${totalEmails > 1 ? 's' : ''} ingéré${totalEmails > 1 ? 's' : ''}` : ' · Emails synchronisés';
       setSyncMsg({
         type: 'success',
-        text: `✓ ${totalCreated} nouvelles réunions · Emails synchronisés (${syncedProviders.join(' + ')})`,
+        text: `✓ ${totalCreated} nouvelle${totalCreated > 1 ? 's' : ''} réunion${totalCreated > 1 ? 's' : ''}${emailPart}${syncedProviders.length ? ` (${syncedProviders.join(' + ')})` : ''}`,
       });
       reloadMeetings?.();
     } catch (e: any) {

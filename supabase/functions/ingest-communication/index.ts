@@ -538,7 +538,10 @@ async function graphGet(path: string, token: string): Promise<any> {
   return res.json();
 }
 
-// Récupère tous les messages échangés avec un contact (From ou To)
+// Récupère tous les messages échangés avec un contact via deux requêtes séparées :
+// 1) Messages reçus (from the contact) via /me/messages?$filter=from/emailAddress/address eq '...'
+// 2) Messages envoyés (to the contact) via /me/sentItems?$filter=toRecipients/any(...)
+// Note: toRecipients/any() n'est PAS supporté sur /me/messages — uniquement sur /me/sentItems
 async function listOutlookMessages(
   contactEmails: string[],
   token: string,
@@ -546,32 +549,55 @@ async function listOutlookMessages(
   maxMessages: number,
 ): Promise<any[]> {
   const results: any[] = [];
+  const seen = new Set<string>();
+  const select = 'id,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isDraft';
 
   for (const email of contactEmails) {
-    let url: string | null =
-      `/me/messages?$top=100` +
-      `&$select=id,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isDraft` +
-      `&$filter=isDraft eq false and (from/emailAddress/address eq '${encodeURIComponent(email)}' or toRecipients/any(r: r/emailAddress/address eq '${encodeURIComponent(email)}'))` +
+    // Échappe les apostrophes dans l'adresse email pour OData
+    const safeEmail = email.replace(/'/g, "''");
+
+    // ── 1. Messages reçus de ce contact ──────────────────────────────────────
+    let inboundUrl: string | null =
+      `/me/messages?$top=100&$select=${select}` +
+      `&$filter=isDraft eq false and from/emailAddress/address eq '${safeEmail}'` +
       `&$orderby=receivedDateTime desc`;
 
-    while (url && results.length < maxMessages) {
-      const data = await graphGet(url.startsWith('http') ? url.replace(GRAPH_API, '') : url, token);
-      const msgs: any[] = data.value ?? [];
-      // Filtre lookback
-      const filtered = msgs.filter((m: any) => {
-        const d = m.receivedDateTime || m.sentDateTime;
-        return d && d >= afterDate;
-      });
-      results.push(...filtered);
-      if (filtered.length < msgs.length) break; // plus vieux que lookback
-      url = data['@odata.nextLink'] ? data['@odata.nextLink'].replace(GRAPH_API, '') : null;
+    while (inboundUrl && results.length < maxMessages) {
+      try {
+        const path = inboundUrl.startsWith('http') ? inboundUrl.replace(GRAPH_API, '') : inboundUrl;
+        const data = await graphGet(path, token);
+        const msgs: any[] = (data.value ?? []).filter((m: any) => {
+          const d = m.receivedDateTime || m.sentDateTime;
+          return d && d >= afterDate;
+        });
+        for (const m of msgs) { if (!seen.has(m.id)) { seen.add(m.id); results.push(m); } }
+        if (msgs.length === 0) break;
+        inboundUrl = data['@odata.nextLink'] ?? null;
+      } catch { break; }
+    }
+
+    // ── 2. Messages envoyés à ce contact (/me/sentItems) ─────────────────────
+    let sentUrl: string | null =
+      `/me/sentItems?$top=100&$select=${select}` +
+      `&$filter=isDraft eq false and toRecipients/any(r: r/emailAddress/address eq '${safeEmail}')` +
+      `&$orderby=sentDateTime desc`;
+
+    while (sentUrl && results.length < maxMessages) {
+      try {
+        const path = sentUrl.startsWith('http') ? sentUrl.replace(GRAPH_API, '') : sentUrl;
+        const data = await graphGet(path, token);
+        const msgs: any[] = (data.value ?? []).filter((m: any) => {
+          const d = m.sentDateTime || m.receivedDateTime;
+          return d && d >= afterDate;
+        });
+        for (const m of msgs) { if (!seen.has(m.id)) { seen.add(m.id); results.push(m); } }
+        if (msgs.length === 0) break;
+        sentUrl = data['@odata.nextLink'] ?? null;
+      } catch { break; }
     }
   }
 
-  // Déduplique par id
-  const seen = new Set<string>();
-  return results.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; })
-    .slice(0, maxMessages);
+  return results.slice(0, maxMessages);
 }
 
 async function processOutlookContact(
