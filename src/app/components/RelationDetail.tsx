@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft,
@@ -85,6 +85,7 @@ export default function RelationDetail() {
     behavioral: false,
     career: false,
     history: false,
+    emails: false,
     topics: false,
     company: false,
     network: false,
@@ -96,6 +97,8 @@ export default function RelationDetail() {
   const [cogProfile, setCogProfile] = useState<CognitiveProfile | null>(null);
   const [cogScore, setCogScore] = useState<any>(null);
   const [emailCount, setEmailCount] = useState<number>(0);
+  const [emailMessages, setEmailMessages] = useState<any[]>([]);
+  const [syncingEmails, setSyncingEmails] = useState(false);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [topicsData, setTopicsData] = useState<any[]>([]);
   const [objectionsData, setObjectionsData] = useState<any[]>([]);
@@ -104,8 +107,77 @@ export default function RelationDetail() {
   const [companySignalsData, setCompanySignalsData] = useState<any[]>([]);
   const [meetingsHistory, setMeetingsHistory] = useState<any[]>([]);
 
+  const autoSyncAttempted = useRef(false);
+
   const toggleBlock = (block: keyof typeof openBlocks) =>
     setOpenBlocks((prev) => ({ ...prev, [block]: !prev[block] }));
+
+  // Auto-sync emails quand la fiche charge avec 0 emails (contact nouvellement importé)
+  useEffect(() => {
+    if (rawContact?.email && emailCount === 0 && !syncingEmails && !autoSyncAttempted.current) {
+      autoSyncAttempted.current = true;
+      syncContactEmails();
+    }
+  }, [rawContact?.id, emailCount]);
+
+  async function syncContactEmails() {
+    if (!supabase || !id || syncingEmails) return;
+    setSyncingEmails(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const orgId = await getActiveOrganizationId();
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const headers = { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' };
+
+      const { data: connectors } = await supabase
+        .from('connectors').select('provider, status, metadata')
+        .eq('organization_id', orgId).eq('status', 'connected');
+
+      const connected = new Map((connectors ?? []).map((c: any) => [c.provider as string, c]));
+      const email = rawContact?.email;
+      if (!email) return;
+
+      // Google
+      if (connected.has('google')) {
+        const googleToken = (connected.get('google')?.metadata as any)?.access_token ?? session.provider_token ?? null;
+        fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ organizationId: orgId, providerToken: googleToken, provider: 'google', contactEmails: [email], lookbackDays: 3650, maxMessagesPerContact: 1000 }),
+        }).catch(() => {});
+      }
+      // Microsoft
+      if (connected.has('microsoft')) {
+        const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
+        const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
+        const msToken = (isMsSession && session.provider_token) ? session.provider_token : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null);
+        if (msToken) {
+          fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: orgId, providerToken: msToken, provider: 'microsoft', contactEmails: [email], lookbackDays: 3650, maxMessagesPerContact: 1000 }),
+          }).catch(() => {});
+        }
+      }
+
+      // Recharge les messages après 3s
+      setTimeout(async () => {
+        if (!supabase) return;
+        const { data: msgs } = await supabase
+          .from('communication_messages')
+          .select('id, sent_at, direction, subject, provider')
+          .eq('contact_id', id!)
+          .order('sent_at', { ascending: false })
+          .limit(30);
+        setEmailMessages(msgs ?? []);
+        const { count } = await supabase
+          .from('communication_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('contact_id', id!);
+        setEmailCount(count ?? 0);
+        setSyncingEmails(false);
+      }, 4000);
+    } catch { setSyncingEmails(false); }
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -231,6 +303,17 @@ export default function RelationDetail() {
         if (!emailRes.error) setEmailCount(emailRes.count ?? 0);
       }
 
+      // 7. Email messages list
+      if (supabase) {
+        const { data: msgs } = await supabase
+          .from('communication_messages')
+          .select('id, sent_at, direction, subject, provider')
+          .eq('contact_id', id!)
+          .order('sent_at', { ascending: false })
+          .limit(30);
+        if (mounted) setEmailMessages(msgs ?? []);
+      }
+
       if (mounted) setLoading(false);
     }
 
@@ -285,7 +368,7 @@ export default function RelationDetail() {
   }));
 
   const stats = [
-    { label: 'Emails échangés', value: String(emailCount > 0 ? emailCount : (snapshot?.emails_exchanged ?? 0)), source: 'Gmail' },
+    { label: 'Emails échangés', value: String(emailCount > 0 ? emailCount : (snapshot?.emails_exchanged ?? 0)), source: 'Email' },
     { label: 'Réunions tenues', value: String(meetingsHistory.length > 0 ? meetingsHistory.length : (snapshot?.meetings_count ?? 0)), source: 'Calendar' },
     {
       label: 'Score intensité',
@@ -302,9 +385,9 @@ export default function RelationDetail() {
       value: snapshot?.response_rate_hours
         ? `< ${Math.round(snapshot.response_rate_hours)}h`
         : '—',
-      source: 'Gmail',
+      source: 'Email',
     },
-    { label: 'Dernier contact', value: relDate(snapshot?.last_contact_date), source: 'Gmail' },
+    { label: 'Dernier contact', value: relDate(snapshot?.last_contact_date), source: 'Email' },
   ];
 
   const interactionProfile = cogProfile
@@ -574,7 +657,7 @@ export default function RelationDetail() {
                   <p className="text-xs text-muted-foreground mb-2">Sources</p>
                   <div className="flex flex-wrap gap-1.5">
                     <KnowrBadge variant={contact.sources.gmail ? 'sage' : 'muted'} size="sm">
-                      Gmail {contact.sources.gmail && '✓'}
+                      Email {contact.sources.gmail && '✓'}
                     </KnowrBadge>
                     <KnowrBadge variant={contact.sources.calendar ? 'sage' : 'muted'} size="sm">
                       Calendar {contact.sources.calendar && '✓'}
@@ -891,6 +974,90 @@ export default function RelationDetail() {
               </KnowrCard>
             </motion.div>
 
+            {/* Emails synchronisés */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.85 }}
+            >
+              <KnowrCard className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <button
+                    onClick={() => toggleBlock('emails')}
+                    className="flex items-center gap-2 hover:text-primary transition-colors"
+                  >
+                    <Mail className="size-4 text-primary" />
+                    <h2 className="text-base font-bold">
+                      Emails synchronisés
+                      {emailCount > 0 && (
+                        <span className="ml-2 text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                          {emailCount}
+                        </span>
+                      )}
+                    </h2>
+                    {openBlocks.emails ? <ChevronUp className="size-4 ml-1" /> : <ChevronDown className="size-4 ml-1" />}
+                  </button>
+                  <button
+                    onClick={syncContactEmails}
+                    disabled={syncingEmails || !rawContact?.email}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-muted/60 hover:bg-muted transition-colors disabled:opacity-40"
+                    title={rawContact?.email ? 'Synchroniser les emails de ce contact' : 'Email manquant'}
+                  >
+                    {syncingEmails ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />}
+                    {syncingEmails ? 'Sync…' : 'Synchroniser'}
+                  </button>
+                </div>
+
+                {openBlocks.emails && (
+                  emailMessages.length === 0 ? (
+                    <div className="text-center py-6 space-y-2">
+                      <p className="text-sm text-muted-foreground">Aucun email synchronisé pour ce contact.</p>
+                      {rawContact?.email && (
+                        <p className="text-xs text-muted-foreground">
+                          Cliquez sur "Synchroniser" pour charger l'historique depuis Gmail / Outlook.
+                        </p>
+                      )}
+                      {!rawContact?.email && (
+                        <p className="text-xs text-destructive">Ajoutez un email à ce contact pour synchroniser.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {emailMessages.map((msg: any) => {
+                        const isOut = msg.direction === 'outbound';
+                        return (
+                          <div key={msg.id} className="flex items-start gap-3 p-3 bg-muted/20 rounded-lg hover:bg-muted/30 transition-colors">
+                            <div className={`size-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${isOut ? 'bg-primary/10' : 'bg-muted'}`}>
+                              <Mail className={`size-3.5 ${isOut ? 'text-primary' : 'text-muted-foreground'}`} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2 mb-0.5">
+                                <p className="text-sm font-medium truncate">
+                                  {msg.subject || '(Sans objet)'}
+                                </p>
+                                <p className="text-xs text-muted-foreground flex-shrink-0">{relDate(msg.sent_at)}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-full ${isOut ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                                  {isOut ? '→ Envoyé' : '← Reçu'}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground capitalize">{msg.provider === 'microsoft' ? 'Outlook' : 'Gmail'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {emailCount > 30 && (
+                        <p className="text-xs text-muted-foreground text-center pt-1">
+                          {emailCount - 30} email{emailCount - 30 > 1 ? 's' : ''} supplémentaire{emailCount - 30 > 1 ? 's' : ''} en base.
+                        </p>
+                      )}
+                    </div>
+                  )
+                )}
+              </KnowrCard>
+            </motion.div>
+
             {/* Topics & Objections */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -1081,7 +1248,7 @@ export default function RelationDetail() {
                   <div className="text-center py-8 text-muted-foreground text-sm">
                     <Calendar className="size-8 mx-auto mb-2 opacity-30" />
                     <p>Aucune activité enregistrée</p>
-                    <p className="text-xs mt-1">Connectez Gmail et Calendar pour voir les échanges.</p>
+                    <p className="text-xs mt-1">Connectez votre messagerie (Gmail ou Outlook) et Calendar pour voir les échanges.</p>
                   </div>
                 ) : (
                   exchangeHistory.map((item, i) => (

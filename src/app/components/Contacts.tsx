@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import {
   Users,
   Search,
@@ -392,6 +392,7 @@ function AddContactModal({ onClose, onAdded, orgId }: AddContactModalProps) {
 
 export default function Contacts() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [viewType, setViewType] = useState<'people' | 'companies'>('people');
   const [sortBy, setSortBy] = useState<SortType>('meetings');
@@ -406,10 +407,21 @@ export default function Contacts() {
   const [suggestionsOpen, setSuggestionsOpen] = useState(true);
   const [importingEmails, setImportingEmails] = useState<Set<string>>(new Set());
   const [suggestionError, setSuggestionError] = useState<string | null>(null);
+  const [mergingIds, setMergingIds] = useState<Set<string>>(new Set());
+  const [duplicatesOpen, setDuplicatesOpen] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   useEffect(() => {
     loadContacts();
   }, []);
+
+  // Si on arrive depuis Dashboard avec ?discover=1 → lancer automatiquement la découverte
+  useEffect(() => {
+    if (searchParams.get('discover') === '1') {
+      discoverContacts();
+    }
+  }, [searchParams]);
 
   async function loadContacts() {
     if (!supabase) return;
@@ -526,6 +538,71 @@ export default function Contacts() {
     }
   }
 
+  async function syncEmails() {
+    if (!supabase || syncing) return;
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Non authentifié');
+      const resolvedOrgId = orgId || await getActiveOrganizationId();
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const headers = { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' };
+      const providerToken = session.provider_token;
+
+      const { data: conns } = await supabase.from('connectors').select('provider, status, metadata')
+        .eq('organization_id', resolvedOrgId).eq('status', 'connected');
+      const connected = new Map((conns ?? []).map((c: any) => [c.provider as string, c]));
+      const hasGoogle = connected.has('google');
+      const hasMicrosoft = connected.has('microsoft');
+      const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
+      const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
+
+      let totalSynced = 0;
+
+      if (hasGoogle) {
+        const googleToken = (connected.get('google')?.metadata as any)?.access_token ?? providerToken ?? null;
+        if (googleToken) {
+          const r = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: resolvedOrgId, providerToken: googleToken, provider: 'google', lookbackDays: 3650 }),
+          });
+          const d = await r.json();
+          if (r.ok) totalSynced += d.stats?.messages ?? 0;
+        }
+      }
+
+      if (hasMicrosoft) {
+        // Priorité au token FRAIS de la session Microsoft (sinon token stocké, possiblement périmé)
+        const msToken: string | null = (isMsSession && providerToken) ? providerToken : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null);
+        // Sème access_token + refresh_token dans le connecteur pour le renouvellement auto serveur
+        if (isMsSession && providerToken && session.user) {
+          await (supabase.from('connectors') as any).upsert({
+            organization_id: resolvedOrgId, user_id: session.user.id, provider: 'microsoft', status: 'connected',
+            metadata: { access_token: providerToken, refresh_token: (session as any).provider_refresh_token ?? (connected.get('microsoft')?.metadata as any)?.refresh_token ?? null, email: session.user.email, token_stored_at: new Date().toISOString() },
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'organization_id,user_id,provider' });
+        }
+        if (msToken) {
+          const r = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: resolvedOrgId, providerToken: msToken, provider: 'microsoft', lookbackDays: 3650 }),
+          });
+          const d = await r.json();
+          if (r.ok) totalSynced += d.stats?.messages ?? 0;
+        }
+      }
+
+      setSyncMsg(totalSynced > 0 ? `✓ ${totalSynced} email${totalSynced > 1 ? 's' : ''} synchronisé${totalSynced > 1 ? 's' : ''}` : '✓ Actualisé');
+      await loadContacts();
+    } catch (e: any) {
+      setSyncMsg(`Erreur : ${e.message}`);
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMsg(null), 4000);
+    }
+  }
+
   async function discoverContacts() {
     if (!supabase || loadingSuggestions) return;
     setLoadingSuggestions(true);
@@ -552,13 +629,25 @@ export default function Contacts() {
         return;
       }
 
-      // Tokens : Google → session.provider_token (si connecté via Google) sinon metadata
+      // Détecte si la session courante est une session Microsoft OAuth
+      const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
+      const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
+
+      // Tokens : on privilégie le token FRAIS de la session si elle correspond au provider
       const googleToken = hasGoogle
-        ? ((connected.get('google')?.metadata as any)?.access_token ?? session.provider_token ?? null)
+        ? (session.provider_token ?? (connected.get('google')?.metadata as any)?.access_token ?? null)
         : null;
       const microsoftToken = hasMicrosoft
-        ? ((connected.get('microsoft')?.metadata as any)?.access_token ?? (!hasGoogle ? session.provider_token : null))
+        ? ((isMsSession && session.provider_token) ? session.provider_token : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null))
         : null;
+      // Sème le refresh_token MS dans le connecteur (renouvellement auto côté serveur)
+      if (hasMicrosoft && isMsSession && session.provider_token && session.user) {
+        await (supabase.from('connectors') as any).upsert({
+          organization_id: resolvedOrgId, user_id: session.user.id, provider: 'microsoft', status: 'connected',
+          metadata: { access_token: session.provider_token, refresh_token: (session as any).provider_refresh_token ?? (connected.get('microsoft')?.metadata as any)?.refresh_token ?? null, email: session.user.email, token_stored_at: new Date().toISOString() },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'organization_id,user_id,provider' });
+      }
 
       const res = await fetch(`${supabaseUrl}/functions/v1/discover-contacts`, {
         method: 'POST',
@@ -570,8 +659,8 @@ export default function Contacts() {
           organizationId: resolvedOrgId,
           googleToken,
           microsoftToken,
-          lookbackDays: 90,
-          minExchanges: 2,
+          lookbackDays: 3650,
+          minExchanges: 1,
         }),
       });
       const data = await res.json();
@@ -595,16 +684,97 @@ export default function Contacts() {
         organization_id: resolvedOrgId,
         full_name: displayName,
         email: s.email,
-        source_summary: { source: 'mail_discovery', domain: s.domain, exchange_count: s.count },
+        role_title: (s as any).title ?? null,
+        linkedin_url: (s as any).linkedIn ?? null,
+        source_summary: {
+          source: 'mail_discovery',
+          domain: s.domain,
+          exchange_count: s.count,
+          phone: (s as any).phone ?? null,
+        },
         enrichment_status: 'pending',
       });
       if (error) throw error;
       setDismissed(prev => new Set(prev).add(s.email));
       loadContacts();
+
+      // Auto-trigger email sync for this new contact
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const headers = { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' };
+        const { data: conns } = await supabase.from('connectors').select('provider, status, metadata')
+          .eq('organization_id', resolvedOrgId).eq('status', 'connected');
+        const connected = new Map((conns ?? []).map((c: any) => [c.provider as string, c]));
+        if (connected.has('google')) {
+          const googleToken = (connected.get('google')?.metadata as any)?.access_token ?? session.provider_token ?? null;
+          fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: resolvedOrgId, providerToken: googleToken, provider: 'google', contactEmails: [s.email], lookbackDays: 3650, maxMessagesPerContact: 1000 }),
+          }).catch(() => {});
+        }
+        if (connected.has('microsoft')) {
+          const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
+          const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
+          const msToken: string | null = (isMsSession && session.provider_token) ? session.provider_token : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null);
+          if (msToken) {
+            fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+              method: 'POST', headers,
+              body: JSON.stringify({ organizationId: resolvedOrgId, providerToken: msToken, provider: 'microsoft', contactEmails: [s.email], lookbackDays: 3650, maxMessagesPerContact: 1000 }),
+            }).catch(() => {});
+          }
+        }
+      }
     } catch (e: any) {
       console.error('Import error:', e.message);
     } finally {
       setImportingEmails(prev => { const n = new Set(prev); n.delete(s.email); return n; });
+    }
+  }
+
+  // ── Détection des doublons par nom normalisé ──────────────────────────────
+  const duplicateGroups = useMemo(() => {
+    const normalize = (name: string) =>
+      name.toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z\s]/g, ' ')
+        .split(/\s+/).filter(Boolean).sort().join(' ');
+
+    const byNorm = new Map<string, Contact[]>();
+    for (const c of contacts) {
+      if (!c.name || c.name === '—') continue;
+      const norm = normalize(c.name);
+      if (norm.length < 4) continue; // ignore noms trop courts
+      if (!byNorm.has(norm)) byNorm.set(norm, []);
+      byNorm.get(norm)!.push(c);
+    }
+    // Seulement les groupes avec des emails différents (vraie collision)
+    return Array.from(byNorm.values()).filter(
+      group => group.length >= 2 && new Set(group.map(c => c.email)).size >= 2
+    );
+  }, [contacts]);
+
+  async function mergeContact(primary: Contact, secondary: Contact) {
+    if (!supabase || mergingIds.has(secondary.id)) return;
+    setMergingIds(prev => new Set(prev).add(secondary.id));
+    try {
+      // 1. Ajouter l'email secondaire aux emails secondaires du contact principal
+      const { data: primaryRaw } = await supabase.from('contacts').select('secondary_emails').eq('id', primary.id).maybeSingle();
+      const existing: string[] = primaryRaw?.secondary_emails ?? [];
+      if (secondary.email && !existing.includes(secondary.email)) {
+        await supabase.from('contacts').update({
+          secondary_emails: [...existing, secondary.email],
+        }).eq('id', primary.id);
+      }
+      // 2. Transférer les communication_messages
+      await supabase.from('communication_messages').update({ contact_id: primary.id }).eq('contact_id', secondary.id);
+      // 3. Marquer le doublon comme fusionné
+      await supabase.from('contacts').update({ merged_into_contact_id: primary.id }).eq('id', secondary.id);
+      loadContacts();
+    } catch (e: any) {
+      console.error('Merge error:', e.message);
+    } finally {
+      setMergingIds(prev => { const n = new Set(prev); n.delete(secondary.id); return n; });
     }
   }
 
@@ -695,11 +865,12 @@ export default function Contacts() {
             actions={
               <>
                 <button
-                  onClick={loadContacts}
-                  className="px-4 py-2 bg-muted hover:bg-muted/70 rounded-xl flex items-center gap-2 text-sm transition-colors"
+                  onClick={syncEmails}
+                  disabled={syncing}
+                  className="px-4 py-2 bg-muted hover:bg-muted/70 rounded-xl flex items-center gap-2 text-sm transition-colors disabled:opacity-50"
                 >
-                  <RefreshCw className="size-4" />
-                  <span className="hidden sm:inline">Actualiser</span>
+                  {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                  <span className="hidden sm:inline">{syncing ? 'Sync…' : 'Actualiser'}</span>
                 </button>
                 <button
                   onClick={discoverContacts}
@@ -721,6 +892,12 @@ export default function Contacts() {
               </>
             }
           />
+
+          {syncMsg && (
+            <p className={`text-xs px-3 py-1.5 rounded-full mb-2 w-fit ${syncMsg.startsWith('✓') ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+              {syncMsg}
+            </p>
+          )}
 
           {/* View Toggle + Search */}
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -756,7 +933,74 @@ export default function Contacts() {
           </div>
         </motion.div>
 
-        {/* ── Suggestions Gmail ──────────────────────────────────────────── */}
+        {/* ── Doublons détectés ──────────────────────────────────────────── */}
+        <AnimatePresence>
+          {duplicateGroups.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 overflow-hidden"
+            >
+              <button
+                onClick={() => setDuplicatesOpen(v => !v)}
+                className="w-full flex items-center justify-between px-5 py-4 hover:bg-amber-500/10 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="size-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
+                    <AlertCircle className="size-4 text-amber-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-sm">{duplicateGroups.length} doublon{duplicateGroups.length > 1 ? 's' : ''} probable{duplicateGroups.length > 1 ? 's' : ''} détecté{duplicateGroups.length > 1 ? 's' : ''}</p>
+                    <p className="text-xs text-muted-foreground">Même nom, emails différents — probablement la même personne</p>
+                  </div>
+                </div>
+                {duplicatesOpen ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
+              </button>
+              {duplicatesOpen && (
+                <div className="px-5 pb-5 space-y-3">
+                  {duplicateGroups.map((group, gi) => (
+                    <div key={gi} className="rounded-xl border border-amber-500/15 bg-background p-4">
+                      <p className="text-xs font-semibold text-amber-700 mb-3 uppercase tracking-wide">
+                        {group[0].name} — {group.length} comptes détectés
+                      </p>
+                      <div className="space-y-2">
+                        {group.map((c, ci) => (
+                          <div key={c.id} className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="size-7 rounded-full bg-amber-500/15 flex items-center justify-center text-xs font-bold text-amber-700 flex-shrink-0">
+                                {c.initials}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium truncate">{c.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">{c.email ?? '—'}</p>
+                              </div>
+                            </div>
+                            {ci > 0 && (
+                              <button
+                                onClick={() => mergeContact(group[0], c)}
+                                disabled={mergingIds.has(c.id)}
+                                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 transition-colors flex-shrink-0 disabled:opacity-40"
+                              >
+                                {mergingIds.has(c.id) ? <Loader2 className="size-3 animate-spin" /> : null}
+                                Fusionner dans {group[0].name.split(' ')[0]}
+                              </button>
+                            )}
+                            {ci === 0 && (
+                              <span className="text-[10px] text-amber-600 font-semibold bg-amber-500/15 px-2 py-0.5 rounded-full flex-shrink-0">Principal</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Suggestions Mail ──────────────────────────────────────────── */}
         <AnimatePresence>
           {(suggestions.length > 0 || suggestionError) && (
             <motion.div

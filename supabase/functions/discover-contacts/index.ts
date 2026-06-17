@@ -1,6 +1,6 @@
 /**
- * discover-contacts v3
- * Scanne les emails Gmail OU Outlook selon le provider connecté.
+ * discover-contacts v4
+ * Scanne Gmail ET Outlook (reçus + envoyés) pour suggérer de nouveaux contacts.
  * Retourne les interlocuteurs fréquents pas encore dans la base.
  * Le corps est lu en mémoire pour snippet — jamais stocké en base (RGPD).
  */
@@ -93,13 +93,6 @@ async function gmailGet(path: string, token: string) {
 // ── Helpers Outlook (Microsoft Graph) ────────────────────────────────────────
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 
-async function graphGet(path: string, token: string) {
-  const r = await fetch(`${GRAPH}${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
-  if (r.status === 401) throw Object.assign(new Error('TOKEN_EXPIRED'), { code: 401 });
-  if (!r.ok) throw new Error(`Graph ${r.status}: ${await r.text()}`);
-  return r.json();
-}
-
 // ── Type fréquence contact ────────────────────────────────────────────────────
 interface ContactFreq {
   name: string;
@@ -107,6 +100,32 @@ interface ContactFreq {
   lastSeen: string;
   lastSubject: string;
   lastSnippet: string;
+  phone?: string;
+  linkedIn?: string;
+  title?: string;
+}
+
+// ── Extraction des données de signature ───────────────────────────────────────
+function extractSignatureData(text: string): { phone?: string; linkedIn?: string; title?: string } {
+  if (!text) return {};
+  // Prend les 40 dernières lignes (là où se trouve la signature)
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const sigLines = lines.slice(-40).join(' ');
+
+  // Téléphone : formats internationaux, français, avec/sans espaces
+  const phoneMatch = sigLines.match(/(?:tel|tél|phone|mob|mobile|cell|☎|📞)?\s*:?\s*(\+?(?:33|1|44|49|34|39|41|32|31|1)[\s\-.]?\(?\d{1,4}\)?[\s\-.]?\d{2,4}[\s\-.]?\d{2,4}[\s\-.]?\d{2,4})/i)
+    ?? sigLines.match(/(\+\d{1,3}[\s\-.]?\d{2,3}[\s\-.]?\d{2,4}[\s\-.]?\d{2,4}[\s\-.]?\d{2,4})/);
+  const phone = phoneMatch?.[1]?.replace(/\s+/g, ' ').trim();
+
+  // LinkedIn URL
+  const linkedInMatch = sigLines.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_%]+)/i);
+  const linkedIn = linkedInMatch ? `https://www.linkedin.com/in/${linkedInMatch[1]}` : undefined;
+
+  // Titre/Poste : mots-clés courants de signature
+  const titleMatch = sigLines.match(/(?:^|\|)\s*((?:CEO|CTO|CFO|COO|VP|Director?|Directeur|Responsable|Manager|Lead|Head of|Chef|Founder|Co-Founder|Partner|Associé|Consultant|Ingénieur|Engineer|Developer|Développeur|Analyst|Sales|Commercial|Account)[^\n|•]{0,60})/im);
+  const title = titleMatch?.[1]?.trim().slice(0, 80);
+
+  return { phone: phone ?? undefined, linkedIn, title: title ?? undefined };
 }
 
 // ── Scan Gmail ────────────────────────────────────────────────────────────────
@@ -119,7 +138,7 @@ async function scanGmail(token: string, userEmail: string, afterEpoch: number): 
     const page: any = await gmailGet(`/users/me/messages?${params}`, token);
     for (const m of page.messages ?? []) allIds.push(m.id);
     pageToken = page.nextPageToken;
-  } while (pageToken && allIds.length < 1000);
+  } while (pageToken && allIds.length < 2000);
 
   const chunkSize = 5;
   for (let i = 0; i < allIds.length; i += chunkSize) {
@@ -130,7 +149,9 @@ async function scanGmail(token: string, userEmail: string, afterEpoch: number): 
         const headers: Array<{ name: string; value: string }> = msg.payload?.headers ?? [];
         const sentAt = msg.internalDate ? new Date(parseInt(msg.internalDate)).toISOString() : new Date().toISOString();
         const subject = headerVal(headers, 'Subject') || '';
-        const snippet = cleanSnippet(extractBodyText(msg.payload) || msg.snippet || '');
+        const bodyText = extractBodyText(msg.payload) || msg.snippet || '';
+        const snippet = cleanSnippet(bodyText);
+        const sigData = extractSignatureData(bodyText);
         const candidates = [
           ...parseAddresses(headerVal(headers, 'From')),
           ...parseAddresses(headerVal(headers, 'To')),
@@ -141,10 +162,15 @@ async function scanGmail(token: string, userEmail: string, afterEpoch: number): 
           const domain = email.split('@')[1] ?? '';
           if (PERSONAL_DOMAINS.has(domain) || isSpam(email)) continue;
           const cur = freq.get(email);
-          if (!cur) { freq.set(email, { name, count: 1, lastSeen: sentAt, lastSubject: subject, lastSnippet: snippet }); }
+          if (!cur) { freq.set(email, { name, count: 1, lastSeen: sentAt, lastSubject: subject, lastSnippet: snippet, ...sigData }); }
           else {
             cur.count++;
-            if (sentAt > cur.lastSeen) { cur.lastSeen = sentAt; if (name) cur.name = name; cur.lastSubject = subject; cur.lastSnippet = snippet; }
+            if (sentAt > cur.lastSeen) {
+              cur.lastSeen = sentAt; if (name) cur.name = name; cur.lastSubject = subject; cur.lastSnippet = snippet;
+              if (sigData.phone && !cur.phone) cur.phone = sigData.phone;
+              if (sigData.linkedIn && !cur.linkedIn) cur.linkedIn = sigData.linkedIn;
+              if (sigData.title && !cur.title) cur.title = sigData.title;
+            }
           }
         }
       } catch { /* skip */ }
@@ -153,51 +179,79 @@ async function scanGmail(token: string, userEmail: string, afterEpoch: number): 
   return freq;
 }
 
-// ── Scan Outlook ──────────────────────────────────────────────────────────────
+// ── Scan Outlook : reçus (/me/messages) + envoyés (/me/sentItems) ─────────────
 async function scanOutlook(token: string, userEmail: string, afterDate: string): Promise<Map<string, ContactFreq>> {
   const freq = new Map<string, ContactFreq>();
-  const select = 'from,toRecipients,ccRecipients,subject,bodyPreview,receivedDateTime';
-  const filter = `receivedDateTime ge ${afterDate}`;
-  let nextLink: string | undefined;
+  // OData ne supporte pas les millisecondes — on les enlève
+  const after = afterDate.replace(/\.\d+Z$/, 'Z');
+  const select = 'from,toRecipients,ccRecipients,subject,bodyPreview,receivedDateTime,sentDateTime';
   let scanned = 0;
+  const MAX = 3000;
 
-  // First page
-  const firstParams = new URLSearchParams({ $top: '100', $select: select, $filter: filter, $orderby: 'receivedDateTime desc' });
-  let page: any = await graphGet(`/me/messages?${firstParams}`, token);
+  function processMsg(msg: any) {
+    const ts: string = msg.receivedDateTime || msg.sentDateTime || new Date().toISOString();
+    const subject: string = msg.subject ?? '';
+    const rawPreview = (msg.bodyPreview ?? '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ');
+    const snippet: string = cleanSnippet(rawPreview);
+    const sigData = extractSignatureData(rawPreview);
 
-  do {
-    for (const msg of page.value ?? []) {
-      const receivedAt: string = msg.receivedDateTime ?? new Date().toISOString();
-      const subject: string = msg.subject ?? '';
-      const snippet: string = cleanSnippet(
-        (msg.bodyPreview ?? '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ')
-      );
+    const candidates: Array<{ email: string; name: string }> = [];
+    if (msg.from?.emailAddress) {
+      const addr = msg.from.emailAddress.address?.toLowerCase() ?? '';
+      if (addr) candidates.push({ email: addr, name: msg.from.emailAddress.name ?? '' });
+    }
+    for (const r of msg.toRecipients ?? []) {
+      if (r.emailAddress?.address) candidates.push({ email: r.emailAddress.address.toLowerCase(), name: r.emailAddress.name ?? '' });
+    }
+    for (const r of msg.ccRecipients ?? []) {
+      if (r.emailAddress?.address) candidates.push({ email: r.emailAddress.address.toLowerCase(), name: r.emailAddress.name ?? '' });
+    }
 
-      const candidates: Array<{ email: string; name: string }> = [];
-      if (msg.from?.emailAddress) candidates.push({ email: msg.from.emailAddress.address?.toLowerCase() ?? '', name: msg.from.emailAddress.name ?? '' });
-      for (const r of msg.toRecipients ?? []) { if (r.emailAddress) candidates.push({ email: r.emailAddress.address?.toLowerCase() ?? '', name: r.emailAddress.name ?? '' }); }
-      for (const r of msg.ccRecipients ?? []) { if (r.emailAddress) candidates.push({ email: r.emailAddress.address?.toLowerCase() ?? '', name: r.emailAddress.name ?? '' }); }
-
-      for (const { email, name } of candidates) {
-        if (!email.includes('@') || email === userEmail) continue;
-        const domain = email.split('@')[1] ?? '';
-        if (PERSONAL_DOMAINS.has(domain) || isSpam(email)) continue;
-        const cur = freq.get(email);
-        if (!cur) { freq.set(email, { name, count: 1, lastSeen: receivedAt, lastSubject: subject, lastSnippet: snippet }); }
-        else {
-          cur.count++;
-          if (receivedAt > cur.lastSeen) { cur.lastSeen = receivedAt; if (name) cur.name = name; cur.lastSubject = subject; cur.lastSnippet = snippet; }
+    for (const { email, name } of candidates) {
+      if (!email.includes('@') || email === userEmail) continue;
+      const domain = email.split('@')[1] ?? '';
+      if (PERSONAL_DOMAINS.has(domain) || isSpam(email)) continue;
+      const cur = freq.get(email);
+      if (!cur) { freq.set(email, { name, count: 1, lastSeen: ts, lastSubject: subject, lastSnippet: snippet, ...sigData }); }
+      else {
+        cur.count++;
+        if (ts > cur.lastSeen) {
+          cur.lastSeen = ts; if (name) cur.name = name; cur.lastSubject = subject; cur.lastSnippet = snippet;
+          if (sigData.phone && !cur.phone) cur.phone = sigData.phone;
+          if (sigData.linkedIn && !cur.linkedIn) cur.linkedIn = sigData.linkedIn;
+          if (sigData.title && !cur.title) cur.title = sigData.title;
         }
       }
-      scanned++;
     }
-    nextLink = page['@odata.nextLink'];
-    if (nextLink && scanned < 1000) {
-      const r = await fetch(nextLink, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
+  }
+
+  // 1. Messages reçus — /me/messages avec filtre sur receivedDateTime
+  // Note: on construit l'URL manuellement pour éviter l'encodage de $ par URLSearchParams
+  let inboundUrl: string | null = `${GRAPH}/me/messages?$top=100&$select=${select}&$filter=receivedDateTime ge ${after}&$orderby=receivedDateTime desc`;
+  while (inboundUrl && scanned < MAX) {
+    try {
+      const r = await fetch(inboundUrl, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
+      if (!r.ok) {
+        console.error('Outlook inbound error:', r.status, await r.text());
+        break;
+      }
+      const page = await r.json();
+      for (const msg of page.value ?? []) { processMsg(msg); scanned++; }
+      inboundUrl = page['@odata.nextLink'] ?? null;
+    } catch { break; }
+  }
+
+  // 2. Messages envoyés — /me/sentItems avec filtre sur sentDateTime
+  let sentUrl: string | null = `${GRAPH}/me/sentItems?$top=100&$select=${select}&$filter=sentDateTime ge ${after}&$orderby=sentDateTime desc`;
+  while (sentUrl && scanned < MAX) {
+    try {
+      const r = await fetch(sentUrl, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
       if (!r.ok) break;
-      page = await r.json();
-    } else { break; }
-  } while (scanned < 1000);
+      const page = await r.json();
+      for (const msg of page.value ?? []) { processMsg(msg); scanned++; }
+      sentUrl = page['@odata.nextLink'] ?? null;
+    } catch { break; }
+  }
 
   return freq;
 }
@@ -214,6 +268,47 @@ function mergeFreqs(a: Map<string, ContactFreq>, b: Map<string, ContactFreq>): M
     }
   }
   return result;
+}
+
+// ── Microsoft token refresh ────────────────────────────────────────────────
+async function refreshMicrosoftToken(refreshToken: string, supabase: any, organizationId: string, userId: string): Promise<string | null> {
+  const clientId = Deno.env.get('MICROSOFT_CLIENT_ID');
+  const clientSecret = Deno.env.get('MICROSOFT_CLIENT_SECRET');
+  if (!clientId || !clientSecret || !refreshToken) return null;
+  try {
+    const res = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken,
+        grant_type: 'refresh_token', scope: 'openid profile email offline_access Calendars.Read Mail.Read',
+      }),
+    });
+    if (!res.ok) { console.error('MS refresh failed:', res.status); return null; }
+    const data = await res.json();
+    if (!data.access_token) return null;
+    const newRefresh = data.refresh_token ?? refreshToken;
+    const { data: conn } = await supabase.from('connectors').select('metadata')
+      .eq('organization_id', organizationId).eq('user_id', userId).eq('provider', 'microsoft').maybeSingle();
+    await supabase.from('connectors').update({
+      metadata: { ...(conn?.metadata ?? {}), access_token: data.access_token, refresh_token: newRefresh, token_stored_at: new Date().toISOString() },
+      status: 'connected', updated_at: new Date().toISOString(),
+    }).eq('organization_id', organizationId).eq('user_id', userId).eq('provider', 'microsoft');
+    return data.access_token;
+  } catch (e) { console.error('MS refresh error:', e); return null; }
+}
+
+async function ensureValidMsToken(token: string | null, refreshToken: string | null, supabase: any, organizationId: string, userId: string): Promise<string | null> {
+  if (token) {
+    const test = await fetch(`${GRAPH}/me?$select=id`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
+    if (test.ok) return token;
+    if (test.status !== 401) return token;
+  }
+  if (refreshToken) {
+    const fresh = await refreshMicrosoftToken(refreshToken, supabase, organizationId, userId);
+    if (fresh) return fresh;
+  }
+  return null;
 }
 
 // ── Handler principal ─────────────────────────────────────────────────────────
@@ -233,8 +328,8 @@ Deno.serve(async (req) => {
       organizationId,
       googleToken,
       microsoftToken,
-      lookbackDays = 90,
-      minExchanges = 2,
+      lookbackDays = 3650,  // par défaut : tout l'historique (~10 ans)
+      minExchanges = 1,     // par défaut : 1 échange suffit
     } = body;
 
     if (!organizationId) return json({ error: 'organizationId required' }, 400);
@@ -244,40 +339,54 @@ Deno.serve(async (req) => {
     const afterDate = new Date(Date.now() - lookbackDays * 86400000).toISOString();
 
     let combinedFreq = new Map<string, ContactFreq>();
-    let totalScanned = 0;
+
+    if (!googleToken && !microsoftToken) {
+      return json({ error: 'Aucun compte mail connecté. Connectez Google ou Microsoft dans Paramètres.' }, 400);
+    }
 
     // ── Gmail ─────────────────────────────────────────────────────────────────
     if (googleToken) {
       try {
         const gmailFreq = await scanGmail(googleToken, userEmail, afterEpoch);
         combinedFreq = mergeFreqs(combinedFreq, gmailFreq);
-        totalScanned += gmailFreq.size > 0 ? 1000 : 0; // approximation
+        console.log(`Gmail scan: ${gmailFreq.size} contacts uniques`);
       } catch (e: any) {
         console.error('Gmail scan error:', e.message);
       }
     }
 
     // ── Outlook ───────────────────────────────────────────────────────────────
-    if (microsoftToken) {
-      try {
-        const outlookFreq = await scanOutlook(microsoftToken, userEmail, afterDate);
-        combinedFreq = mergeFreqs(combinedFreq, outlookFreq);
-      } catch (e: any) {
-        console.error('Outlook scan error:', e.message);
+    // On lit le connecteur pour récupérer le refresh_token, puis on valide/rafraîchit
+    // le token avant de scanner (évite les 401 silencieux → 0 résultat).
+    {
+      const { data: msConn } = await supabaseClient.from('connectors').select('metadata, status')
+        .eq('organization_id', organizationId).eq('user_id', user.id).eq('provider', 'microsoft').maybeSingle();
+      const hasMsConnector = msConn && msConn.status !== 'not_connected';
+      if (microsoftToken || hasMsConnector) {
+        const refreshToken = (msConn?.metadata as any)?.refresh_token ?? null;
+        const candidateToken = microsoftToken ?? (msConn?.metadata as any)?.access_token ?? null;
+        const validToken = await ensureValidMsToken(candidateToken, refreshToken, supabaseClient, organizationId, user.id);
+        if (validToken) {
+          try {
+            const outlookFreq = await scanOutlook(validToken, userEmail, afterDate);
+            combinedFreq = mergeFreqs(combinedFreq, outlookFreq);
+            console.log(`Outlook scan: ${outlookFreq.size} contacts uniques`);
+          } catch (e: any) {
+            console.error('Outlook scan error:', e.message);
+          }
+        } else {
+          console.error('Outlook: token invalide et refresh impossible');
+        }
       }
-    }
-
-    if (!googleToken && !microsoftToken) {
-      return json({ error: 'Aucun compte mail connecté. Connectez Google ou Microsoft dans Paramètres.' }, 400);
     }
 
     // ── Seuil minimum d'échanges ──────────────────────────────────────────────
     const candidates = Array.from(combinedFreq.entries())
       .filter(([, v]) => v.count >= minExchanges)
       .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 100);
+      .slice(0, 200);
 
-    if (candidates.length === 0) return json({ suggestions: [], scanned: totalScanned });
+    if (candidates.length === 0) return json({ suggestions: [], scanned: combinedFreq.size });
 
     // ── Filtrer les contacts déjà connus ──────────────────────────────────────
     const emails = candidates.map(([email]) => email);
@@ -300,10 +409,14 @@ Deno.serve(async (req) => {
         lastSeen: v.lastSeen,
         lastSubject: v.lastSubject,
         lastSnippet: v.lastSnippet,
+        // Données extraites de la signature
+        phone: v.phone ?? null,
+        linkedIn: v.linkedIn ?? null,
+        title: v.title ?? null,
       }))
-      .slice(0, 50);
+      .slice(0, 100);
 
-    return json({ suggestions, scanned: totalScanned });
+    return json({ suggestions, scanned: combinedFreq.size });
 
   } catch (err: any) {
     console.error('discover-contacts error:', err.message);

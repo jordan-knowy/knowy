@@ -538,6 +538,67 @@ async function graphGet(path: string, token: string): Promise<any> {
   return res.json();
 }
 
+// ── Microsoft token refresh ──────────────────────────────────────────────────
+// Les access tokens Graph expirent après ~1h. On utilise le refresh_token
+// (scope offline_access) pour en obtenir un nouveau sans reconnexion.
+async function refreshMicrosoftToken(
+  refreshToken: string,
+  supabase: any,
+  organizationId: string,
+  userId: string,
+): Promise<string | null> {
+  const clientId = Deno.env.get('MICROSOFT_CLIENT_ID');
+  const clientSecret = Deno.env.get('MICROSOFT_CLIENT_SECRET');
+  if (!clientId || !clientSecret || !refreshToken) return null;
+  try {
+    const res = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+        scope: 'openid profile email offline_access Calendars.Read Mail.Read',
+      }),
+    });
+    if (!res.ok) { console.error('MS refresh failed:', res.status, await res.text()); return null; }
+    const data = await res.json();
+    const newToken: string = data.access_token;
+    if (!newToken) return null;
+    // Microsoft fait tourner les refresh tokens : on stocke le nouveau s'il est fourni
+    const newRefresh: string = data.refresh_token ?? refreshToken;
+    const { data: conn } = await supabase.from('connectors').select('metadata')
+      .eq('organization_id', organizationId).eq('user_id', userId).eq('provider', 'microsoft').maybeSingle();
+    await supabase.from('connectors').update({
+      metadata: { ...(conn?.metadata ?? {}), access_token: newToken, refresh_token: newRefresh, token_stored_at: new Date().toISOString() },
+      status: 'connected', updated_at: new Date().toISOString(),
+    }).eq('organization_id', organizationId).eq('user_id', userId).eq('provider', 'microsoft');
+    return newToken;
+  } catch (e) { console.error('MS refresh error:', e); return null; }
+}
+
+// Valide le token via un appel léger /me. Si 401 et refresh_token dispo → rafraîchit.
+// Retourne un token valide, ou null si impossible (reconnexion nécessaire).
+async function ensureValidMsToken(
+  token: string | null,
+  refreshToken: string | null,
+  supabase: any,
+  organizationId: string,
+  userId: string,
+): Promise<string | null> {
+  if (token) {
+    const test = await fetch(`${GRAPH_API}/me?$select=id`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
+    if (test.ok) return token;
+    if (test.status !== 401) return token; // autre erreur transitoire → on tente quand même
+  }
+  if (refreshToken) {
+    const fresh = await refreshMicrosoftToken(refreshToken, supabase, organizationId, userId);
+    if (fresh) return fresh;
+  }
+  return null;
+}
+
 // Récupère tous les messages échangés avec un contact via deux requêtes séparées :
 // 1) Messages reçus (from the contact) via /me/messages?$filter=from/emailAddress/address eq '...'
 // 2) Messages envoyés (to the contact) via /me/sentItems?$filter=toRecipients/any(...)
@@ -557,10 +618,10 @@ async function listOutlookMessages(
     const safeEmail = email.replace(/'/g, "''");
 
     // ── 1. Messages reçus de ce contact ──────────────────────────────────────
+    // Note: $orderby sur un champ différent de $filter n'est pas supporté par Graph API sur toutes les boîtes
     let inboundUrl: string | null =
       `/me/messages?$top=100&$select=${select}` +
-      `&$filter=isDraft eq false and from/emailAddress/address eq '${safeEmail}'` +
-      `&$orderby=receivedDateTime desc`;
+      `&$filter=isDraft eq false and from/emailAddress/address eq '${safeEmail}'`;
 
     while (inboundUrl && results.length < maxMessages) {
       try {
@@ -579,8 +640,7 @@ async function listOutlookMessages(
     // ── 2. Messages envoyés à ce contact (/me/sentItems) ─────────────────────
     let sentUrl: string | null =
       `/me/sentItems?$top=100&$select=${select}` +
-      `&$filter=isDraft eq false and toRecipients/any(r: r/emailAddress/address eq '${safeEmail}')` +
-      `&$orderby=sentDateTime desc`;
+      `&$filter=isDraft eq false and toRecipients/any(r: r/emailAddress/address eq '${safeEmail}')`;
 
     while (sentUrl && results.length < maxMessages) {
       try {
@@ -698,19 +758,27 @@ export async function handleOutlookIngest(req: Request, supabase: any, user: any
   if (!organizationId) return jsonResponse({ error: 'organizationId is required' }, 400);
 
   let providerToken: string | null = bodyToken ?? null;
+  let refreshToken: string | null = null;
+  // On lit toujours le connecteur pour récupérer le refresh_token (renouvellement auto)
+  const { data: connector } = await supabase
+    .from('connectors')
+    .select('metadata, status')
+    .eq('organization_id', organizationId)
+    .eq('user_id', user.id)
+    .eq('provider', 'microsoft')
+    .maybeSingle();
+  if (!connector || connector.status === 'not_connected') {
+    return jsonResponse({ error: 'Outlook non connecté. Connectez votre compte Microsoft dans Paramètres.', code: 'NOT_CONNECTED' }, 400);
+  }
+  refreshToken = (connector.metadata as any)?.refresh_token ?? null;
+  if (!providerToken) providerToken = (connector.metadata as any)?.access_token ?? null;
+
+  // Valide / rafraîchit le token avant d'attaquer Graph (évite les 401 silencieux)
+  providerToken = await ensureValidMsToken(providerToken, refreshToken, supabase, organizationId, user.id);
   if (!providerToken) {
-    const { data: connector } = await supabase
-      .from('connectors')
-      .select('metadata, status')
-      .eq('organization_id', organizationId)
-      .eq('user_id', user.id)
-      .eq('provider', 'microsoft')
-      .maybeSingle();
-    if (!connector || connector.status === 'not_connected') {
-      return jsonResponse({ error: 'Outlook non connecté. Connectez votre compte Microsoft dans Paramètres.', code: 'NOT_CONNECTED' }, 400);
-    }
-    providerToken = (connector.metadata as any)?.access_token ?? null;
-    if (!providerToken) return jsonResponse({ error: 'Token Outlook introuvable ou expiré.', code: 'TOKEN_MISSING' }, 401);
+    await supabase.from('connectors').update({ status: 'needs_reauth', updated_at: new Date().toISOString() })
+      .eq('organization_id', organizationId).eq('user_id', user.id).eq('provider', 'microsoft');
+    return jsonResponse({ error: 'Token Outlook expiré et renouvellement impossible. Reconnectez votre compte Microsoft.', code: 'TOKEN_EXPIRED' }, 401);
   }
 
   const userEmail = user.email ?? '';

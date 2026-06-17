@@ -216,6 +216,7 @@ export default function Dashboard() {
   const [impact, setImpact] = useState<WeeklyImpact | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [newContactsFound, setNewContactsFound] = useState(0);
   const [totalContacts, setTotalContacts] = useState<number>(0);
   const [totalEmails, setTotalEmails] = useState<number>(0);
   const [displayedEmails, setDisplayedEmails] = useState<number>(0);
@@ -250,6 +251,9 @@ export default function Dashboard() {
       const connected = new Set((connectors ?? []).map((c: any) => c.provider as string));
       const hasGoogle    = connected.has('google');
       const hasMicrosoft = connected.has('microsoft');
+      // Détecte si la session courante est une session Microsoft OAuth (azure = provider Supabase pour MS)
+      const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
+      const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
 
       if (!hasGoogle && !hasMicrosoft) {
         setSyncMsg({ type: 'error', text: 'Aucun compte connecté. Allez dans Paramètres → Connexions.' });
@@ -278,7 +282,7 @@ export default function Dashboard() {
         // Pas conditionné à providerToken : ingest résout le token depuis connectors.metadata
         const emailRes = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
           method: 'POST', headers,
-          body: JSON.stringify({ organizationId: orgId, providerToken: providerToken ?? null, provider: 'google', lookbackDays: 90 }),
+          body: JSON.stringify({ organizationId: orgId, providerToken: providerToken ?? null, provider: 'google', lookbackDays: 3650 }),
         });
         const emailData = await emailRes.json();
         if (emailRes.ok) totalEmails += emailData.stats?.messages ?? 0;
@@ -293,8 +297,16 @@ export default function Dashboard() {
           .eq('provider', 'microsoft')
           .eq('status', 'connected')
           .maybeSingle();
-        // Token MS : metadata.access_token > session.provider_token si MS est le provider de session
-        const msToken = (msConnector?.metadata as any)?.access_token ?? (!hasGoogle ? providerToken : null);
+        // Token MS : on privilégie le token FRAIS de la session MS, sinon le token stocké
+        let msToken: string | null = (isMsSession && providerToken) ? providerToken : ((msConnector?.metadata as any)?.access_token ?? null);
+        // Sème le refresh_token MS pour le renouvellement auto côté serveur
+        if (isMsSession && providerToken && session.user) {
+          await (supabase.from('connectors') as any).upsert({
+            organization_id: orgId, user_id: session.user.id, provider: 'microsoft', status: 'connected',
+            metadata: { ...(msConnector?.metadata ?? {}), access_token: providerToken, refresh_token: (session as any).provider_refresh_token ?? (msConnector?.metadata as any)?.refresh_token ?? null, email: session.user.email, token_stored_at: new Date().toISOString() },
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'organization_id,user_id,provider' });
+        }
 
         if (msToken) {
           const calRes = await fetch(`${supabaseUrl}/functions/v1/sync-outlook-calendar`, {
@@ -305,22 +317,63 @@ export default function Dashboard() {
           if (calRes.ok) {
             totalCreated += calData.stats?.created ?? 0;
             syncedProviders.push('Outlook');
+            // Relit le token fraîchement stocké par sync-outlook-calendar
+            const { data: msConnFresh } = await supabase
+              .from('connectors').select('metadata')
+              .eq('organization_id', orgId).eq('provider', 'microsoft').eq('status', 'connected').maybeSingle();
+            const freshToken = (msConnFresh?.metadata as any)?.access_token;
+            if (freshToken) msToken = freshToken;
           }
         }
-        // Emails Outlook — ingest résout le token depuis connectors si msToken est null
-        const emailRes = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-          method: 'POST', headers,
-          body: JSON.stringify({ organizationId: orgId, providerToken: msToken ?? null, provider: 'microsoft', lookbackDays: 90 }),
-        });
-        const emailData = await emailRes.json();
-        if (emailRes.ok) totalEmails += emailData.stats?.messages ?? 0;
+        // Emails Outlook — utilise le token frais (après sync calendrier) ou celui en base
+        if (msToken) {
+          const emailRes = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: orgId, providerToken: msToken, provider: 'microsoft', lookbackDays: 3650 }),
+          });
+          const emailData = await emailRes.json();
+          if (emailRes.ok) totalEmails += emailData.stats?.messages ?? 0;
+        }
       }
 
+      // ── Auto-discover nouveaux contacts depuis les emails ─────────────────
+      let newSuggestions = 0;
+      try {
+        // Relit le connector Microsoft (token stocké par sync-outlook-calendar qui vient de s'exécuter)
+        const { data: msConnFresh } = hasMicrosoft ? await supabase
+          .from('connectors').select('metadata')
+          .eq('organization_id', orgId).eq('provider', 'microsoft').eq('status', 'connected').maybeSingle()
+          : { data: null };
+
+        const discoverBody: Record<string, any> = { organizationId: orgId, lookbackDays: 90, minExchanges: 1 };
+        if (hasGoogle) discoverBody.googleToken = providerToken ?? null;
+        if (hasMicrosoft) discoverBody.microsoftToken = (isMsSession && providerToken) ? providerToken : ((msConnFresh?.metadata as any)?.access_token ?? null);
+
+        if (discoverBody.googleToken || discoverBody.microsoftToken) {
+          const discRes = await fetch(`${supabaseUrl}/functions/v1/discover-contacts`, {
+            method: 'POST', headers,
+            body: JSON.stringify(discoverBody),
+          });
+          if (discRes.ok) {
+            const discData = await discRes.json();
+            newSuggestions = discData.suggestions?.length ?? 0;
+            setNewContactsFound(newSuggestions);
+          }
+        }
+      } catch { /* non-bloquant */ }
+
       const emailPart = totalEmails > 0 ? ` · ${totalEmails} email${totalEmails > 1 ? 's' : ''} ingéré${totalEmails > 1 ? 's' : ''}` : ' · Emails synchronisés';
+      const contactPart = newSuggestions > 0 ? ` · ${newSuggestions} contact${newSuggestions > 1 ? 's' : ''} à importer` : '';
       setSyncMsg({
         type: 'success',
-        text: `✓ ${totalCreated} nouvelle${totalCreated > 1 ? 's' : ''} réunion${totalCreated > 1 ? 's' : ''}${emailPart}${syncedProviders.length ? ` (${syncedProviders.join(' + ')})` : ''}`,
+        text: `✓ ${totalCreated} nouvelle${totalCreated > 1 ? 's' : ''} réunion${totalCreated > 1 ? 's' : ''}${emailPart}${contactPart}${syncedProviders.length ? ` (${syncedProviders.join(' + ')})` : ''}`,
       });
+      // Rafraîchit le compteur KPI "Mails synchronisés" depuis la base
+      const { count: refreshedEmailCount } = await supabase
+        .from('communication_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId);
+      if (refreshedEmailCount !== null) setTotalEmails(refreshedEmailCount);
       reloadMeetings?.();
     } catch (e: any) {
       setSyncMsg({ type: 'error', text: e.message });
@@ -779,11 +832,20 @@ export default function Dashboard() {
           </button>
         </div>
         {syncMsg && (
-          <p className={`text-xs px-3 py-1.5 rounded-full mb-5 w-fit ${
+          <p className={`text-xs px-3 py-1.5 rounded-full mb-3 w-fit ${
             syncMsg.type === 'success' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
           }`}>
             {syncMsg.text}
           </p>
+        )}
+        {newContactsFound > 0 && (
+          <button
+            onClick={() => { setNewContactsFound(0); navigate('/contacts?discover=1'); }}
+            className="flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors mb-5 w-fit"
+          >
+            <Users className="size-3.5" />
+            {newContactsFound} nouveau{newContactsFound > 1 ? 'x' : ''} contact{newContactsFound > 1 ? 's' : ''} détecté{newContactsFound > 1 ? 's' : ''} dans vos emails — Importer →
+          </button>
         )}
 
         {/* Rangée KPI — NPS (anneau) + comptes + contacts + signaux (maquette) */}

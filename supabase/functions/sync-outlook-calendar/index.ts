@@ -30,6 +30,34 @@ async function graphGet(path: string, token: string) {
   return res.json();
 }
 
+// Renouvelle l'access token Microsoft via le refresh_token (scope offline_access).
+async function refreshMicrosoftToken(refreshToken: string, supabase: any, organizationId: string, userId: string): Promise<string | null> {
+  const clientId = Deno.env.get('MICROSOFT_CLIENT_ID');
+  const clientSecret = Deno.env.get('MICROSOFT_CLIENT_SECRET');
+  if (!clientId || !clientSecret || !refreshToken) return null;
+  try {
+    const res = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken,
+        grant_type: 'refresh_token', scope: 'openid profile email offline_access Calendars.Read Mail.Read',
+      }),
+    });
+    if (!res.ok) { console.error('MS refresh failed:', res.status); return null; }
+    const data = await res.json();
+    if (!data.access_token) return null;
+    const newRefresh = data.refresh_token ?? refreshToken;
+    const { data: conn } = await supabase.from('connectors').select('metadata')
+      .eq('organization_id', organizationId).eq('user_id', userId).eq('provider', 'microsoft').maybeSingle();
+    await supabase.from('connectors').update({
+      metadata: { ...(conn?.metadata ?? {}), access_token: data.access_token, refresh_token: newRefresh, token_stored_at: new Date().toISOString() },
+      status: 'connected', updated_at: new Date().toISOString(),
+    }).eq('organization_id', organizationId).eq('user_id', userId).eq('provider', 'microsoft');
+    return data.access_token;
+  } catch (e) { console.error('MS refresh error:', e); return null; }
+}
+
 interface GraphEvent {
   id: string;
   subject?: string;
@@ -89,10 +117,30 @@ Deno.serve(async (req) => {
   if (userError || !user) return json({ error: 'Unauthorized' }, 401);
 
   const body = await req.json().catch(() => ({}));
-  const { organizationId, providerToken } = body;
+  const { organizationId, providerToken: bodyToken, refreshToken: bodyRefresh } = body;
 
   if (!organizationId) return json({ error: 'organizationId required' }, 400);
-  if (!providerToken) return json({ error: 'providerToken required — reconnect Outlook' }, 400);
+
+  // Résolution du token : body (frais, depuis la session) > connecteur stocké.
+  // On capture aussi le refresh_token pour le renouvellement automatique.
+  const { data: existingConn } = await supabase
+    .from('connectors').select('metadata')
+    .eq('organization_id', organizationId).eq('user_id', user.id).eq('provider', 'microsoft').maybeSingle();
+  let providerToken: string | null = bodyToken ?? (existingConn?.metadata as any)?.access_token ?? null;
+  const refreshToken: string | null = bodyRefresh ?? (existingConn?.metadata as any)?.refresh_token ?? null;
+
+  // Si un refresh_token frais arrive du body, on le persiste tout de suite
+  if (bodyRefresh) {
+    await supabase.from('connectors').update({
+      metadata: { ...(existingConn?.metadata ?? {}), refresh_token: bodyRefresh, ...(bodyToken ? { access_token: bodyToken } : {}), token_stored_at: new Date().toISOString() },
+      status: 'connected', updated_at: new Date().toISOString(),
+    }).eq('organization_id', organizationId).eq('user_id', user.id).eq('provider', 'microsoft');
+  }
+
+  if (!providerToken && refreshToken) {
+    providerToken = await refreshMicrosoftToken(refreshToken, supabase, organizationId, user.id);
+  }
+  if (!providerToken) return json({ error: 'Outlook non connecté ou token introuvable. Reconnectez votre compte.', code: 'TOKEN_MISSING' }, 400);
 
   const now = new Date();
   const startDateTime = new Date(now.getTime() - 30 * 86400000).toISOString();
@@ -108,7 +156,17 @@ Deno.serve(async (req) => {
       $select: 'id,subject,bodyPreview,location,start,end,attendees,organizer,onlineMeeting,isOnlineMeeting,onlineMeetingProvider,webLink,isCancelled',
       $orderby: 'start/dateTime asc',
     });
-    const data = await graphGet(`/me/calendarView?${params}`, providerToken);
+    let data;
+    try {
+      data = await graphGet(`/me/calendarView?${params}`, providerToken);
+    } catch (e: any) {
+      // Token expiré en cours de route → on rafraîchit une fois et on réessaie
+      if (e.code === 401 && refreshToken) {
+        const fresh = await refreshMicrosoftToken(refreshToken, supabase, organizationId, user.id);
+        if (fresh) { providerToken = fresh; data = await graphGet(`/me/calendarView?${params}`, providerToken); }
+        else throw e;
+      } else throw e;
+    }
     events = data.value ?? [];
 
     // Pagination
@@ -215,9 +273,24 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ── 3. Marquer le connector comme synchronisé ─────────────────────────────
+  // ── 3. Marquer le connector comme synchronisé + stocker le token ─────────
+  // Le token est nécessaire pour ingest-communication (emails) qui s'exécute après.
+  // On relit le connecteur (le refresh_token a pu tourner pendant la sync).
+  const { data: latestConn } = await supabase
+    .from('connectors').select('metadata')
+    .eq('organization_id', organizationId).eq('user_id', user.id).eq('provider', 'microsoft').maybeSingle();
+
   await supabase.from('connectors')
-    .update({ status: 'connected', last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({
+      status: 'connected',
+      last_synced_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      metadata: {
+        ...(latestConn?.metadata ?? {}),
+        access_token: providerToken,
+        token_stored_at: new Date().toISOString(),
+      },
+    })
     .eq('organization_id', organizationId).eq('user_id', user.id).eq('provider', 'microsoft');
 
   return json({

@@ -362,17 +362,23 @@ export default function AccountSettings() {
     if (!supabase) return;
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!session?.provider_token || !supabase) return;
-      const hasGoogleIdentity = session.user.identities?.some(i => i.provider === 'google');
-      if (!hasGoogleIdentity) return;
+
+      // Détermine le provider du token frais via app_metadata.provider (le plus récent)
+      const sessionProvider = (session.user.app_metadata as any)?.provider ?? '';
+      const isMs = sessionProvider === 'azure' || sessionProvider === 'microsoft';
+      const isGoogle = sessionProvider === 'google';
+      if (!isMs && !isGoogle) return;
+
+      const connectorProvider = isMs ? 'microsoft' : 'google';
 
       const orgId = await getActiveOrganizationId();
       if (!orgId) return;
 
-      // Stocke le token Google persistant — tente d'abord avec metadata, fallback sans
+      // Stocke le token (+ refresh_token) persistant — tente avec metadata, fallback sans
       const baseConnector = {
         organization_id: orgId,
         user_id: session.user.id,
-        provider: 'google',
+        provider: connectorProvider,
         status: 'connected',
         updated_at: new Date().toISOString(),
       };
@@ -383,6 +389,7 @@ export default function AccountSettings() {
           refresh_token: (session as any).provider_refresh_token ?? null,
           email:         session.user.email,
           stored_at:     new Date().toISOString(),
+          token_stored_at: new Date().toISOString(),
         },
       };
       const { error: connErr } = await (supabase.from('connectors') as any)

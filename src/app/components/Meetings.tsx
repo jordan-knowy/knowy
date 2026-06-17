@@ -109,7 +109,7 @@ export default function Meetings() {
         // Emails : ingest résout le token depuis connectors.metadata (stocké par sync-google-calendar)
         fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
           method: 'POST', headers,
-          body: JSON.stringify({ organizationId: orgId, providerToken: providerToken ?? null, provider: 'google', lookbackDays: 90 }),
+          body: JSON.stringify({ organizationId: orgId, providerToken: providerToken ?? null, provider: 'google', lookbackDays: 3650 }),
         }).catch(() => {});
       }
 
@@ -139,7 +139,7 @@ export default function Meetings() {
         }
         fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
           method: 'POST', headers,
-          body: JSON.stringify({ organizationId: orgId, providerToken: msToken ?? null, provider: 'microsoft', lookbackDays: 90 }),
+          body: JSON.stringify({ organizationId: orgId, providerToken: msToken ?? null, provider: 'microsoft', lookbackDays: 3650 }),
         }).catch(() => {});
       }
 
