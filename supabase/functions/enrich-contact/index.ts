@@ -13,7 +13,7 @@ import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 const MODEL = 'google/gemini-2.5-flash-lite';
 const PERPLEXITY_API = 'https://api.perplexity.ai/chat/completions';
-const PERPLEXITY_MODEL = 'sonar';
+const PERPLEXITY_MODEL = 'sonar-pro';
 
 // ── Name parsing ──────────────────────────────────────────────────────────────
 
@@ -25,11 +25,24 @@ function capitalizeToken(w: string, isFirst: boolean): string {
   return l.charAt(0).toUpperCase() + l.slice(1);
 }
 
+/** Nettoie les artefacts générés par la découverte mail (ex: "Ambre Perrochaud Via LinkedIn") */
+function cleanContactName(raw: string): string {
+  return raw
+    .replace(/\s+via\s+[\w\s]{2,30}$/gi, '')    // "Via LinkedIn", "Via Gmail"…
+    .replace(/\s*\(via\s+[^)]+\)/gi, '')          // "(via Outlook)"
+    .replace(/\s*\[[^\]]*\]/g, '')                 // "[external]"
+    .replace(/\s*\([^)]{0,40}\)/g, '')             // "(info)"
+    .replace(/^(mr\.?\s+|mme\.?\s+|dr\.?\s+|m\.\s+)/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** "liam.desousatoudret" → "Liam De Sousa Toudret" */
 function parseHumanName(raw: string): string {
-  if (raw.includes(' ')) return raw;
-  const tokens = raw.split(/[._-]+/).filter(Boolean);
-  if (tokens.length === 1) return raw.charAt(0).toUpperCase() + raw.slice(1);
+  const cleaned = cleanContactName(raw);
+  if (cleaned.includes(' ')) return cleaned;
+  const tokens = cleaned.split(/[._-]+/).filter(Boolean);
+  if (tokens.length === 1) return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   return tokens.map((t, i) => capitalizeToken(t, i === 0)).join(' ');
 }
 
@@ -108,20 +121,36 @@ async function perplexityCall(userContent: string, maxTokens: number): Promise<s
         messages: [
           {
             role: 'system',
-            content: 'Tu es un expert en recherche professionnelle. Retourne UNIQUEMENT des informations factuelles et vérifiables avec leurs sources. Aucune spéculation ni hallucination. Texte brut sans markdown.',
+            content: `Tu es un investigateur professionnel expert en OSINT et recherche de profils B2B.
+RÈGLES ABSOLUES :
+1. Ne retourne QUE des informations vérifiées avec sources URL citées.
+2. Si une information n'est pas trouvée, écris explicitement "Non trouvé" — jamais d'invention.
+3. Fournis des données PRÉCISES et ACTIONNABLES : noms exacts, URLs LinkedIn, titres de poste, dates, chiffres.
+4. Effectue plusieurs requêtes de recherche avec différentes formulations pour maximiser les résultats.
+5. Priorise les sources primaires : site officiel, LinkedIn, registres d'entreprises, presse économique.
+6. Pour les entreprises françaises : pappers.fr, societe.com, infogreffe.fr sont OBLIGATOIRES.
+7. Pour les startups : crunchbase.com, wellfound.com, maddyness.com, lesechos.fr.
+Texte brut structuré, pas de markdown superflu.`,
           },
           { role: 'user', content: userContent },
         ],
         max_tokens: maxTokens,
         temperature: 0.1,
+        search_recency_filter: 'month',
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error('Perplexity error:', res.status, await res.text());
+      return null;
+    }
     const data = await res.json();
     const content: string = data.choices?.[0]?.message?.content ?? '';
     if (!content || content.trim().length < 40) return null;
     return content.trim();
-  } catch { return null; }
+  } catch (e) {
+    console.error('Perplexity call error:', e);
+    return null;
+  }
 }
 
 // ── Phase 1a : Organisation research (parallel with DB queries) ───────────────
@@ -129,43 +158,63 @@ async function perplexityCall(userContent: string, maxTokens: number): Promise<s
 async function researchOrganization(analysis: DomainAnalysis): Promise<string | null> {
   if (analysis.domainType === 'personal' || !analysis.orgName) return null;
 
-  let registryHint: string;
-  if (analysis.domainType === 'company_fr') {
-    registryHint = `Recherche OBLIGATOIREMENT sur pappers.fr et societe.com :
-- Forme juridique (SAS, SARL, SA…), numéro SIREN
-- Dirigeants officiels inscrits (noms et rôles)
-- Date de création, siège social
-- Objet social / secteur d'activité
-Cherche aussi sur LinkedIn et le site ${analysis.domain}.`;
-  } else if (analysis.domainType === 'startup') {
-    registryHint = `Recherche sur crunchbase.com, wellfound.com, linkedin.com et ${analysis.domain} :
-- Produit/service, secteur, stade de développement
-- Fondateurs et équipe dirigeante (noms et rôles)
-- Levées de fonds, investisseurs si applicable`;
-  } else if (analysis.domainType === 'edu') {
-    registryHint = `Recherche sur ${analysis.domain} et Wikipedia :
-- Type d'établissement (lycée, université, grande école…)
-- Localisation, spécialité, accréditations, programmes`;
-  } else {
-    registryHint = `Recherche sur LinkedIn, ${analysis.domain}, et les registres d'entreprise locaux :
-- Secteur d'activité, produit/service principal
-- Dirigeants et taille de l'entreprise`;
+  // Domaines appartenant à des géants tech → les contacts sont probablement UTILISATEURS pas employés
+  const MEGACORP_DOMAINS = new Set(['linkedin.com','google.com','microsoft.com','apple.com','amazon.com','meta.com','facebook.com','twitter.com','x.com']);
+  if (MEGACORP_DOMAINS.has(analysis.domain)) {
+    // Retourne infos générales sur l'entreprise sans longue recherche
+    return `NOM_OFFICIEL: ${analysis.orgName}\nTYPE: Grande entreprise technologique internationale\nNOTE: Contact probablement utilisateur/partenaire de la plateforme, pas forcément employé.`;
   }
 
-  return perplexityCall(`Recherche des informations sur l'organisation "${analysis.orgName}" (domaine : ${analysis.domain}).
+  let registryHint: string;
+  if (analysis.domainType === 'company_fr') {
+    registryHint = `SOURCES OBLIGATOIRES (dans l'ordre) :
+1. pappers.fr — cherche "${analysis.orgName}" : SIREN, forme juridique, capital, dirigeants inscrits (noms + rôles exacts), date création, adresse siège
+2. societe.com — confirme les dirigeants et l'objet social
+3. infogreffe.fr — informations légales complémentaires
+4. linkedin.com/company/${analysis.domain.split('.')[0]} — page LinkedIn de l'entreprise
+5. ${analysis.domain} — site officiel, page "Équipe" ou "À propos"`;
+  } else if (analysis.domainType === 'startup') {
+    registryHint = `SOURCES OBLIGATOIRES (dans l'ordre) :
+1. crunchbase.com — cherche "${analysis.orgName}" : fondateurs, montants levées, investisseurs, stade
+2. wellfound.com (ex AngelList) — profil startup
+3. ${analysis.domain}/about et ${analysis.domain}/team — équipe fondatrice
+4. maddyness.com ou lesechos.fr — articles de presse sur la startup
+5. linkedin.com/company — page LinkedIn, nombre d'employés actuels`;
+  } else if (analysis.domainType === 'edu') {
+    registryHint = `SOURCES :
+1. ${analysis.domain} — type d'établissement, localisation, programmes, corps enseignant
+2. Wikipedia — historique, accréditations, classements
+3. LinkedIn — page établissement, anciens élèves notables`;
+  } else {
+    registryHint = `SOURCES (dans l'ordre) :
+1. ${analysis.domain} — site officiel, pages "Équipe", "Leadership", "À propos"
+2. linkedin.com/company — taille, secteur, employés
+3. Registres d'entreprise locaux selon le pays
+4. Presse économique — actualités récentes`;
+  }
+
+  return perplexityCall(`Recherche COMPLÈTE sur l'organisation "${analysis.orgName}" (domaine : ${analysis.domain}).
 
 ${registryHint}
 
-Retourne :
-1. Nom officiel complet
-2. Type (entreprise / startup / école / association)
-3. Secteur et activité principale
-4. Localisation (ville, pays)
-5. Fondateurs / dirigeants principaux (noms et rôles exacts)
-6. Taille (effectifs, stade)
-7. Source(s) (URLs)
+FORMAT DE RÉPONSE OBLIGATOIRE :
 
-Si non trouvé pour une section : "Non trouvé."`, 400);
+NOM_OFFICIEL: [Raison sociale exacte ou "Non trouvé"]
+TYPE: [SAS / SARL / SA / startup / école / association / etc.]
+SECTEUR: [Secteur d'activité précis]
+ACTIVITE: [Description de l'activité principale en 1-2 phrases]
+LOCALISATION: [Ville, Pays — adresse complète si possible]
+SIREN: [Numéro SIREN si entreprise française, sinon "N/A"]
+CREATION: [Année de création]
+EFFECTIFS: [Fourchette d'effectifs]
+CA: [Chiffre d'affaires ou valorisation si startup — "Non public" si inconnu]
+DIRIGEANTS:
+- [Prénom Nom] | [Titre exact : CEO, PDG, DG, Fondateur…] | depuis [année si connu]
+- [répéter pour chaque dirigeant principal]
+ACTUALITES_RECENTES: [Levées, acquisitions, partenariats, nouveaux produits des 12 derniers mois]
+SOURCES: [URLs des pages consultées]
+
+Pour chaque champ introuvable, écrire "Non trouvé" — jamais de données inventées.`, 600);
 }
 
 // ── Phase 1b : LinkedIn deep dive (parallel with org research + DB queries) ───
@@ -173,49 +222,91 @@ Si non trouvé pour une section : "Non trouvé."`, 400);
 async function researchLinkedIn(ctx: SearchCtx, role: string, email: string): Promise<string | null> {
   const { displayName, organization, analysis } = ctx;
 
-  // Email personnel → pas de LinkedIn pro ciblé
-  if (analysis.domainType === 'personal' && !organization) return null;
+  // Email personnel sans organisation connue → on cherche quand même via le prénom/nom
+  const username = analysis.username; // partie avant @email
+  const nameParts = displayName.split(' ').filter(Boolean);
+  const firstName = nameParts[0] ?? '';
+  const lastName = nameParts.slice(1).join(' ');
+
+  // Construire toutes les variantes URL LinkedIn à tester
+  const slugVariants = [
+    `${firstName.toLowerCase()}-${lastName.toLowerCase().replace(/\s+/g, '-')}`,
+    `${firstName.toLowerCase()}${lastName.toLowerCase().replace(/\s+/g, '')}`,
+    `${lastName.toLowerCase()}-${firstName.toLowerCase()}`,
+    username.toLowerCase().replace(/[._]/g, '-'),
+  ].filter((v, i, a) => v.length > 2 && a.indexOf(v) === i);
 
   const orgAnchor = organization
-    ? `affilié(e) à "${organization}" (domaine : ${analysis.domain})`
-    : '';
+    ? `actuellement ou récemment affilié(e) à "${organization}" (domaine email : ${analysis.domain})`
+    : (role ? `avec le rôle "${role}"` : '');
 
   const disambiguationRule = organization
-    ? `⚠️ DÉSAMBIGUÏSATION : S'il existe plusieurs "${displayName}" sur LinkedIn, retiens UNIQUEMENT celui lié à "${organization}" / ${analysis.domain}. Ignore tous les homonymes.`
-    : '';
+    ? `⚠️ DÉSAMBIGUÏSATION STRICTE :
+Il peut exister plusieurs "${displayName}" sur LinkedIn. La SEULE personne qui nous intéresse est celle liée à "${organization}" / ${analysis.domain}.
+Ignore ABSOLUMENT tous les homonymes sans lien avec cette organisation.
+L'email ${email} PROUVE l'appartenance à ${analysis.domain}.`
+    : `Cherche la personne qui correspond le mieux au profil : ${role || 'professionnel(le)'}.`;
 
-  return perplexityCall(`Trouve et analyse en profondeur le profil LinkedIn de "${displayName}" ${orgAnchor}.
-${role ? `Rôle connu : ${role}.` : ''}
-Email professionnel (ancre d'identification) : ${email}
+  return perplexityCall(`MISSION : Trouver et analyser le profil LinkedIn de "${displayName}" ${orgAnchor}.
+Email professionnel : ${email}${role ? `\nRôle connu : ${role}` : ''}
 
 ${disambiguationRule}
 
-ÉTAPES DE RECHERCHE :
-1. Cherche : "linkedin.com/in/" + variantes du nom ("${displayName}", "${displayName.split(' ').slice(0, 2).join(' ')}", "${displayName.split(' ').reverse().join(' ')}")
-2. Cherche : "${displayName}" site:linkedin.com ${organization ? `"${organization}"` : ''}
-3. Lis l'intégralité du profil public visible
-4. Cherche les posts publics récents (12 derniers mois) de cette personne sur LinkedIn
+STRATÉGIE DE RECHERCHE (effectue TOUTES ces requêtes) :
+1. Accède directement aux URLs LinkedIn :${slugVariants.map(s => `\n   - linkedin.com/in/${s}`).join('')}
+2. Recherche Google : "${displayName}" site:linkedin.com${organization ? ` "${organization}"` : ''}
+3. Recherche Google : "${displayName}" "${organization || analysis.domain}" LinkedIn profil
+4. Recherche : "${firstName} ${lastName}" ${organization ? `"${organization}"` : ''} LinkedIn poste "${role || ''}"
+5. Si profil trouvé : lis INTÉGRALEMENT la section À propos, le parcours, les posts récents
 
-RETOURNE CE FORMAT STRUCTURÉ (conserve exactement ces labels) :
+FORMAT DE RÉPONSE OBLIGATOIRE (respecte exactement ces labels) :
 
-LINKEDIN_URL: [URL complète linkedin.com/in/... ou "Non trouvé"]
-LINKEDIN_HEADLINE: [titre professionnel affiché sur le profil]
-POSTE_ACTUEL: [titre exact] | [entreprise] | depuis [mois/année si visible]
+LINKEDIN_URL: [URL complète https://linkedin.com/in/... OU "Non trouvé après 5 tentatives"]
+LINKEDIN_HEADLINE: [Titre professionnel exact affiché sur le profil]
+POSTE_ACTUEL: [Titre exact du poste] | [Entreprise] | depuis [mois/année]
 PARCOURS_PRO:
-- [Titre de poste] | [Entreprise] | [date début] → [date fin ou "présent"] | [durée] | [description du rôle si visible]
-- [répéter pour chaque poste, du plus récent au plus ancien]
+- [Titre] | [Entreprise] | [date début] → [date fin ou "présent"] | [durée] | [missions clés si visibles]
 FORMATION:
-- [Diplôme ou certification] | [École / Organisme] | [années]
-COMPÉTENCES: [liste des top compétences endorsées ou mentionnées]
-A_PROPOS: [contenu de la section "À propos" / "About" si visible — texte complet ou résumé]
+- [Diplôme] | [École] | [années]
+COMPETENCES_CLES: [Top 5-10 compétences endorsées]
+A_PROPOS: [Texte complet de la section About si visible]
 POSTS_RECENTS:
-- [Résumé du post / thème] — [ton : technique / inspirationnel / sectoriel / personnel / etc.] — [nb de likes si visible]
-- [répéter pour 3-5 posts récents]
-FREQUENCE_PUBLICATION: [quotidien / hebdo / mensuel / rare / aucun trouvé]
-CERTIFICATIONS: [certifications listées sur le profil, le cas échéant]
-RECOMMANDATIONS: [nb et thèmes si visibles]
+- [Sujet du post] | [Ton : analytique/inspirationnel/sectoriel/commercial] | [engagement : nb likes/comments]
+FREQUENCE_PUBLICATION: [Fréquence estimée : quotidien/hebdo/mensuel/rare/inactif]
+CONNEXIONS: [Nb de connexions si visible : 500+, 1000+, etc.]
+CERTIFICATIONS: [Certifications professionnelles listées]
+LANGUES: [Langues mentionnées sur le profil]
 
-Si le profil LinkedIn n'est pas trouvé, commence par : LINKEDIN_URL: Non trouvé`, 700);
+Si LINKEDIN_URL est "Non trouvé", indique malgré tout toutes les données trouvées ailleurs (autres réseaux, site perso, interviews).`, 900);
+}
+
+// ── Phase 1c : Recherche complémentaire — présence web globale ────────────────
+
+async function researchWebPresence(ctx: SearchCtx, role: string, email: string): Promise<string | null> {
+  const { displayName, organization, analysis } = ctx;
+  if (analysis.domainType === 'personal' && !organization && !role) return null;
+
+  const orgCtx = organization || 'leur secteur';
+
+  return perplexityCall(`Recherche la présence web et les traces professionnelles de "${displayName}"${organization ? ` (${organization})` : ''}.
+Email : ${email}${role ? `\nRôle : ${role}` : ''}
+
+SOURCES À CONSULTER :
+1. ${analysis.domain !== '' ? `Site officiel ${analysis.domain} — pages équipe, about, blog` : ''}
+2. Presse économique : Les Echos, BFM Business, Le Monde, TechCrunch, Maddyness, Forbes
+3. Interviews, podcasts, conférences (recherche "${displayName}" ${orgCtx} interview OR conférence)
+4. GitHub si profil tech : github.com/${analysis.username}
+5. Twitter/X : @${analysis.username} ou "${displayName}" twitter
+6. Publications, articles de blog, tribunes
+
+RETOURNE :
+PRESSE: [Articles mentionnant cette personne — titre, source, date, URL]
+INTERVIEWS: [Podcasts, vidéos, conférences — sujet, date, URL]
+RESEAUX_SOCIAUX: [Twitter/X, GitHub, autres — handles et activité]
+CITATIONS_NOTABLES: [Citations directes trouvées en ligne]
+PROJETS_PUBLICS: [Projets, publications, travaux visibles en ligne]
+
+Si rien trouvé : "Aucune trace publique trouvée."`, 500);
 }
 
 // ── Phase 2 : Person research with disambiguation ─────────────────────────────
@@ -232,72 +323,112 @@ async function researchPerson(
 
   let prompt: string;
 
+  const nameParts = displayName.split(' ').filter(Boolean);
+  const firstName = nameParts[0] ?? '';
+  const lastName = nameParts.slice(1).join(' ');
+
   if (analysis.domainType === 'personal') {
-    prompt = `Recherche des informations professionnelles sur "${displayName}".
-${role ? `Rôle connu : ${role}.` : ''}
-Retourne : parcours professionnel, compétences, présence LinkedIn et en ligne.`;
+    prompt = `RECHERCHE PROFESSIONNELLE — "${displayName}"
+Email personnel : ${email}${role ? `\nRôle connu : ${role}` : ''}
+${orgInfoSection}
+
+STRATÉGIE :
+1. Cherche "${displayName}" linkedin.com + "${role || ''}"
+2. Cherche "${displayName}" ${role ? `"${role}"` : ''} interview OR conférence OR article
+3. Cherche "${firstName} ${lastName}" ${role ? `"${role}"` : ''} entreprise
+4. Cherche sur GitHub, Twitter, blog perso
+
+FORMAT RÉPONSE :
+NOM_CONFIRME: [Nom complet exact trouvé]
+TITRE_ACTUEL: [Poste actuel]
+EMPLOYEUR_ACTUEL: [Entreprise actuelle]
+PARCOURS_RECENT: [2-3 dernières expériences]
+LINKEDIN_URL: [URL ou "Non trouvé"]
+SPECIALITES: [Domaines d'expertise]
+SOURCES: [URLs]
+
+Si rien trouvé : AUCUN_RÉSULTAT_CONFIRMÉ : profil sans présence web publique détectable`;
 
   } else if (analysis.domainType === 'edu') {
-    prompt = `RECHERCHE CIBLÉE — "${displayName}" à ${orgCtx} (${analysis.domain}).
-Email professionnel confirmé : ${email} → affiliation certaine à cette institution.${orgInfoSection}
+    prompt = `RECHERCHE CIBLÉE — "${displayName}" à ${orgCtx} (${analysis.domain})
+Email institutionnel confirmé : ${email} → affiliation certaine.${orgInfoSection}
 
-Recherche :
-- Sur ${analysis.domain} : annuaire, pages équipe, publications, mentions
-- Sur LinkedIn : profil liant ce nom à l'institution
-- Variantes du nom (chaque composante séparée : "${displayName.split(' ').join('", "')}"))
+STRATÉGIE (effectue toutes ces recherches) :
+1. Annuaire ${analysis.domain}/annuaire, /equipe, /enseignants, /chercheurs
+2. Publications : scholar.google.com "${displayName}", researchgate.net
+3. LinkedIn : "${displayName}" "${orgCtx}"
+4. "${firstName} ${lastName}" ${orgCtx} site:${analysis.domain}
 
-RETOURNE :
-1. Identité : Nom complet exact trouvé en ligne
-2. Rôle : étudiant / enseignant / chercheur / personnel (département, filière, niveau)
-3. Parcours : formation ou expérience antérieure si trouvée
-4. Présence en ligne : LinkedIn, publications, portfolio
-5. Sources (URLs)`;
+FORMAT RÉPONSE :
+NOM_CONFIRME: [Nom complet exact]
+ROLE_INSTITUTIONNEL: [Statut exact : Professeur / Maître de conf / Chercheur / Étudiant / Personnel / etc.]
+DEPARTEMENT: [Département ou laboratoire]
+SPECIALITE: [Domaine de spécialité]
+PUBLICATIONS: [Travaux ou thèses notables]
+LINKEDIN_URL: [URL ou "Non trouvé"]
+SOURCES: [URLs]`;
 
   } else {
     let registrySearch: string;
     if (analysis.domainType === 'company_fr') {
-      registrySearch = `- Cherche "${displayName}" "${orgCtx}" sur pappers.fr (dirigeant, associé, président, co-gérant)
-- Cherche "${displayName}" "${orgCtx}" sur societe.com
-- Cherche "${displayName}" "${orgCtx}" sur LinkedIn avec filtre entreprise
-- Cherche des articles, interviews ou communiqués mentionnant "${displayName}" et "${orgCtx}"`;
+      registrySearch = `REGISTRES LÉGAUX (OBLIGATOIRES) :
+a. pappers.fr — recherche "${displayName}" : est-il dirigeant, associé, président, gérant inscrit ?
+b. societe.com — confirmation du rôle légal
+c. infogreffe.fr — extrait Kbis, liste des mandataires
+d. ${analysis.domain}/equipe, /leadership, /about — page officielle de l'entreprise
+
+PRESSE ET RÉSEAUX :
+e. "${displayName}" "${orgCtx}" Les Echos OR BFM Business OR La Tribune OR Le Monde
+f. LinkedIn filtre entreprise "${orgCtx}" + nom "${displayName}"
+g. "${displayName}" "${orgCtx}" interview OR conférence`;
     } else if (analysis.domainType === 'startup') {
-      registrySearch = `- Cherche "${displayName}" "${orgCtx}" sur crunchbase.com et wellfound.com
-- Cherche sur ${analysis.domain}/about, ${analysis.domain}/team, ${analysis.domain}/founders
-- Cherche "${displayName}" "${orgCtx}" sur LinkedIn
-- Cherche des articles TechCrunch, Les Echos, Maddyness ou presse tech mentionnant "${displayName}"`;
+      registrySearch = `SOURCES STARTUP (dans l'ordre) :
+a. crunchbase.com/person/${analysis.username} et recherche "${displayName}" ${orgCtx}
+b. wellfound.com — profil fondateur/équipe
+c. ${analysis.domain}/about, /team, /founders, /leadership
+d. maddyness.com, frenchweb.fr, lesechos.fr, lefigaro.fr — articles sur ${orgCtx} + "${displayName}"
+e. LinkedIn "${displayName}" "${orgCtx}"
+f. ProductHunt, GitHub, Twitter — pour profils tech`;
     } else {
-      registrySearch = `- Cherche "${displayName}" "${orgCtx}" sur LinkedIn
-- Cherche sur le site ${analysis.domain} (pages équipe, about)
-- Cherche des articles de presse mentionnant "${displayName}" et "${orgCtx}"`;
+      registrySearch = `SOURCES :
+a. ${analysis.domain}/equipe, /about, /contact
+b. LinkedIn "${displayName}" "${orgCtx}"
+c. Presse : "${displayName}" "${orgCtx}" OR "${analysis.domain}"
+d. Registres d'entreprise locaux`;
     }
 
-    prompt = `TÂCHE DE DÉSAMBIGUÏSATION STRICTE
+    prompt = `TÂCHE DE DÉSAMBIGUÏSATION STRICTE ET EXHAUSTIVE
 
-Contexte : Je cherche "${displayName}" qui est affilié(e) à "${orgCtx}" (domaine : ${analysis.domain}).
-${role ? `Rôle connu : ${role}.` : ''}
-Email professionnel : ${email}${orgInfoSection}
+CIBLE : "${displayName}" — affilié(e) à "${orgCtx}" (domaine email : ${analysis.domain})
+${role ? `Rôle connu : ${role}` : ''}
+Email professionnel : ${email} (PREUVE d'appartenance à ${analysis.domain})${orgInfoSection}
 
-⚠️ RÈGLE ABSOLUE — HOMONYMES :
-Il peut exister plusieurs personnes nommées "${displayName}" sur internet.
-L'email ${email} PROUVE que LA BONNE PERSONNE est uniquement celle affiliée à ${analysis.domain}.
-Tu dois IGNORER COMPLÈTEMENT tous les homonymes non affiliés à ${orgCtx} / ${analysis.domain}.
+⚠️ RÈGLE ABSOLUE ANTI-HOMONYMES :
+Il PEUT exister plusieurs "${displayName}" sur internet.
+La SEULE personne qui nous intéresse est celle PROUVABLEMENT liée à ${orgCtx} / ${analysis.domain}.
+IGNORE tout résultat concernant un homonyme sans lien avec ${orgCtx}.
+Si tu n'es pas certain à 100% que le résultat concerne la bonne personne → ne le retourne PAS.
 
-ÉTAPES DE RECHERCHE :
+STRATÉGIE DE RECHERCHE :
 ${registrySearch}
 
-RETOURNE (uniquement pour la personne confirmée chez ${orgCtx}) :
-1. Identité confirmée : Nom complet + preuve concrète de l'affiliation à ${orgCtx}
-2. Rôle exact : Fondateur ? Co-fondateur ? CEO ? CTO ? Employé ? (avec date de prise de poste si trouvée)
-3. Parcours antérieur : Expériences pro avant ${orgCtx} (entreprises, postes, formations)
-4. Profil synthèse : 2-3 phrases actionnables sur qui est cette personne professionnellement
-5. Infos ${orgCtx} complémentaires : données confirmant le lien (page équipe, registre, article)
-6. Sources exactes : URLs (LinkedIn, pappers, crunchbase, article presse, etc.)
+FORMAT DE RÉPONSE OBLIGATOIRE :
 
-Si aucun résultat confirmé pour "${displayName}" chez ${orgCtx}, écris exactement la ligne :
-AUCUN_RÉSULTAT_CONFIRMÉ : [raison brève]`;
+IDENTITE_CONFIRMEE: [Nom complet exact + source de confirmation]
+PREUVE_AFFILIATION: [Comment tu as confirmé le lien avec ${orgCtx} : page équipe URL, registre, article…]
+ROLE_EXACT: [Titre de poste exact + département + date de prise de poste si trouvé]
+ANCIENNETE: [Depuis quand dans l'organisation]
+PARCOURS_ANTERIEUR:
+- [Poste] | [Entreprise] | [période] | [contexte]
+FORMATION: [Diplômes, écoles — si trouvés]
+PROFIL_ACTIONNABLE: [3 phrases synthétisant qui est cette personne, son background, ses enjeux professionnels]
+RESEAUX_CONFIRMES: [LinkedIn URL, Twitter, GitHub — uniquement si confirmés pour CETTE personne]
+SOURCES_EXACTES: [URLs complètes utilisées pour chaque information]
+
+Si aucun résultat confirmé : AUCUN_RÉSULTAT_CONFIRMÉ : [raison précise]`;
   }
 
-  const result = await perplexityCall(prompt, 700);
+  const result = await perplexityCall(prompt, 900);
   if (!result) return null;
   if (result.startsWith('AUCUN_RÉSULTAT_CONFIRMÉ')) return null;
   return result;
@@ -593,13 +724,14 @@ Deno.serve(async (req) => {
     .eq('id', contactId);
 
   try {
-    // ── 3. Phase 1a (org) + Phase 1b (LinkedIn) + DB queries — ALL IN PARALLEL ─
-    // Toutes les recherches Perplexity tournent pendant les requêtes DB → 0 latence supplémentaire
+    // ── 3. Phase 1a/1b/1c (Perplexity) + DB queries — TOUT EN PARALLÈLE ────────
+    // sonar-pro effectue plusieurs requêtes web → résultats en ~5-8s — overlap avec DB
     const [
       { data: messages },
       { data: meetingParts },
       orgInfo,
       linkedinData,
+      webPresenceData,
     ] = await Promise.all([
       supabase.from('communication_messages')
         .select('direction, sent_at, thread_id, metadata, subject')
@@ -615,26 +747,28 @@ Deno.serve(async (req) => {
       researchOrganization(searchCtx.analysis),
       // Phase 1b : LinkedIn deep dive
       researchLinkedIn(searchCtx, contact.role_title ?? '', contact.email ?? ''),
+      // Phase 1c : présence web globale (presse, réseaux, publications)
+      researchWebPresence(searchCtx, contact.role_title ?? '', contact.email ?? ''),
     ]);
 
     const msgs = messages ?? [];
     const meets = (meetingParts ?? []).map((p: any) => p.meetings).filter(Boolean).flat();
 
-    // ── 4. Phase 2 : Person disambiguation with org + LinkedIn context ────────
-    // On passe orgInfo + linkedinData comme contexte pour la désambiguïsation
-    const orgAndLinkedinContext = [orgInfo, linkedinData].filter(Boolean).join('\n\n---\n\n') || null;
+    // ── 4. Phase 2 : Désambiguïsation personne avec tout le contexte accumulé ──
+    const allWebContext = [orgInfo, linkedinData, webPresenceData].filter(Boolean).join('\n\n---\n\n') || null;
     const personBio = await researchPerson(
       searchCtx,
       contact.role_title ?? '',
       contact.email ?? '',
-      orgAndLinkedinContext,
+      allWebContext,
     );
 
-    // Combine toutes les sources en un web_bio structuré
+    // Combine toutes les sources en un web_bio structuré (4 sections max)
     const webBio = [
-      orgInfo      ? `=== ORGANISATION ===\n${orgInfo}`            : null,
-      linkedinData ? `=== PROFIL LINKEDIN ===\n${linkedinData}`    : null,
-      personBio    ? `=== PROFIL PROFESSIONNEL ===\n${personBio}`  : null,
+      orgInfo         ? `=== ORGANISATION ===\n${orgInfo}`              : null,
+      linkedinData    ? `=== PROFIL LINKEDIN ===\n${linkedinData}`      : null,
+      webPresenceData ? `=== PRÉSENCE WEB ===\n${webPresenceData}`      : null,
+      personBio       ? `=== PROFIL PROFESSIONNEL ===\n${personBio}`    : null,
     ].filter(Boolean).join('\n\n');
 
     if (webBio) await supabase.from('contacts').update({ web_bio: webBio }).eq('id', contactId);
@@ -660,9 +794,10 @@ Deno.serve(async (req) => {
     const orgCtx = searchCtx.organization || companyName || '—';
 
     // Sections contexte web structurées pour le LLM
+    const sourcesCount = [orgInfo, linkedinData, webPresenceData, personBio].filter(Boolean).length;
     const webContextSection = webBio ? `
 
-=== DONNÉES WEB ENRICHIES (Perplexity — 3 sources croisées) ===
+=== DONNÉES WEB ENRICHIES (Perplexity sonar-pro — ${sourcesCount} sources croisées) ===
 ${webBio}
 ===` : '';
 
@@ -853,8 +988,8 @@ Instructions spécifiques :
     } catch (_) { /* best-effort */ }
 
     // Activity event
-    const sources = [orgInfo && 'org', linkedinData && 'linkedin', personBio && 'person'].filter(Boolean);
-    const webLabel = webBio ? ` · Perplexity ✓ (${sources.join('+')})` : '';
+    const sourceNames = [orgInfo && 'org', linkedinData && 'linkedin', webPresenceData && 'web', personBio && 'person'].filter(Boolean);
+    const webLabel = webBio ? ` · Perplexity ✓ (${sourceNames.join('+')})` : '';
     await supabase.from('knowy_activity_events').insert({
       organization_id: organizationId,
       user_id: user.id,
@@ -876,6 +1011,7 @@ Instructions spécifiques :
       webEnriched: !!webBio,
       orgResearched: !!orgInfo,
       linkedinFound: !!linkedinData && !linkedinData.includes('LINKEDIN_URL: Non trouvé'),
+      webSources: sourceNames.length,
     });
 
   } catch (err: any) {

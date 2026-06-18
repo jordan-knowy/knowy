@@ -87,12 +87,12 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
       className="h-screen w-[220px] bg-sidebar border-r border-sidebar-border flex flex-col z-20 md:fixed md:left-0 md:top-0"
     >
       {/* Logo */}
-      <div className="p-6 border-b border-sidebar-border">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-black italic text-foreground">
-            Know<span className="text-primary">r</span>
+      <div className="px-5 py-5 border-b border-sidebar-border">
+        <div className="flex flex-col gap-0.5">
+          <h1 style={{ fontFamily: 'Epilogue, sans-serif', fontWeight: 900, fontSize: '20px', letterSpacing: '-0.03em', color: 'var(--t1, #1A1040)', lineHeight: 1 }}>
+            Know<span style={{ color: 'var(--violet, #6E50C8)' }}>r</span>
           </h1>
-          <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+          <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '9px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.10em', color: 'var(--t3, #9082B8)' }}>
             OS Relationnel
           </p>
         </div>
@@ -107,21 +107,22 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
               onClick={() => go(item.path)}
               whileHover={{ x: 2 }}
               whileTap={{ scale: 0.98 }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
+              className={`w-full flex items-center gap-2.5 rounded-lg transition-all duration-150 ${
                 isActive(item.path)
                   ? 'bg-primary text-white shadow-sm'
                   : 'text-muted-foreground hover:bg-lavender-100 hover:text-foreground'
               }`}
+              style={{ padding: '8px 12px' }}
             >
-              <item.icon className="size-5" />
-              <span className="flex-1 text-left text-sm font-semibold">{item.label}</span>
+              <item.icon className="size-4 flex-shrink-0" />
+              <span className="flex-1 text-left font-semibold" style={{ fontSize: '12.5px' }}>{item.label}</span>
             </motion.button>
           ))}
 
           {/* Coach — V2, désactivé */}
-          <div className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg opacity-35 cursor-not-allowed select-none">
-            <Zap className="size-5 text-muted-foreground" />
-            <span className="flex-1 text-left text-sm font-semibold text-muted-foreground">Coach</span>
+          <div className="w-full flex items-center gap-2.5 rounded-lg opacity-35 cursor-not-allowed select-none" style={{ padding: '8px 12px' }}>
+            <Zap className="size-4 text-muted-foreground flex-shrink-0" />
+            <span className="flex-1 text-left font-semibold text-muted-foreground" style={{ fontSize: '12.5px' }}>Coach</span>
             <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
               V2
             </span>
@@ -142,14 +143,15 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
                 onClick={() => go(item.path)}
                 whileHover={{ x: 2 }}
                 whileTap={{ scale: 0.98 }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
+                className={`w-full flex items-center gap-2.5 rounded-lg transition-all duration-150 ${
                   isActive(item.path)
                     ? 'bg-primary text-white shadow-sm'
                     : 'text-muted-foreground hover:bg-lavender-100 hover:text-foreground'
                 }`}
+                style={{ padding: '8px 12px' }}
               >
-                <item.icon className="size-5" />
-                <span className="flex-1 text-left text-sm font-semibold">{item.label}</span>
+                <item.icon className="size-4 flex-shrink-0" />
+                <span className="flex-1 text-left font-semibold" style={{ fontSize: '12.5px' }}>{item.label}</span>
               </motion.button>
             ))}
           </nav>
@@ -165,29 +167,32 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
           className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-all"
         >
           {profile?.avatarUrl ? (
-            <img src={profile.avatarUrl} alt={profile.fullName} className="size-10 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />
+            <img src={profile.avatarUrl} alt={profile.fullName} className="size-9 rounded-full object-cover border-2 border-white shadow-sm flex-shrink-0" />
           ) : (
-            <div className="size-10 bg-gradient-to-br from-primary to-[#8B6FD4] rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 border-2 border-white shadow-sm">
+            <div className="size-9 bg-gradient-to-br from-primary to-[#8B6FD4] rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 border-2 border-white shadow-sm" style={{ fontSize: '12px' }}>
               {profile?.initials ?? '?'}
             </div>
           )}
           <div className="flex-1 text-left min-w-0">
-            <p className="text-sm font-semibold truncate">{profile?.fullName ?? 'Mon compte'}</p>
-            <p className="text-xs text-muted-foreground truncate">{profile?.companyName ?? ''}</p>
+            <p className="font-bold truncate" style={{ fontSize: '12.5px' }}>{profile?.fullName ?? 'Mon compte'}</p>
+            <p className="truncate" style={{ fontSize: '10.5px', color: 'var(--t3, #9082B8)' }}>{profile?.companyName ?? ''}</p>
           </div>
           <ChevronDown className="size-4 text-muted-foreground flex-shrink-0" />
         </motion.button>
 
         {/* Connector dots — live from Supabase */}
-        <div className="mt-3 px-3 flex items-center gap-2 text-xs text-muted-foreground">
-          <span>Sources :</span>
+        <div className="mt-2 px-3 flex items-center gap-2">
+          <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '9px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--t3, #9082B8)' }}>Sources</span>
           <div className="flex items-center gap-1.5">
             <div title={`Gmail ${connectors.google ? '✓' : '— non connecté'}`}
-              className={`size-2 rounded-full ${connectors.google ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+              className="size-2 rounded-full"
+              style={{ background: connectors.google ? 'var(--sage, #2EA86A)' : 'var(--t4, #C4B8E0)' }} />
             <div title={`LinkedIn ${connectors.linkedin ? '✓' : '— non connecté'}`}
-              className={`size-2 rounded-full ${connectors.linkedin ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+              className="size-2 rounded-full"
+              style={{ background: connectors.linkedin ? 'var(--sage, #2EA86A)' : 'var(--t4, #C4B8E0)' }} />
             <div title={`HubSpot ${connectors.hubspot ? '✓' : '— non connecté'}`}
-              className={`size-2 rounded-full ${connectors.hubspot ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+              className="size-2 rounded-full"
+              style={{ background: connectors.hubspot ? 'var(--sage, #2EA86A)' : 'var(--t4, #C4B8E0)' }} />
           </div>
         </div>
       </div>

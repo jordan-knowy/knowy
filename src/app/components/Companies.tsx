@@ -322,14 +322,21 @@ export default function Companies() {
           </motion.div>
         ) : (
           <div className="space-y-2">
-            {filtered.map((company, i) => (
+            {filtered.map((company, i) => {
+              const accentColor = company.lastContactDays == null
+                ? '#C4B8E0'
+                : company.lastContactDays < 30 ? '#2EA86A'
+                : company.lastContactDays < 90 ? '#C97A20'
+                : '#D94F63';
+              return (
               <motion.button
                 key={company.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(i * 0.04, 0.3) }}
                 onClick={() => navigate(`/company/${company.id}`)}
-                className="w-full text-left bg-card rounded-2xl border border-border hover:border-primary/30 hover:shadow-sm p-4 transition-all group"
+                className="w-full text-left bg-card rounded-2xl border border-border hover:shadow-md p-4 transition-all group overflow-hidden"
+                style={{ borderLeft: `3px solid ${accentColor}`, paddingLeft: 20 }}
               >
                 <div className="flex items-center gap-4">
                   {/* Logo/initials */}
@@ -389,7 +396,8 @@ export default function Companies() {
                   <ArrowRight className="size-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all flex-shrink-0" />
                 </div>
               </motion.button>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

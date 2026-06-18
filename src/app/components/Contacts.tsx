@@ -554,14 +554,25 @@ export default function Contacts() {
         .eq('organization_id', resolvedOrgId).eq('status', 'connected');
       const connected = new Map((conns ?? []).map((c: any) => [c.provider as string, c]));
       const hasGoogle = connected.has('google');
-      const hasMicrosoft = connected.has('microsoft');
       const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
       const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
+
+      // Sème le connecteur MS AVANT de calculer hasMicrosoft — indispensable pour les sessions fraîches
+      if (isMsSession && providerToken && session.user) {
+        await (supabase.from('connectors') as any).upsert({
+          organization_id: resolvedOrgId, user_id: session.user.id, provider: 'microsoft', status: 'connected',
+          metadata: { access_token: providerToken, refresh_token: (session as any).provider_refresh_token ?? (connected.get('microsoft')?.metadata as any)?.refresh_token ?? null, email: session.user.email, token_stored_at: new Date().toISOString() },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'organization_id,user_id,provider' });
+      }
+      // hasMicrosoft = connecteur en base OU session MS active avec token (premier login MS)
+      const hasMicrosoft = connected.has('microsoft') || (isMsSession && !!providerToken);
 
       let totalSynced = 0;
 
       if (hasGoogle) {
-        const googleToken = (connected.get('google')?.metadata as any)?.access_token ?? providerToken ?? null;
+        // Ne jamais utiliser le provider_token MS comme token Google
+        const googleToken = (connected.get('google')?.metadata as any)?.access_token ?? (isMsSession ? null : providerToken) ?? null;
         if (googleToken) {
           const r = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
             method: 'POST', headers,
@@ -573,16 +584,7 @@ export default function Contacts() {
       }
 
       if (hasMicrosoft) {
-        // Priorité au token FRAIS de la session Microsoft (sinon token stocké, possiblement périmé)
         const msToken: string | null = (isMsSession && providerToken) ? providerToken : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null);
-        // Sème access_token + refresh_token dans le connecteur pour le renouvellement auto serveur
-        if (isMsSession && providerToken && session.user) {
-          await (supabase.from('connectors') as any).upsert({
-            organization_id: resolvedOrgId, user_id: session.user.id, provider: 'microsoft', status: 'connected',
-            metadata: { access_token: providerToken, refresh_token: (session as any).provider_refresh_token ?? (connected.get('microsoft')?.metadata as any)?.refresh_token ?? null, email: session.user.email, token_stored_at: new Date().toISOString() },
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'organization_id,user_id,provider' });
-        }
         if (msToken) {
           const r = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
             method: 'POST', headers,
@@ -621,33 +623,32 @@ export default function Contacts() {
         .eq('status', 'connected');
 
       const connected = new Map((connectors ?? []).map((c: any) => [c.provider as string, c]));
-      const hasGoogle    = connected.has('google');
-      const hasMicrosoft = connected.has('microsoft');
-
-      if (!hasGoogle && !hasMicrosoft) {
-        setSuggestionError('Aucun compte mail connecté. Allez dans Paramètres → Connexions.');
-        return;
-      }
-
-      // Détecte si la session courante est une session Microsoft OAuth
+      const hasGoogle = connected.has('google');
       const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
       const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
 
-      // Tokens : on privilégie le token FRAIS de la session si elle correspond au provider
-      const googleToken = hasGoogle
-        ? (session.provider_token ?? (connected.get('google')?.metadata as any)?.access_token ?? null)
-        : null;
-      const microsoftToken = hasMicrosoft
-        ? ((isMsSession && session.provider_token) ? session.provider_token : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null))
-        : null;
-      // Sème le refresh_token MS dans le connecteur (renouvellement auto côté serveur)
-      if (hasMicrosoft && isMsSession && session.provider_token && session.user) {
+      // Sème le connecteur MS AVANT de calculer hasMicrosoft (sessions fraîches sans record en base)
+      if (isMsSession && session.provider_token && session.user) {
         await (supabase.from('connectors') as any).upsert({
           organization_id: resolvedOrgId, user_id: session.user.id, provider: 'microsoft', status: 'connected',
           metadata: { access_token: session.provider_token, refresh_token: (session as any).provider_refresh_token ?? (connected.get('microsoft')?.metadata as any)?.refresh_token ?? null, email: session.user.email, token_stored_at: new Date().toISOString() },
           updated_at: new Date().toISOString(),
         }, { onConflict: 'organization_id,user_id,provider' });
       }
+      const hasMicrosoft = connected.has('microsoft') || (isMsSession && !!session.provider_token);
+
+      if (!hasGoogle && !hasMicrosoft) {
+        setSuggestionError('Aucun compte mail connecté. Allez dans Paramètres → Connexions.');
+        return;
+      }
+
+      // Tokens : session fraîche prioritaire, jamais utiliser le token MS pour Gmail
+      const googleToken = hasGoogle
+        ? ((connected.get('google')?.metadata as any)?.access_token ?? (isMsSession ? null : session.provider_token) ?? null)
+        : null;
+      const microsoftToken = hasMicrosoft
+        ? ((isMsSession && session.provider_token) ? session.provider_token : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null))
+        : null;
 
       const res = await fetch(`${supabaseUrl}/functions/v1/discover-contacts`, {
         method: 'POST',
@@ -1164,23 +1165,28 @@ export default function Contacts() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="overflow-x-auto rounded-2xl border border-border bg-card"
             >
-              <div className="grid min-w-[760px] grid-cols-12 gap-4 px-6 py-4 bg-muted/30 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                <div className="col-span-3">Contact</div>
-                <div className="col-span-3">Entreprise</div>
-                <div className="col-span-2 text-center">Emails</div>
-                <div className="col-span-2 text-center">Score</div>
-                <div className="col-span-1 text-center">Dernier contact</div>
+              <div className="grid min-w-[760px] grid-cols-12 gap-4 px-6 py-3 bg-muted/30 border-b border-border">
+                <div className="col-span-3" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--t3, #9082B8)' }}>Contact</div>
+                <div className="col-span-3" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--t3, #9082B8)' }}>Entreprise</div>
+                <div className="col-span-2 text-center" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--t3, #9082B8)' }}>Emails</div>
+                <div className="col-span-2 text-center" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--t3, #9082B8)' }}>Score</div>
+                <div className="col-span-1 text-center" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--t3, #9082B8)' }}>Vu</div>
                 <div className="col-span-1" />
               </div>
 
               <div className="divide-y divide-border">
-                {displayed.map((contact, i) => (
+                {displayed.map((contact, i) => {
+                  const scoreColorVal = contact.engagementScore >= 70 ? '#2EA86A' : contact.engagementScore >= 50 ? '#C97A20' : contact.engagementScore > 0 ? '#D94F63' : 'var(--t4, #C4B8E0)';
+                  return (
                   <motion.div
                     key={contact.id}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.3, delay: i * 0.015 }}
-                    className="grid min-w-[760px] grid-cols-12 gap-4 px-6 py-4 hover:bg-muted/20 transition-colors cursor-pointer group items-center"
+                    className="grid min-w-[760px] grid-cols-12 gap-4 px-6 py-4 transition-all cursor-pointer group items-center"
+                    style={{ borderLeft: `3px solid ${scoreColorVal}`, paddingLeft: '21px' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 16px rgba(110,80,200,0.08)'; (e.currentTarget as HTMLElement).style.background = 'rgba(110,80,200,0.03)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ''; (e.currentTarget as HTMLElement).style.boxShadow = ''; (e.currentTarget as HTMLElement).style.background = ''; }}
                     onClick={() => navigate(`/contact/${contact.id}`)}
                   >
                     {/* Contact */}
@@ -1226,11 +1232,7 @@ export default function Contacts() {
                     {/* Score */}
                     <div className="col-span-2 flex items-center justify-center">
                       {contact.engagementScore > 0 ? (
-                        <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${
-                          contact.engagementScore >= 70 ? 'bg-success/10 text-success' :
-                          contact.engagementScore >= 40 ? 'bg-primary/10 text-primary' :
-                          'bg-destructive/10 text-destructive'
-                        }`}>
+                        <span style={{ fontFamily: 'Epilogue, sans-serif', fontWeight: 800, fontSize: '15px', color: scoreColorVal }}>
                           {contact.engagementScore}
                         </span>
                       ) : (
@@ -1240,12 +1242,12 @@ export default function Contacts() {
 
                     {/* Last contact */}
                     <div className="col-span-1 flex items-center justify-center">
-                      <span className={`text-xs font-medium ${
-                        contact.lastContactDays === null ? 'text-muted-foreground' :
-                        contact.lastContactDays > 14 ? 'text-destructive' :
-                        contact.lastContactDays > 7 ? 'text-warning' :
-                        'text-success'
-                      }`}>
+                      <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '10px', fontWeight: 600,
+                        color: contact.lastContactDays === null ? 'var(--t3, #9082B8)' :
+                        contact.lastContactDays > 14 ? '#D94F63' :
+                        contact.lastContactDays > 7 ? '#C97A20' :
+                        '#2EA86A'
+                      }}>
                         {getDaysText(contact.lastContactDays)}
                       </span>
                     </div>
@@ -1255,7 +1257,8 @@ export default function Contacts() {
                       <ArrowRight className="size-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                     </div>
                   </motion.div>
-                ))}
+                  );
+                })}
               </div>
             </motion.div>
 

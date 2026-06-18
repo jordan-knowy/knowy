@@ -139,6 +139,7 @@ export default function CompanyDetail() {
   const [signals,   setSignals]   = useState<BehavioralSignal[]>([]);
   const [emailCount30d, setEmailCount30d] = useState<number>(0);
   const [loading,   setLoading]   = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showAllMeetings, setShowAllMeetings] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -512,11 +513,24 @@ export default function CompanyDetail() {
               </div>
             ))}
             <button
-              onClick={loadData}
-              className="ml-auto flex items-center gap-1.5 text-[11px] transition-colors"
-              style={{ color: 'rgba(255,255,255,0.3)' }}
+              onClick={async () => {
+                setRefreshing(true);
+                try { await loadData(); } finally { setRefreshing(false); }
+              }}
+              disabled={refreshing}
+              className="ml-auto flex items-center gap-1.5 text-[11px] font-semibold transition-all cursor-pointer"
+              style={{
+                color: refreshing ? 'rgba(212,197,245,0.4)' : 'rgba(212,197,245,0.75)',
+                background: 'rgba(110,80,200,0.18)',
+                border: '1px solid rgba(110,80,200,0.3)',
+                borderRadius: 8,
+                padding: '4px 10px',
+              }}
             >
-              <RefreshCw className="size-3.5" /> Actualiser
+              {refreshing
+                ? <Loader2 className="size-3.5 animate-spin" />
+                : <RefreshCw className="size-3.5" />}
+              Actualiser
             </button>
           </div>
         </motion.div>

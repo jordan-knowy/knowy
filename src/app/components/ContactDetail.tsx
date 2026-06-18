@@ -250,6 +250,7 @@ export default function ContactDetail() {
   const [emailAnalysis, setEmailAnalysis] = useState<any | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [syncingContactEmails, setSyncingContactEmails] = useState(false);
 
   // ── Load all data ────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -299,7 +300,7 @@ export default function ContactDetail() {
       const [{ data: msgs }, { data: meetParts }, { data: notesData }, { data: hist }] =
         await Promise.all([
           supabase.from('communication_messages')
-            .select('id, direction, sent_at, subject')
+            .select('id, direction, sent_at, subject, provider')
             .eq('contact_id', id).eq('organization_id', oid)
             .order('sent_at', { ascending: false }).limit(100),
           supabase.from('meeting_participants')
@@ -363,9 +364,12 @@ export default function ContactDetail() {
     setAnalyzeError(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const providerToken = session?.provider_token ?? null;
+      const sessionAuthProvider = (session?.user?.app_metadata as any)?.provider ?? '';
+      const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
+      const providerToken = isMsSession ? null : (session?.provider_token ?? null);
+      const microsoftToken = isMsSession ? (session?.provider_token ?? null) : null;
       const { data, error } = await supabase.functions.invoke('analyze-email-exchanges', {
-        body: { contactId: id, organizationId: orgId, providerToken },
+        body: { contactId: id, organizationId: orgId, providerToken, microsoftToken },
       });
       if (error) {
         let realMsg: string | null = null;
@@ -373,7 +377,7 @@ export default function ContactDetail() {
           const body = await (error as any)?.context?.json?.();
           realMsg = body?.error ?? null;
           if (body?.code === 'NO_MESSAGES') realMsg = 'Aucun email synchronisé pour ce contact.';
-          else if (body?.code === 'TOKEN_MISSING') realMsg = 'Token Google expiré. Relancez une sync Gmail dans Paramètres → Connexions.';
+          else if (body?.code === 'TOKEN_MISSING') realMsg = 'Token expiré. Relancez une synchronisation dans Paramètres → Connexions.';
         } catch { /* ignore */ }
         setAnalyzeError(realMsg ?? (error as any)?.message ?? 'Erreur inconnue');
       } else if (data?.analysis) {
@@ -384,6 +388,49 @@ export default function ContactDetail() {
       setAnalyzeError(e?.message ?? 'Erreur inconnue');
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  const syncContactEmails = async () => {
+    if (!supabase || !id || syncingContactEmails || !contact?.email) return;
+    setSyncingContactEmails(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const oid = orgId ?? await getActiveOrganizationId();
+      if (!oid) return;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const headers = { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' };
+      const { data: conns } = await supabase.from('connectors').select('provider, status, metadata')
+        .eq('organization_id', oid).eq('status', 'connected');
+      const connected = new Map((conns ?? []).map((c: any) => [c.provider as string, c]));
+      const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
+      const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
+      const fetches: Promise<any>[] = [];
+      if (connected.has('google')) {
+        const googleToken = (connected.get('google')?.metadata as any)?.access_token ?? (isMsSession ? null : session.provider_token) ?? null;
+        if (googleToken) {
+          fetches.push(fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: oid, providerToken: googleToken, provider: 'google', contactEmails: [contact.email], lookbackDays: 3650, maxMessagesPerContact: 1000 }),
+          }));
+        }
+      }
+      if (connected.has('microsoft')) {
+        const msToken = (isMsSession && session.provider_token) ? session.provider_token : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null);
+        if (msToken) {
+          fetches.push(fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: oid, providerToken: msToken, provider: 'microsoft', contactEmails: [contact.email], lookbackDays: 3650, maxMessagesPerContact: 1000 }),
+          }));
+        }
+      }
+      await Promise.allSettled(fetches);
+      await loadData();
+    } catch (e: any) {
+      console.error('Sync emails error:', e);
+    } finally {
+      setSyncingContactEmails(false);
     }
   };
 
@@ -437,7 +484,14 @@ export default function ContactDetail() {
   const phase       = profile?.score_phase as 'growth' | 'stagnant' | 'decline' | undefined;
   const allDates    = [...messages.map(m => m.sent_at), ...meetings.map(m => m.starts_at)].filter(Boolean).sort().reverse();
   const lastContact = allDates[0];
-  const sources     = ['Gmail', 'Calendar'].filter((_, i) => i === 0 ? messages.length > 0 : meetings.length > 0);
+  const hasOutlookMsgs = messages.some((m: any) => m.provider === 'microsoft');
+  const hasGmailMsgs   = messages.some((m: any) => !m.provider || m.provider === 'google');
+  const sources = [
+    ...(hasGmailMsgs ? ['Gmail'] : []),
+    ...(hasOutlookMsgs ? ['Outlook'] : []),
+    ...(!hasGmailMsgs && !hasOutlookMsgs && messages.length > 0 ? ['Emails'] : []),
+    ...(meetings.length > 0 ? ['Calendar'] : []),
+  ];
 
   const scoreColor  = score == null ? '#9082B8' : score >= 70 ? '#2EA86A' : score >= 40 ? '#6E50C8' : '#D94F63';
   const phaseLabel  = phase === 'growth' ? 'Développement' : phase === 'decline' ? 'Déclin' : 'Stable';
@@ -1077,11 +1131,16 @@ export default function ContactDetail() {
                 <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                   <Clock className="size-4 text-muted-foreground" />
                   <span className="text-xs font-semibold">Historique des échanges</span>
-                  {messages.length === 0 && (
-                    <button onClick={() => navigate('/account')} className="ml-auto text-xs text-primary underline">
-                      Sync Gmail →
-                    </button>
-                  )}
+                  <button
+                    onClick={syncContactEmails}
+                    disabled={syncingContactEmails || !contact?.email}
+                    className="ml-auto flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors disabled:opacity-40"
+                    title={contact?.email ? 'Synchroniser Gmail & Outlook' : 'Email manquant sur ce contact'}
+                  >
+                    {syncingContactEmails
+                      ? <><Loader2 className="size-3 animate-spin" /> Sync…</>
+                      : <><RefreshCw className="size-3" /> Sync emails</>}
+                  </button>
                 </div>
                 <div className="divide-y divide-border max-h-80 overflow-y-auto">
                   {[

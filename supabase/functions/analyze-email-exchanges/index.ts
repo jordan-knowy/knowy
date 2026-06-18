@@ -20,6 +20,7 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1';
+const GRAPH_API = 'https://graph.microsoft.com/v1.0';
 
 // ── Résolution du token Google ─────────────────────────────────────────────
 async function resolveGoogleToken(
@@ -72,6 +73,79 @@ async function resolveGoogleToken(
   }
 
   return token;
+}
+
+// ── Résolution du token Microsoft ─────────────────────────────────────────
+async function resolveOutlookToken(
+  supabase: any,
+  organizationId: string,
+  userId: string,
+  bodyToken: string | null,
+): Promise<string | null> {
+  if (bodyToken) return bodyToken;
+
+  const { data: connector } = await supabase.from('connectors')
+    .select('metadata, status')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .eq('provider', 'microsoft')
+    .maybeSingle();
+
+  if (!connector || connector.status === 'not_connected') return null;
+
+  let token = (connector.metadata as any)?.access_token ?? null;
+  const refreshToken = (connector.metadata as any)?.refresh_token ?? null;
+
+  if (!token && refreshToken) {
+    const clientId = Deno.env.get('MICROSOFT_CLIENT_ID');
+    const clientSecret = Deno.env.get('MICROSOFT_CLIENT_SECRET');
+    if (clientId && clientSecret) {
+      try {
+        const res = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecret,
+            refresh_token: refreshToken,
+            grant_type: 'refresh_token',
+            scope: 'openid profile email offline_access Mail.Read',
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          token = data.access_token ?? null;
+          if (token) {
+            await supabase.from('connectors').update({
+              metadata: { ...(connector.metadata ?? {}), access_token: token, token_stored_at: new Date().toISOString() },
+              updated_at: new Date().toISOString(),
+            }).eq('organization_id', organizationId).eq('user_id', userId).eq('provider', 'microsoft');
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  }
+  return token;
+}
+
+// ── Nettoyage HTML Outlook → texte brut ───────────────────────────────────
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 // ── Détection newsletters / emails automatiques ───────────────────────────
@@ -186,16 +260,20 @@ Deno.serve(async (req) => {
   if (userErr || !user) return jsonResponse({ error: 'Unauthorized' }, 401);
 
   const body = await req.json().catch(() => ({}));
-  const { contactId, organizationId, providerToken: bodyToken } = body;
+  const { contactId, organizationId, providerToken: bodyGoogleToken, microsoftToken: bodyMsToken } = body;
   if (!contactId || !organizationId) {
     return jsonResponse({ error: 'contactId et organizationId requis' }, 400);
   }
 
-  // 1. Résoudre le token Google
-  const gmailToken = await resolveGoogleToken(supabase, organizationId, user.id, bodyToken ?? null);
-  if (!gmailToken) {
+  // 1. Résoudre les tokens (Google + Microsoft en parallèle)
+  const [gmailToken, outlookToken] = await Promise.all([
+    resolveGoogleToken(supabase, organizationId, user.id, bodyGoogleToken ?? null),
+    resolveOutlookToken(supabase, organizationId, user.id, bodyMsToken ?? null),
+  ]);
+
+  if (!gmailToken && !outlookToken) {
     return jsonResponse({
-      error: 'Token Google introuvable. Reconnectez votre compte Google dans Paramètres → Connexions.',
+      error: 'Aucun compte messagerie connecté. Connectez Gmail ou Outlook dans Paramètres → Connexions.',
       code: 'TOKEN_MISSING',
     }, 401);
   }
@@ -203,7 +281,7 @@ Deno.serve(async (req) => {
   // 2. Récupérer les external_message_id stockés pour ce contact (20 plus récents)
   const { data: storedMsgs, error: msgsErr } = await supabase
     .from('communication_messages')
-    .select('external_message_id, direction, sent_at, subject')
+    .select('external_message_id, direction, sent_at, subject, provider')
     .eq('contact_id', contactId)
     .eq('organization_id', organizationId)
     .order('sent_at', { ascending: false })
@@ -211,7 +289,7 @@ Deno.serve(async (req) => {
 
   if (msgsErr || !storedMsgs?.length) {
     return jsonResponse({
-      error: 'Aucun email synchronisé pour ce contact. Lancez d\'abord une synchronisation Gmail.',
+      error: 'Aucun email synchronisé pour ce contact. Lancez d\'abord une synchronisation.',
       code: 'NO_MESSAGES',
     }, 400);
   }
@@ -224,40 +302,61 @@ Deno.serve(async (req) => {
   const contactName = contactRow?.full_name ?? 'Contact';
   const userEmail = user.email ?? '';
 
-  // 4. Récupérer les corps d'emails depuis Gmail (les 10 plus récents)
+  // 4. Récupérer les corps d'emails depuis Gmail ET/OU Outlook selon le provider
   const msgsToFetch = storedMsgs.slice(0, 10);
   const emailBodies: Array<{ direction: string; subject: string; body: string; date: string }> = [];
 
   await Promise.all(msgsToFetch.map(async (msg: any) => {
+    const provider: string = msg.provider ?? 'google';
     try {
-      const res = await fetch(
-        `${GMAIL_API}/users/me/messages/${msg.external_message_id}?format=full`,
-        { headers: { Authorization: `Bearer ${gmailToken}` } },
-      );
-      if (!res.ok) return;
-      const gmailMsg = await res.json();
-      const headers: Array<{ name: string; value: string }> = gmailMsg.payload?.headers ?? [];
-
-      // Compter les destinataires directs (To) pour détecter emails de masse
-      // Ignorer newsletters, bulk, automatiques
-      if (isNewsletter(headers)) return;
-
-      const rawBody = extractTextPlain(gmailMsg.payload);
-      const cleanedBody = cleanBody(rawBody, 800);
-      if (cleanedBody.length > 20) {
-        emailBodies.push({
-          direction: msg.direction,
-          subject: msg.subject ?? '(Sans objet)',
-          body: cleanedBody,
-          date: msg.sent_at,
-        });
+      if (provider === 'microsoft' && outlookToken) {
+        // ── Microsoft Graph ────────────────────────────────────────────────
+        const res = await fetch(
+          `${GRAPH_API}/me/messages/${msg.external_message_id}?$select=body,subject,isDraft`,
+          { headers: { Authorization: `Bearer ${outlookToken}`, ConsistencyLevel: 'eventual' } },
+        );
+        if (!res.ok) return;
+        const graphMsg = await res.json();
+        if (graphMsg.isDraft) return;
+        const contentType: string = graphMsg.body?.contentType ?? 'text';
+        const rawContent: string = graphMsg.body?.content ?? '';
+        const text = contentType === 'html' ? stripHtml(rawContent) : rawContent;
+        const cleanedBody = cleanBody(text, 800);
+        if (cleanedBody.length > 20) {
+          emailBodies.push({
+            direction: msg.direction,
+            subject: msg.subject ?? graphMsg.subject ?? '(Sans objet)',
+            body: cleanedBody,
+            date: msg.sent_at,
+          });
+        }
+      } else if (gmailToken) {
+        // ── Gmail API ─────────────────────────────────────────────────────
+        const res = await fetch(
+          `${GMAIL_API}/users/me/messages/${msg.external_message_id}?format=full`,
+          { headers: { Authorization: `Bearer ${gmailToken}` } },
+        );
+        if (!res.ok) return;
+        const gmailMsg = await res.json();
+        const headers: Array<{ name: string; value: string }> = gmailMsg.payload?.headers ?? [];
+        if (isNewsletter(headers)) return;
+        const rawBody = extractTextPlain(gmailMsg.payload);
+        const cleanedBody = cleanBody(rawBody, 800);
+        if (cleanedBody.length > 20) {
+          emailBodies.push({
+            direction: msg.direction,
+            subject: msg.subject ?? '(Sans objet)',
+            body: cleanedBody,
+            date: msg.sent_at,
+          });
+        }
       }
     } catch { /* ignore les erreurs individuelles */ }
   }));
 
   if (emailBodies.length === 0) {
     return jsonResponse({
-      error: 'Impossible de lire les corps des emails. Vérifiez les permissions Gmail.',
+      error: 'Impossible de lire les corps des emails. Vérifiez les permissions de votre messagerie.',
       code: 'BODY_READ_FAILED',
     }, 400);
   }

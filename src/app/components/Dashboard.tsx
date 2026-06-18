@@ -848,83 +848,116 @@ export default function Dashboard() {
           </button>
         )}
 
-        {/* Rangée KPI — NPS (anneau) + comptes + contacts + signaux (maquette) */}
+        {/* ══ Rangée KPI — 4 cartes (maquette) ══════════════════════════════ */}
         <motion.div
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
-          className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]"
+          className="grid grid-cols-1 gap-3 mb-6 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]"
         >
-          {/* NPS — carte anneau violette */}
-          <div className="rounded-2xl p-6 flex items-center gap-4" style={{ background: 'linear-gradient(135deg,#6E50C8,#5A3EAA)' }}>
+          {/* ── NPS — carte anneau violette ──────────────────────────────── */}
+          <div
+            className="rounded-2xl flex items-center gap-4 flex-shrink-0"
+            style={{ background: '#6E50C8', padding: '16px 20px', boxShadow: '0 6px 28px rgba(110,80,200,0.22)' }}
+          >
+            {/* Ring donut */}
             <div
-              className="size-[72px] rounded-full flex-shrink-0 flex items-center justify-center"
-              style={{ background: `conic-gradient(#fff ${(nps?.avgScore ?? 0) * 3.6}deg, rgba(255,255,255,0.18) 0deg)` }}
+              className="flex-shrink-0 flex items-center justify-center"
+              style={{
+                width: 76, height: 76, borderRadius: '50%',
+                background: `conic-gradient(rgba(255,255,255,0.88) ${(nps?.avgScore ?? 0) * 3.6}deg, rgba(255,255,255,0.15) 0deg)`,
+              }}
             >
-              <div className="size-[58px] rounded-full flex flex-col items-center justify-center" style={{ background: '#6E50C8' }}>
-                <span className="text-2xl font-black text-white leading-none">{nps?.avgScore ?? '—'}</span>
-                <span className="text-[8px] text-white/60" style={{ fontFamily: 'var(--mono)' }}>/ 100</span>
+              <div
+                className="flex flex-col items-center justify-center"
+                style={{ width: 60, height: 60, borderRadius: '50%', background: '#5A3EAA' }}
+              >
+                <span style={{ fontFamily: 'Epilogue, sans-serif', fontWeight: 900, fontSize: 26, color: '#fff', lineHeight: 1 }}>
+                  {nps?.avgScore ?? '—'}
+                </span>
+                <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 8, color: 'rgba(255,255,255,0.45)', marginTop: 1 }}>
+                  / 100
+                </span>
               </div>
             </div>
+            {/* Labels */}
             <div className="min-w-0">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-white/50 mb-1.5" style={{ fontFamily: 'var(--mono)' }}>
-                Capital relationnel · NPS
+              <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.10em', color: 'rgba(255,255,255,0.48)', marginBottom: 6 }}>
+                Capital Relationnel · NPS
               </p>
-              <p className="text-lg font-black text-white leading-tight">
+              <p style={{ fontFamily: 'Epilogue, sans-serif', fontWeight: 800, fontSize: 17, color: '#fff', lineHeight: 1.25 }}>
                 {npsBand(nps?.avgScore ?? null).label}
-                {nps && nps.value > 0 && (
-                  <span className="text-sm font-semibold text-white/70"> ↗ +{nps.value}</span>
+                {nps && nps.value !== 0 && (
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.60)', marginLeft: 6 }}>
+                    {nps.value > 0 ? '↗' : '↘'} {nps.value > 0 ? '+' : ''}{nps.value} ce mois
+                  </span>
                 )}
               </p>
             </div>
           </div>
 
-          {/* Comptes */}
-          <KnowrCard className="p-6 rounded-2xl flex flex-col justify-center">
-            <p className="leading-none">
-              <span className="text-4xl font-black">{companiesCount || '—'}</span>
-              <span className="text-base font-semibold text-muted-foreground ml-1.5">comptes</span>
-            </p>
-          </KnowrCard>
+          {/* ── Comptes ────────────────────────────────────────────────────── */}
+          <div
+            className="rounded-2xl flex items-center"
+            style={{ background: '#fff', border: '1px solid rgba(110,80,200,0.10)', boxShadow: '0 1px 4px rgba(110,80,200,0.07)', padding: '16px 20px' }}
+          >
+            <span style={{ fontFamily: 'Epilogue, sans-serif', fontWeight: 900, fontSize: 40, color: '#1A1040', lineHeight: 1, marginRight: 10 }}>
+              {companiesCount || '—'}
+            </span>
+            <span style={{ fontFamily: 'Epilogue, sans-serif', fontSize: 15, color: '#5A4880', lineHeight: 1.4 }}>
+              comptes
+            </span>
+          </div>
 
-          {/* Contacts */}
-          <KnowrCard className="p-6 rounded-2xl flex flex-col justify-center">
-            <p className="leading-none flex items-center gap-2 flex-wrap">
-              <span className="text-4xl font-black">{totalContacts || '—'}</span>
-              <span className="text-base font-semibold text-muted-foreground">contacts</span>
-            </p>
-          </KnowrCard>
+          {/* ── Contacts ───────────────────────────────────────────────────── */}
+          <div
+            className="rounded-2xl flex items-center gap-2 flex-wrap"
+            style={{ background: '#fff', border: '1px solid rgba(110,80,200,0.10)', boxShadow: '0 1px 4px rgba(110,80,200,0.07)', padding: '16px 20px' }}
+          >
+            <span style={{ fontFamily: 'Epilogue, sans-serif', fontWeight: 900, fontSize: 40, color: '#1A1040', lineHeight: 1, marginRight: 8 }}>
+              {totalContacts || '—'}
+            </span>
+            <span style={{ fontFamily: 'Epilogue, sans-serif', fontSize: 15, color: '#5A4880', lineHeight: 1.4 }}>
+              contacts
+            </span>
+            {totalEmails > 0 && (
+              <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 8, fontWeight: 700, padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.06em', color: '#2EA86A', background: 'rgba(46,168,106,0.12)', marginLeft: 2 }}>
+                ↗ {totalEmails.toLocaleString('fr-FR')} emails
+              </span>
+            )}
+          </div>
 
-          {/* Signaux + chips familles */}
-          <KnowrCard className="p-6 rounded-2xl flex flex-col justify-center">
-            <p className="leading-none mb-2">
-              <span className="text-4xl font-black">{signalsFeed.length || '—'}</span>
-              <span className="text-base font-semibold text-muted-foreground ml-1.5">signaux</span>
-            </p>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {signalCounts.risque > 0 && (
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase" style={{ color: '#C97A20', background: 'rgba(201,122,32,0.12)', fontFamily: 'var(--mono)' }}>{signalCounts.risque} risque</span>
-              )}
-              {signalCounts.levier > 0 && (
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase" style={{ color: '#2EA86A', background: 'rgba(46,168,106,0.12)', fontFamily: 'var(--mono)' }}>{signalCounts.levier} levier</span>
-              )}
-              {signalCounts.marche > 0 && (
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase" style={{ color: '#3D6FCC', background: 'rgba(61,111,204,0.12)', fontFamily: 'var(--mono)' }}>{signalCounts.marche} marché</span>
-              )}
+          {/* ── Signaux ────────────────────────────────────────────────────── */}
+          <div
+            className="rounded-2xl flex flex-col justify-center"
+            style={{ background: '#fff', border: '1px solid rgba(110,80,200,0.10)', boxShadow: '0 1px 4px rgba(110,80,200,0.07)', padding: '16px 20px' }}
+          >
+            <div className="flex items-center" style={{ marginBottom: signalsFeed.length > 0 ? 8 : 0 }}>
+              <span style={{ fontFamily: 'Epilogue, sans-serif', fontWeight: 900, fontSize: 40, color: '#1A1040', lineHeight: 1, marginRight: 10 }}>
+                {signalsFeed.length || '—'}
+              </span>
+              <span style={{ fontFamily: 'Epilogue, sans-serif', fontSize: 15, color: '#5A4880', lineHeight: 1.4 }}>
+                signaux
+              </span>
             </div>
-          </KnowrCard>
-
-          {/* Mails synchronisés (compteur animé) */}
-          <KnowrCard className="p-6 rounded-2xl flex flex-col justify-center">
-            <div className="flex items-center justify-between mb-1">
-              <Mail className="size-5 text-primary" />
-              {totalEmails > 0 && (
-                <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full animate-pulse">LIVE</span>
-              )}
-            </div>
-            <p className="text-3xl font-black tabular-nums leading-none">
-              {displayedEmails > 0 ? displayedEmails.toLocaleString('fr-FR') : '—'}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">Mails synchronisés</p>
-          </KnowrCard>
+            {signalsFeed.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {signalCounts.risque > 0 && (
+                  <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 8, fontWeight: 700, padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.06em', color: '#D94F63', background: 'rgba(217,79,99,0.12)' }}>
+                    {signalCounts.risque} risque
+                  </span>
+                )}
+                {signalCounts.levier > 0 && (
+                  <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 8, fontWeight: 700, padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.06em', color: '#2EA86A', background: 'rgba(46,168,106,0.12)' }}>
+                    {signalCounts.levier} levier
+                  </span>
+                )}
+                {signalCounts.marche > 0 && (
+                  <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 8, fontWeight: 700, padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '.06em', color: '#3D6FCC', background: 'rgba(61,111,204,0.12)' }}>
+                    {signalCounts.marche} marché
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </motion.div>
 
         {/* Cette semaine · à faire (maquette) */}
@@ -1035,11 +1068,11 @@ export default function Dashboard() {
             ) : (
               <KnowrCard className="rounded-2xl overflow-hidden p-0">
                 {/* En-tête colonnes */}
-                <div className="flex items-center gap-3 px-5 py-2.5 border-b border-border text-[9px] font-bold uppercase tracking-widest text-muted-foreground" style={{ fontFamily: 'var(--mono)' }}>
-                  <span className="flex-1">Compte</span>
-                  <span className="w-28 text-center">NPS</span>
-                  <span className="w-12 text-right">Vu</span>
-                  <span className="w-10 text-right">Action</span>
+                <div className="flex items-center gap-3 border-b border-border" style={{ padding: '10px 20px 10px 20px' }}>
+                  <span className="flex-1" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--t3, #9082B8)' }}>Compte</span>
+                  <span className="w-28 text-center" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--t3, #9082B8)' }}>NPS</span>
+                  <span className="w-12 text-right" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--t3, #9082B8)' }}>Vu</span>
+                  <span className="w-10 text-right" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--t3, #9082B8)' }}>→</span>
                 </div>
                 <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
                   {comptesSorted.slice(0, 12).map(company => {
@@ -1050,16 +1083,15 @@ export default function Dashboard() {
                     const TrendIcon = company.trend > 1 ? TrendingUp : company.trend < -1 ? TrendingDown : ArrowRight;
                     const trendColor = company.trend > 1 ? '#2EA86A' : company.trend < -1 ? '#D94F63' : '#9082B8';
                     return (
-                      <div key={company.id} className="relative flex items-center gap-3 px-5 py-3 hover:bg-muted/20 transition-colors group">
-                        {/* accent bas par bande */}
-                        <span className="absolute bottom-0 left-5 right-5 h-px" style={{ background: band.color, opacity: 0.4 }} />
+                      <div key={company.id} className="relative flex items-center gap-3 py-3 hover:bg-muted/20 transition-colors group"
+                        style={{ paddingLeft: '17px', paddingRight: '20px', borderLeft: `3px solid ${band.color}` }}>
                         {/* Compte */}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold truncate">{company.name}</p>
                           {company.subtitle && <p className="text-[11px] text-muted-foreground truncate">{company.subtitle}</p>}
                           {chip && (
-                            <span className="inline-block mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
-                              style={{ color: chip.color, background: chip.bg, fontFamily: 'var(--mono)' }}>
+                            <span className="inline-block mt-1 uppercase"
+                              style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '8px', fontWeight: 700, padding: '2px 7px', borderRadius: '999px', letterSpacing: '.06em', color: chip.color, background: chip.bg }}>
                               Prio {company.verdict!.score} · {chip.label}
                             </span>
                           )}
@@ -1068,14 +1100,14 @@ export default function Dashboard() {
                         <div className="w-28 flex items-center justify-center gap-1.5">
                           {company.npsScore != null ? (
                             <>
-                              <span className="text-lg font-black font-mono" style={{ color: band.color }}>{company.npsScore}</span>
-                              <span className="text-[8px] font-bold px-1 py-0.5 rounded uppercase" style={{ color: band.color, background: band.bg, fontFamily: 'var(--mono)' }}>{band.label}</span>
+                              <span style={{ fontFamily: 'Epilogue, sans-serif', fontWeight: 800, fontSize: '16px', color: band.color }}>{company.npsScore}</span>
+                              <span className="uppercase" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '8px', fontWeight: 700, padding: '2px 5px', borderRadius: '4px', color: band.color, background: band.bg }}>{band.label}</span>
                               <TrendIcon className="size-3" style={{ color: trendColor }} />
                             </>
                           ) : <span className="text-xs text-muted-foreground">—</span>}
                         </div>
                         {/* Vu */}
-                        <span className="w-12 text-right text-xs font-mono font-semibold text-muted-foreground">{daysText}</span>
+                        <span className="w-12 text-right font-semibold" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '11px', color: 'var(--t3, #9082B8)' }}>{daysText}</span>
                         {/* Action */}
                         <button onClick={() => navigate(`/company/${company.id}`)}
                           className="w-10 flex justify-end" title="Ouvrir le compte">
