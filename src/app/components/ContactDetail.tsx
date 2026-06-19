@@ -21,6 +21,20 @@ import ViewSwitcher from './knowr/ViewSwitcher';
 import Coachmark from './knowr/Coachmark';
 import { computeVerdict } from '../../lib/scoring';
 
+// ── Suggestions de fusion ignorées (persistées localement, paire non ordonnée) ──
+const MERGE_DISMISSED_KEY = 'knowr.merge.dismissed';
+function mergePairKey(a: string, b: string) { return [a, b].sort().join(':'); }
+function getDismissedMerges(): string[] {
+  try { return JSON.parse(localStorage.getItem(MERGE_DISMISSED_KEY) ?? '[]'); } catch { return []; }
+}
+function isMergeDismissed(a: string, b: string): boolean {
+  return getDismissedMerges().includes(mergePairKey(a, b));
+}
+function dismissMergePair(a: string, b: string) {
+  const next = Array.from(new Set([...getDismissedMerges(), mergePairKey(a, b)]));
+  try { localStorage.setItem(MERGE_DISMISSED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ContactRow {
   id: string; full_name: string; email?: string; role_title?: string;
@@ -336,7 +350,7 @@ export default function ContactDetail() {
         triggerEnrichment(id, oid);
       }
 
-      findMergeCandidates(id).then(c => setMergeCandidates(c)).catch(() => {});
+      findMergeCandidates(id).then(c => setMergeCandidates(c.filter(mc => !isMergeDismissed(id, mc.id)))).catch(() => {});
     } catch (e) {
       console.error('ContactDetail load error:', e);
       setLoading(false);
@@ -358,6 +372,12 @@ export default function ContactDetail() {
     } finally {
       setMerging(false);
     }
+  };
+
+  // Rejette une suggestion de fusion : disparaît immédiatement + ne réapparaît plus (persisté)
+  const dismissMerge = (secondaryId: string) => {
+    if (id) dismissMergePair(id, secondaryId);
+    setMergeCandidates(prev => prev.filter(c => c.id !== secondaryId));
   };
 
   const handleAnalyzeEmails = async () => {
@@ -820,6 +840,14 @@ export default function ContactDetail() {
                       >
                         {merging ? <Loader2 className="size-3 animate-spin" /> : null}
                         Fusionner
+                      </button>
+                      <button
+                        onClick={() => dismissMerge(mc.id)}
+                        disabled={merging}
+                        title="Ce n'est pas un doublon — ignorer la suggestion"
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-border text-muted-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
+                      >
+                        Ignorer
                       </button>
                     </div>
                   ))}
