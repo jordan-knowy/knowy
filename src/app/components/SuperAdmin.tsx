@@ -198,7 +198,7 @@ export default function SuperAdmin() {
     }
   };
 
-  const PLAN_OPTIONS = ['free', 'pro', 'business', 'enterprise', 'super_admin'];
+  const PLAN_OPTIONS = ['free', 'pro', 'business', 'enterprise', 'tester', 'super_admin'];
 
   const load = useCallback(async () => {
     if (!supabase) return;
@@ -611,6 +611,12 @@ export default function SuperAdmin() {
             <KnowrCard className="overflow-hidden">
               <div className="p-4 border-b border-border flex items-center justify-between">
                 <h3 className="font-bold">{orgs.length} organisations</h3>
+                {orgs.filter(o => o.planId === 'tester').length > 0 && (
+                  <span className="text-xs font-semibold px-3 py-1.5 rounded-full"
+                    style={{ background: 'var(--amber-s, #FBF0E2)', color: 'var(--amber, #C97A20)' }}>
+                    {orgs.filter(o => o.planId === 'tester').length} testeur{orgs.filter(o => o.planId === 'tester').length > 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
