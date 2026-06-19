@@ -236,8 +236,8 @@ export default function AccountSettings() {
       .from('memberships').select('role').eq('user_id', u.id).maybeSingle();
     setIsAdmin((membership as any)?.role === 'admin');
 
-    // Source de vérité = table super_admins (RLS user_id = auth.uid())
-    const { data: sa } = await supabase.from('super_admins').select('id').maybeSingle();
+    // Source de vérité = table super_admins (filtre explicite + RLS user_id = auth.uid())
+    const { data: sa } = await supabase.from('super_admins').select('id').eq('user_id', u.id).maybeSingle();
     setIsSuperAdmin(!!sa);
   }, []);
 
@@ -613,6 +613,29 @@ export default function AccountSettings() {
             );
           })}
         </div>
+
+        {/* Accès Super Admin — visible uniquement pour les super admins, sur tous les onglets */}
+        {isSuperAdmin && (
+          <button
+            onClick={() => navigate('/super-admin')}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', marginBottom: 16,
+              borderRadius: 16, border: '2px solid rgba(110,80,200,.30)',
+              background: 'linear-gradient(90deg, rgba(110,80,200,.10), rgba(110,80,200,.04))',
+              cursor: 'pointer', textAlign: 'left', transition: 'all 0.18s ease' }}
+          >
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: '#6E50C8',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Shield style={{ width: 18, height: 18, color: '#fff' }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#6E50C8' }}>Mode Super Admin</div>
+              <div style={{ fontSize: 11, color: '#9082B8', fontFamily: 'var(--mono, monospace)' }}>
+                Vision 360° · Organisations · Plans · Utilisateurs
+              </div>
+            </div>
+            <ExternalLink style={{ width: 15, height: 15, color: '#6E50C8' }} />
+          </button>
+        )}
 
         {/* ══ PROFILE TAB ══════════════════════════════════════════════════ */}
         {activeTab === 'profile' && (
