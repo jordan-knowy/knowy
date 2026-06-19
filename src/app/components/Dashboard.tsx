@@ -266,25 +266,30 @@ export default function Dashboard() {
 
       // ── Google : calendrier + emails ──────────────────────────────────────
       if (hasGoogle) {
-        if (providerToken) {
-          // Calendrier — nécessite le token de session Google
-          const calRes = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ organizationId: orgId, providerToken }),
-          });
-          const calData = await calRes.json();
-          if (calRes.ok) {
-            totalCreated += calData.stats?.created ?? 0;
-            syncedProviders.push('Google');
-          }
+        // Sème le token frais (+ refresh) si la session en a un, pour le renouvellement serveur
+        if (!isMsSession && providerToken && session.user) {
+          await (supabase.from('connectors') as any).upsert({
+            organization_id: orgId, user_id: session.user.id, provider: 'google', status: 'connected',
+            metadata: { access_token: providerToken, refresh_token: (session as any).provider_refresh_token ?? null, email: session.user.email, token_stored_at: new Date().toISOString() },
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'organization_id,user_id,provider' });
         }
-        // Emails Gmail — utilise le token stocké en base (mis à jour par sync-google-calendar)
-        // Pas conditionné à providerToken : ingest résout le token depuis connectors.metadata
+        // Calendrier — le serveur résout/rafraîchit le token depuis le connecteur si la session n'en a pas
+        const calRes = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ organizationId: orgId, providerToken: providerToken ?? null }),
+        });
+        const calData = await calRes.json().catch(() => ({}));
+        if (calRes.ok) {
+          totalCreated += calData.stats?.created ?? 0;
+          syncedProviders.push('Google');
+        }
+        // Emails Gmail — ingest résout le token depuis connectors.metadata (refresh serveur)
         const emailRes = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
           method: 'POST', headers,
           body: JSON.stringify({ organizationId: orgId, providerToken: providerToken ?? null, provider: 'google', lookbackDays: 3650 }),
         });
-        const emailData = await emailRes.json();
+        const emailData = await emailRes.json().catch(() => ({}));
         if (emailRes.ok) totalEmails += emailData.stats?.messages ?? 0;
       }
 
