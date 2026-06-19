@@ -449,7 +449,8 @@ Deno.serve(async (req) => {
       .eq('organization_id', organizationId)
       .is('merged_into_contact_id', null)
       .not('email', 'is', null)
-      .limit(50); // cap per call
+      .order('updated_at', { ascending: false })
+      .limit(150); // cap par appel (priorité aux contacts récents)
     targetContacts = (data ?? []).filter((c: any) => c.email);
   }
 

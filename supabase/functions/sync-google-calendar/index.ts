@@ -185,6 +185,8 @@ Deno.serve(async (req) => {
   let created = 0;
   let updated = 0;
   let skipped = 0;
+  // Participants externes rencontrés → deviendront des contacts (pour que l'ingestion emails ait des cibles)
+  const discovered = new Map<string, string>();
 
   for (const event of meetingEvents) {
     const startsAt = event.start?.dateTime || event.start?.date;
@@ -198,6 +200,15 @@ Deno.serve(async (req) => {
       return domain !== userDomain;
     });
     const isExternal = externalAttendees.length > 0;
+
+    // Mémorise les participants externes exploitables (hors noreply / adresses calendrier)
+    for (const a of externalAttendees) {
+      const em = (a.email || '').toLowerCase().trim();
+      if (!em || em.includes('noreply') || em.includes('no-reply') || em.includes('donotreply')) continue;
+      const dom = em.split('@')[1] || '';
+      if (!dom || dom.endsWith('calendar.google.com') || dom.endsWith('resource.calendar.google.com')) continue;
+      if (!discovered.has(em)) discovered.set(em, a.displayName || em.split('@')[0]);
+    }
 
     // Get video link
     const videoLink = event.hangoutLink ||
@@ -262,6 +273,26 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── Auto-création de contacts depuis les participants externes ───────────────
+  // Sans ça, ingest-communication n'a aucune cible et n'ingère aucun email.
+  let contactsCreated = 0;
+  if (discovered.size > 0) {
+    const emails = [...discovered.keys()];
+    const { data: existing } = await supabase
+      .from('contacts')
+      .select('email')
+      .eq('organization_id', organizationId)
+      .in('email', emails);
+    const existingSet = new Set((existing ?? []).map((c: any) => (c.email || '').toLowerCase()));
+    const rows = emails
+      .filter(e => !existingSet.has(e))
+      .map(e => ({ organization_id: organizationId, email: e, full_name: discovered.get(e) || e.split('@')[0] }));
+    if (rows.length) {
+      const { data: ins } = await supabase.from('contacts').insert(rows).select('id');
+      contactsCreated = ins?.length ?? 0;
+    }
+  }
+
   // Update connector — stocke aussi le token pour que ingest-communication puisse l'utiliser
   const { data: existingConn } = await supabase
     .from('connectors')
@@ -295,6 +326,7 @@ Deno.serve(async (req) => {
       created,
       updated,
       skipped,
+      contacts_created: contactsCreated,
     },
   });
 });
