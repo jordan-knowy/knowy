@@ -459,10 +459,16 @@ export default function AccountSettings() {
   }
 
   async function handleLogout() {
-    if (!supabase) return;
     setLoggingOut(true);
-    await supabase.auth.signOut();
-    navigate('/signin');
+    // Déconnexion infaillible : on tente signOut, mais on redirige quoi qu'il arrive.
+    try {
+      await Promise.race([
+        supabase?.auth.signOut({ scope: 'local' as any }) ?? Promise.resolve(),
+        new Promise((r) => setTimeout(r, 1500)), // ne jamais rester bloqué
+      ]);
+    } catch { /* ignore */ }
+    // Hard redirect → réinitialise complètement l'état de l'app sans session.
+    window.location.assign('/signin');
   }
 
   async function handleSaveProfile() {
