@@ -116,13 +116,13 @@ export default function OnboardingStep4() {
         {/* Progress bar */}
         <div className="mb-12">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-muted-foreground">Étape 4 sur 5</span>
-            <span className="text-sm font-medium text-primary">80%</span>
+            <span className="text-sm text-muted-foreground">Étape 3 sur 4</span>
+            <span className="text-sm font-medium text-primary">75%</span>
           </div>
           <div className="w-full bg-border rounded-full h-2">
             <motion.div
-              initial={{ width: '60%' }}
-              animate={{ width: '80%' }}
+              initial={{ width: '50%' }}
+              animate={{ width: '75%' }}
               transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
               className="bg-primary rounded-full h-2"
             />
@@ -290,25 +290,6 @@ export default function OnboardingStep4() {
                   className="size-5 rounded border-2 border-primary text-primary focus:ring-2 focus:ring-primary/20"
                 />
               </label>
-
-              <label className="flex items-center justify-between p-4 rounded-xl border border-border cursor-pointer hover:bg-muted/30 transition-colors">
-                <div className="flex items-center gap-3">
-                  <svg className="size-5" viewBox="0 0 24 24" fill="none">
-                    <path d="M6 15a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H6z" fill="#6E50C8" opacity="0.2"/>
-                    <path d="M5 19a2 2 0 0 1-2-2v-2h18v2a2 2 0 0 1-2 2H5z" fill="#6E50C8"/>
-                  </svg>
-                  <div>
-                    <p className="font-medium">Slack</p>
-                    <p className="text-sm text-muted-foreground">Intégration workspace (à configurer plus tard)</p>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={slackNotifs}
-                  onChange={(e) => setSlackNotifs(e.target.checked)}
-                  className="size-5 rounded border-2 border-primary text-primary focus:ring-2 focus:ring-primary/20"
-                />
-              </label>
             </div>
           </motion.div>
 
@@ -363,7 +344,7 @@ export default function OnboardingStep4() {
           className="flex items-center justify-between mt-8"
         >
           <button
-            onClick={() => navigate('/onboarding/step3')}
+            onClick={() => navigate('/onboarding/step2')}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             Retour

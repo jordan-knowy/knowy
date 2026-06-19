@@ -3,6 +3,66 @@ import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 
+// Rafraîchit le token Google via le refresh_token stocké et le persiste dans connectors.
+// Indispensable pour que la sync calendrier fonctionne >1h après le login (sinon 401).
+async function refreshGoogleToken(
+  refreshToken: string,
+  supabase: any,
+  organizationId: string,
+  userId: string,
+): Promise<string | null> {
+  const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
+  const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
+  if (!clientId || !clientSecret) return null;
+
+  try {
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const newToken: string = data.access_token;
+    if (!newToken) return null;
+
+    const { data: conn } = await supabase
+      .from('connectors')
+      .select('metadata')
+      .eq('organization_id', organizationId)
+      .eq('user_id', userId)
+      .eq('provider', 'google')
+      .maybeSingle();
+
+    await supabase.from('connectors').update({
+      metadata: { ...(conn?.metadata ?? {}), access_token: newToken, stored_at: new Date().toISOString() },
+      status: 'connected',
+      updated_at: new Date().toISOString(),
+    }).eq('organization_id', organizationId).eq('user_id', userId).eq('provider', 'google');
+
+    return newToken;
+  } catch {
+    return null;
+  }
+}
+
+function fetchCalendarEvents(token: string, timeMin: string, timeMax: string) {
+  return fetch(
+    `${GOOGLE_CALENDAR_API}/calendars/primary/events?` +
+    `timeMin=${encodeURIComponent(timeMin)}&` +
+    `timeMax=${encodeURIComponent(timeMax)}&` +
+    `singleEvents=true&` +
+    `orderBy=startTime&` +
+    `maxResults=250`,
+    { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
+  );
+}
+
 interface GoogleEvent {
   id: string;
   summary?: string;
@@ -42,10 +102,29 @@ Deno.serve(async (req) => {
   if (userError || !user) return jsonResponse({ error: 'Unauthorized' }, 401);
 
   const body = await req.json().catch(() => ({}));
-  const { organizationId, providerToken } = body;
+  const { organizationId, providerToken: bodyToken } = body;
 
   if (!organizationId) return jsonResponse({ error: 'organizationId is required' }, 400);
-  if (!providerToken) return jsonResponse({ error: 'providerToken is required — please reconnect your Google account' }, 400);
+
+  // Résolution du token : token de session frais (body) → token stocké → refresh serveur.
+  // Rend la sync autonome (plus de dépendance à un login < 1h).
+  const { data: connector } = await supabase
+    .from('connectors')
+    .select('metadata, status')
+    .eq('organization_id', organizationId)
+    .eq('user_id', user.id)
+    .eq('provider', 'google')
+    .maybeSingle();
+
+  const refreshToken: string | null = (connector?.metadata as any)?.refresh_token ?? null;
+  let providerToken: string | null = bodyToken ?? (connector?.metadata as any)?.access_token ?? null;
+
+  if (!providerToken && refreshToken) {
+    providerToken = await refreshGoogleToken(refreshToken, supabase, organizationId, user.id);
+  }
+  if (!providerToken) {
+    return jsonResponse({ error: 'providerToken is required — please reconnect your Google account', code: 'TOKEN_MISSING' }, 400);
+  }
 
   // Fetch calendar events from Google Calendar API
   const now = new Date();
@@ -55,27 +134,23 @@ Deno.serve(async (req) => {
   let events: GoogleEvent[] = [];
 
   try {
-    const calRes = await fetch(
-      `${GOOGLE_CALENDAR_API}/calendars/primary/events?` +
-      `timeMin=${encodeURIComponent(timeMin)}&` +
-      `timeMax=${encodeURIComponent(timeMax)}&` +
-      `singleEvents=true&` +
-      `orderBy=startTime&` +
-      `maxResults=250`,
-      {
-        headers: {
-          Authorization: `Bearer ${providerToken}`,
-          Accept: 'application/json',
-        },
+    let calRes = await fetchCalendarEvents(providerToken, timeMin, timeMax);
+
+    // Token expiré → refresh serveur + un seul retry
+    if (calRes.status === 401 && refreshToken) {
+      const refreshed = await refreshGoogleToken(refreshToken, supabase, organizationId, user.id);
+      if (refreshed) {
+        providerToken = refreshed;
+        calRes = await fetchCalendarEvents(providerToken, timeMin, timeMax);
       }
-    );
+    }
 
     if (!calRes.ok) {
       const errText = await calRes.text();
       console.error('Google Calendar API error:', calRes.status, errText);
 
       if (calRes.status === 401) {
-        // Update connector status to indicate re-auth needed
+        // Refresh impossible (refresh_token absent/invalide) → reconnexion requise
         await supabase
           .from('connectors')
           .update({ status: 'needs_reauth', updated_at: new Date().toISOString() })

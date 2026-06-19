@@ -846,7 +846,10 @@ Instructions spécifiques :
     const rawContent = llmData.choices?.[0]?.message?.content ?? '{}';
     let profile: any = {};
     try { profile = JSON.parse(rawContent); }
-    catch { const m = rawContent.match(/\{[\s\S]*\}/); if (m) profile = JSON.parse(m[0]); }
+    catch {
+      try { const m = rawContent.match(/\{[\s\S]*\}/); if (m) profile = JSON.parse(m[0]); }
+      catch { console.error('[enrich-contact] LLM JSON parse failed, using empty profile. Raw:', rawContent.slice(0, 200)); }
+    }
 
     // ── 7. Upsert cognitive_profile ───────────────────────────────────────────
     const globalConfidence = stats.totalInteractions > 50 ? 80

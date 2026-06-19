@@ -18,6 +18,7 @@ import SignalRail, { type Signal } from './knowr/SignalRail';
 import VerdictCard from './knowr/VerdictCard';
 import ConfidenceRing from './knowr/ConfidenceRing';
 import ViewSwitcher from './knowr/ViewSwitcher';
+import Coachmark from './knowr/Coachmark';
 import { computeVerdict } from '../../lib/scoring';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -251,6 +252,7 @@ export default function ContactDetail() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [syncingContactEmails, setSyncingContactEmails] = useState(false);
+  const [syncEmailsMsg, setSyncEmailsMsg] = useState<string | null>(null);
 
   // ── Load all data ────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -394,43 +396,91 @@ export default function ContactDetail() {
   const syncContactEmails = async () => {
     if (!supabase || !id || syncingContactEmails || !contact?.email) return;
     setSyncingContactEmails(true);
+    setSyncEmailsMsg(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) { setSyncEmailsMsg('Session expirée — reconnectez-vous.'); return; }
       const oid = orgId ?? await getActiveOrganizationId();
-      if (!oid) return;
+      if (!oid) { setSyncEmailsMsg('Aucun workspace actif.'); return; }
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const headers = { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' };
+      const providerToken = session.provider_token ?? null;
+
       const { data: conns } = await supabase.from('connectors').select('provider, status, metadata')
         .eq('organization_id', oid).eq('status', 'connected');
       const connected = new Map((conns ?? []).map((c: any) => [c.provider as string, c]));
       const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
       const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
-      const fetches: Promise<any>[] = [];
-      if (connected.has('google')) {
-        const googleToken = (connected.get('google')?.metadata as any)?.access_token ?? (isMsSession ? null : session.provider_token) ?? null;
-        if (googleToken) {
-          fetches.push(fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ organizationId: oid, providerToken: googleToken, provider: 'google', contactEmails: [contact.email], lookbackDays: 3650, maxMessagesPerContact: 1000 }),
-          }));
+
+      // Sème le connecteur AVANT de calculer la disponibilité — indispensable pour les
+      // sessions fraîches sans record en base (sinon sync jamais déclenchée, en silence).
+      if (session.user && providerToken) {
+        if (isMsSession) {
+          await (supabase.from('connectors') as any).upsert({
+            organization_id: oid, user_id: session.user.id, provider: 'microsoft', status: 'connected',
+            metadata: { access_token: providerToken, refresh_token: (session as any).provider_refresh_token ?? (connected.get('microsoft')?.metadata as any)?.refresh_token ?? null, email: session.user.email, token_stored_at: new Date().toISOString() },
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'organization_id,user_id,provider' });
+        } else {
+          await (supabase.from('connectors') as any).upsert({
+            organization_id: oid, user_id: session.user.id, provider: 'google', status: 'connected',
+            metadata: { access_token: providerToken, refresh_token: (session as any).provider_refresh_token ?? (connected.get('google')?.metadata as any)?.refresh_token ?? null, email: session.user.email, token_stored_at: new Date().toISOString() },
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'organization_id,user_id,provider' });
         }
       }
-      if (connected.has('microsoft')) {
-        const msToken = (isMsSession && session.provider_token) ? session.provider_token : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null);
-        if (msToken) {
-          fetches.push(fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ organizationId: oid, providerToken: msToken, provider: 'microsoft', contactEmails: [contact.email], lookbackDays: 3650, maxMessagesPerContact: 1000 }),
-          }));
-        }
+      const hasGoogle = connected.has('google') || (!isMsSession && !!providerToken);
+      const hasMicrosoft = connected.has('microsoft') || (isMsSession && !!providerToken);
+
+      if (!hasGoogle && !hasMicrosoft) {
+        setSyncEmailsMsg('Aucune source mail connectée. Connectez Gmail ou Outlook dans Paramètres → Connexions.');
+        return;
       }
-      await Promise.allSettled(fetches);
+
+      // Tokens : session fraîche prioritaire, jamais le token MS vers Gmail.
+      const googleToken = hasGoogle
+        ? ((connected.get('google')?.metadata as any)?.access_token ?? (isMsSession ? null : providerToken) ?? null)
+        : null;
+      const msToken = hasMicrosoft
+        ? ((isMsSession && providerToken) ? providerToken : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null))
+        : null;
+
+      let totalSynced = 0;
+      let anyCall = false;
+      let tokenIssue = false;
+
+      const runIngest = async (token: string, provider: 'google' | 'microsoft') => {
+        anyCall = true;
+        try {
+          const r = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ organizationId: oid, providerToken: token, provider, contactEmails: [contact.email], lookbackDays: 3650, maxMessagesPerContact: 1000 }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (r.ok) totalSynced += d?.stats?.messages ?? 0;
+          else if (r.status === 401 || /token|auth/i.test(d?.error ?? '')) tokenIssue = true;
+        } catch { tokenIssue = true; }
+      };
+
+      if (googleToken) await runIngest(googleToken, 'google');
+      if (msToken) await runIngest(msToken, 'microsoft');
+
+      if (!anyCall) {
+        setSyncEmailsMsg('Token expiré. Relancez une synchronisation dans Paramètres → Connexions.');
+        return;
+      }
+
       await loadData();
+
+      if (totalSynced > 0) setSyncEmailsMsg(`✓ ${totalSynced} email${totalSynced > 1 ? 's' : ''} synchronisé${totalSynced > 1 ? 's' : ''}`);
+      else if (tokenIssue) setSyncEmailsMsg('Token expiré. Reconnectez la source dans Paramètres → Connexions.');
+      else setSyncEmailsMsg('Aucun nouvel email trouvé pour ce contact.');
     } catch (e: any) {
       console.error('Sync emails error:', e);
+      setSyncEmailsMsg(`Erreur : ${e?.message ?? 'inconnue'}`);
     } finally {
       setSyncingContactEmails(false);
+      setTimeout(() => setSyncEmailsMsg(null), 6000);
     }
   };
 
@@ -444,7 +494,16 @@ export default function ContactDetail() {
       });
       if (error) {
         const msg = (error as any)?.message ?? String(error);
-        setEnrichError(msg.includes('non-2xx') || msg.includes('404') ? 'deploy' : msg);
+        if (msg.includes('404')) {
+          setEnrichError('deploy');
+        } else {
+          let realMsg: string | null = null;
+          try {
+            const body = await (error as any)?.context?.json?.();
+            realMsg = body?.error ?? null;
+          } catch { /* ignore */ }
+          setEnrichError(realMsg ?? msg);
+        }
       } else {
         await loadData();
       }
@@ -787,6 +846,13 @@ export default function ContactDetail() {
             <pre className="bg-amber-100 rounded-xl px-4 py-3 text-xs font-mono text-amber-900 overflow-x-auto">{`supabase functions deploy enrich-contact`}</pre>
           </motion.div>
         )}
+        {enrichError && enrichError !== 'deploy' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4">
+            <p className="text-sm font-semibold text-red-800 mb-1">Erreur d'enrichissement</p>
+            <p className="text-xs text-red-700 font-mono">{enrichError}</p>
+          </motion.div>
+        )}
 
         {/* ══ PAGE LAYOUT: MAIN + ASIDE ══════════════════════════════════════ */}
         <div className="flex flex-col lg:flex-row gap-5">
@@ -1085,7 +1151,7 @@ export default function ContactDetail() {
               title="Échanges"
               icon={<MessageSquare className="size-4" />}
               badge={messages.length > 0 ? String(messages.length) : undefined}
-              defaultOpen={false}
+              defaultOpen={true}
             >
               {/* Stats */}
               <div className="grid grid-cols-3 gap-3 mb-5">
@@ -1128,7 +1194,7 @@ export default function ContactDetail() {
 
               {/* Timeline */}
               <div className="rounded-xl border border-border overflow-hidden">
-                <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                <div className="relative px-4 py-3 border-b border-border flex items-center gap-2">
                   <Clock className="size-4 text-muted-foreground" />
                   <span className="text-xs font-semibold">Historique des échanges</span>
                   <button
@@ -1141,7 +1207,24 @@ export default function ContactDetail() {
                       ? <><Loader2 className="size-3 animate-spin" /> Sync…</>
                       : <><RefreshCw className="size-3" /> Sync emails</>}
                   </button>
+                  <Coachmark
+                    id="personne-sync-emails"
+                    title="Synchronisez vos emails"
+                    text="Rapatriez vos échanges Gmail / Outlook avec ce contact. Reconnectez la source dans Paramètres si le token a expiré."
+                    className="top-full right-3 mt-2"
+                  />
                 </div>
+                {syncEmailsMsg && (
+                  <div
+                    className="px-4 py-2 text-[11px] font-medium border-b border-border"
+                    style={{
+                      color: syncEmailsMsg.startsWith('✓') ? 'var(--sage, #2EA86A)' : 'var(--coral, #D94F63)',
+                      background: syncEmailsMsg.startsWith('✓') ? 'var(--sage-s, #E4F5ED)' : 'var(--coral-s, #FDEAED)',
+                    }}
+                  >
+                    {syncEmailsMsg}
+                  </div>
+                )}
                 <div className="divide-y divide-border max-h-80 overflow-y-auto">
                   {[
                     ...messages.slice(0, 30).map(m => ({ type: 'email' as const, date: m.sent_at, title: m.subject || 'Email', direction: m.direction, id: m.id })),

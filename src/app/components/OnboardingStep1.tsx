@@ -237,11 +237,11 @@ export default function OnboardingStep1() {
       <div className="max-w-3xl mx-auto px-6 py-12">
         <div className="mb-12">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-muted-foreground">Étape 1 sur 5</span>
-            <span className="text-sm font-medium text-primary">20%</span>
+            <span className="text-sm text-muted-foreground">Étape 1 sur 4</span>
+            <span className="text-sm font-medium text-primary">25%</span>
           </div>
           <div className="w-full bg-border rounded-full h-2">
-            <motion.div initial={{ width: 0 }} animate={{ width: '20%' }} className="bg-primary rounded-full h-2" />
+            <motion.div initial={{ width: 0 }} animate={{ width: '25%' }} className="bg-primary rounded-full h-2" />
           </div>
         </div>
 

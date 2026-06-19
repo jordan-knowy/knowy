@@ -33,6 +33,7 @@ interface OrgRow {
   briefCount: number;
   hasGoogle: boolean;
   hasMicrosoft: boolean;
+  planId: string;
 }
 
 interface UserRow {
@@ -172,6 +173,32 @@ export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState<'overview' | 'orgs' | 'users' | 'network' | 'engagement'>('overview');
   const [engagement, setEngagement] = useState<EngagementStats | null>(null);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [savingPlanOrg, setSavingPlanOrg] = useState<string | null>(null);
+
+  // Assigner manuellement un plan à une org (super admin uniquement — RLS subscriptions_super_admin_update)
+  const assignPlan = async (organizationId: string, planId: string) => {
+    if (!supabase) return;
+    setSavingPlanOrg(organizationId);
+    setOrgs(prev => prev.map(o => o.id === organizationId ? { ...o, planId } : o)); // optimiste
+    try {
+      const { error } = await supabase.from('subscriptions')
+        .update({ plan_id: planId, status: 'active', updated_at: new Date().toISOString() })
+        .eq('organization_id', organizationId);
+      if (error) {
+        // Pas d'abonnement existant → on en crée un
+        await supabase.from('subscriptions').insert({
+          organization_id: organizationId, plan_id: planId, status: 'active',
+          billing_cycle: 'monthly', amount_per_period: 0,
+          started_at: new Date().toISOString(), current_period_start: new Date().toISOString(),
+          current_period_end: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
+        });
+      }
+    } finally {
+      setSavingPlanOrg(null);
+    }
+  };
+
+  const PLAN_OPTIONS = ['free', 'pro', 'business', 'enterprise', 'super_admin'];
 
   const load = useCallback(async () => {
     if (!supabase) return;
@@ -237,6 +264,7 @@ export default function SuperAdmin() {
         supabase.from('briefs').select('*', { count: 'exact', head: true }).eq('organization_id', org.id),
         supabase.from('connectors').select('provider, status').eq('organization_id', org.id).eq('status', 'connected'),
       ]);
+      const { data: sub } = await supabase.from('subscriptions').select('plan_id').eq('organization_id', org.id).eq('status', 'active').maybeSingle();
       return {
         ...org,
         memberCount: memberCount ?? 0,
@@ -245,6 +273,7 @@ export default function SuperAdmin() {
         briefCount: briefCount ?? 0,
         hasGoogle: connectors?.some(c => c.provider === 'google') ?? false,
         hasMicrosoft: connectors?.some(c => c.provider === 'microsoft') ?? false,
+        planId: (sub as any)?.plan_id ?? 'free',
       };
     }));
     setOrgs(orgDetails);
@@ -587,7 +616,7 @@ export default function SuperAdmin() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
-                      {['Organisation', 'Membres', 'Réunions', 'Contacts', 'Briefs', 'Connecteurs', 'Créée le'].map(h => (
+                      {['Organisation', 'Plan', 'Membres', 'Réunions', 'Contacts', 'Briefs', 'Connecteurs', 'Créée le'].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
@@ -598,6 +627,20 @@ export default function SuperAdmin() {
                         <td className="px-4 py-3">
                           <div className="font-medium">{org.name}</div>
                           <div className="text-xs text-muted-foreground">{org.slug}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <select
+                            value={org.planId}
+                            disabled={savingPlanOrg === org.id}
+                            onChange={(e) => assignPlan(org.id, e.target.value)}
+                            className="text-xs font-semibold rounded-lg border border-border bg-card px-2 py-1.5 capitalize focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                            title="Assigner un plan à cette organisation"
+                          >
+                            {PLAN_OPTIONS.map(p => (
+                              <option key={p} value={p}>{p.replace('_', ' ')}</option>
+                            ))}
+                          </select>
+                          {savingPlanOrg === org.id && <span className="ml-1 text-[10px] text-muted-foreground">…</span>}
                         </td>
                         <td className="px-4 py-3">
                           <KnowrBadge variant="default" size="sm">{org.memberCount}</KnowrBadge>

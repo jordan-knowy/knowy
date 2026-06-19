@@ -8,7 +8,8 @@ import {
   ChevronDown,
   Users,
   Building2,
-  Zap
+  Zap,
+  Shield
 } from 'lucide-react';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { supabase } from '../../lib/supabase';
@@ -24,6 +25,7 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
   const location = useLocation();
   const { profile } = useCurrentProfile();
   const [connectors, setConnectors] = useState({ google: false, linkedin: false, hubspot: false });
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -40,6 +42,8 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
         (data as any[]).forEach(c => { map[c.provider] = c.status === 'connected'; });
         setConnectors({ google: map['google'] ?? false, linkedin: map['linkedin'] ?? false, hubspot: map['hubspot'] ?? false });
       }
+      const { data: sa } = await supabase.from('super_admins').select('id').maybeSingle();
+      if (mounted) setIsSuperAdmin(!!sa);
     }
     loadConnectors();
     return () => { mounted = false; };
@@ -54,6 +58,7 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
 
   const bottomItems = [
     { id: 'settings', label: 'Paramètres', icon: Settings, path: '/account' },
+    ...(isSuperAdmin ? [{ id: 'super-admin', label: 'Super Admin', icon: Shield, path: '/super-admin' }] : []),
   ];
 
   const isActive = (path: string) => {
@@ -84,7 +89,7 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
       initial={{ x: -280 }}
       animate={{ x: 0 }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className="h-screen w-[220px] bg-sidebar border-r border-sidebar-border flex flex-col z-20 md:fixed md:left-0 md:top-0"
+      className="h-screen w-[238px] bg-sidebar border-r border-sidebar-border flex flex-col z-20 md:fixed md:left-0 md:top-0"
     >
       {/* Logo */}
       <div className="px-5 py-5 border-b border-sidebar-border">
@@ -107,22 +112,22 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
               onClick={() => go(item.path)}
               whileHover={{ x: 2 }}
               whileTap={{ scale: 0.98 }}
-              className={`w-full flex items-center gap-2.5 rounded-lg transition-all duration-150 ${
+              className={`w-full flex items-center gap-[11px] rounded-lg transition-all duration-150 ${
                 isActive(item.path)
                   ? 'bg-primary text-white shadow-sm'
                   : 'text-muted-foreground hover:bg-lavender-100 hover:text-foreground'
               }`}
-              style={{ padding: '8px 12px' }}
+              style={{ padding: '10px 12px' }}
             >
-              <item.icon className="size-4 flex-shrink-0" />
-              <span className="flex-1 text-left font-semibold" style={{ fontSize: '12.5px' }}>{item.label}</span>
+              <item.icon className="size-[18px] flex-shrink-0" />
+              <span className="flex-1 text-left font-semibold" style={{ fontSize: '13px' }}>{item.label}</span>
             </motion.button>
           ))}
 
           {/* Coach — V2, désactivé */}
-          <div className="w-full flex items-center gap-2.5 rounded-lg opacity-35 cursor-not-allowed select-none" style={{ padding: '8px 12px' }}>
+          <div className="w-full flex items-center gap-[11px] rounded-lg opacity-35 cursor-not-allowed select-none" style={{ padding: '10px 12px' }}>
             <Zap className="size-4 text-muted-foreground flex-shrink-0" />
-            <span className="flex-1 text-left font-semibold text-muted-foreground" style={{ fontSize: '12.5px' }}>Coach</span>
+            <span className="flex-1 text-left font-semibold text-muted-foreground" style={{ fontSize: '13px' }}>Coach</span>
             <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
               V2
             </span>
@@ -143,15 +148,15 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
                 onClick={() => go(item.path)}
                 whileHover={{ x: 2 }}
                 whileTap={{ scale: 0.98 }}
-                className={`w-full flex items-center gap-2.5 rounded-lg transition-all duration-150 ${
+                className={`w-full flex items-center gap-[11px] rounded-lg transition-all duration-150 ${
                   isActive(item.path)
                     ? 'bg-primary text-white shadow-sm'
                     : 'text-muted-foreground hover:bg-lavender-100 hover:text-foreground'
                 }`}
-                style={{ padding: '8px 12px' }}
+                style={{ padding: '10px 12px' }}
               >
                 <item.icon className="size-4 flex-shrink-0" />
-                <span className="flex-1 text-left font-semibold" style={{ fontSize: '12.5px' }}>{item.label}</span>
+                <span className="flex-1 text-left font-semibold" style={{ fontSize: '13px' }}>{item.label}</span>
               </motion.button>
             ))}
           </nav>

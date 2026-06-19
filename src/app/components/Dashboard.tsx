@@ -20,6 +20,7 @@ import type { Meeting as DomainMeeting } from '../../types/domain';
 import { computeVerdict, type VerdictData } from '../../lib/scoring';
 import { resolveAccountType } from '../../lib/accountType';
 import GlobalSearch from './knowr/GlobalSearch';
+import Coachmark from './knowr/Coachmark';
 
 // Posture → chip (spec-30/31)
 const POSTURE_CHIP: Record<string, { label: string; color: string; bg: string }> = {
@@ -1127,7 +1128,7 @@ export default function Dashboard() {
           {/* ── RIGHT : Feed signaux + Activité ─────────────────────────── */}
           <div className="flex flex-col gap-6">
             <div>
-            <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+            <div className="relative flex items-center justify-between gap-2 mb-1 flex-wrap">
               <h2 className="text-xl font-black flex items-center gap-2"><Zap className="size-5 text-primary" /> Feed signaux</h2>
               <button
                 onClick={runVeille}
@@ -1137,6 +1138,12 @@ export default function Dashboard() {
                 {veilleRunning ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCcw className="size-3.5" />}
                 {veilleRunning ? 'Veille en cours…' : 'Lancer la veille'}
               </button>
+              <Coachmark
+                id="home-veille"
+                title="Lancez la veille"
+                text="Knowr scanne l'actualité de vos comptes (LinkedIn · presse · web) et transforme chaque info en signal à valider."
+                className="top-full right-0 mt-2"
+              />
             </div>
             <p className="text-sm text-muted-foreground mb-3">Actualités des comptes (LinkedIn · presse · web) — valide ou écarte chaque info.</p>
             {veilleMsg && <p className="text-[11px] text-muted-foreground mb-3" style={{ fontFamily: 'var(--mono)' }}>{veilleMsg}</p>}

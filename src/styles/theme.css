@@ -31,7 +31,8 @@
   --color-blue-info-bg: #E5EDFF;
 
   /* SEMANTIC COLORS */
-  --color-background: var(--color-lavender-50);
+  /* Fond de page = exact maquette knowr-platform (--bg #F9F8FC), spec-16 */
+  --color-background: #F9F8FC;
   --color-foreground: var(--color-text-primary);
   --color-card: #FFFFFF;
   --color-card-foreground: var(--color-text-primary);
@@ -109,10 +110,10 @@
    vérité = les tokens @theme ci-dessus.
    ============================================================ */
 :root {
-  /* Fonds & sombres */
-  --bg:      var(--color-lavender-50);
-  --bg2:     var(--color-lavender-100);
-  --bg3:     var(--color-lavender-200);
+  /* Fonds & sombres — valeurs exactes maquette knowr-platform (spec-16) */
+  --bg:      #F9F8FC;
+  --bg2:     #F0EEF8;
+  --bg3:     #E8E4F4;
   --white:   #FFFFFF;
   --night:   var(--color-violet-night);       /* #1A1040 */
   --night2:  var(--color-violet-night-deep);  /* #2A1E60 */

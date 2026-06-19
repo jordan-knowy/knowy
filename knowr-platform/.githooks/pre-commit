@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Hook pre-commit Knowr : bloque le commit si les garde-fous echouent.
+# Activation (une fois) :  git config core.hooksPath .githooks
+echo "[knowr] garde-fous pre-commit…"
+bash "$(git rev-parse --show-toplevel)/generateur/garde-fous/check-reference-sets.sh"
+rc=$?
+if [ $rc -ne 0 ]; then
+  echo "[knowr] commit BLOQUE — corrige les garde-fous (ou 'git commit --no-verify' en dernier recours)."
+  exit 1
+fi

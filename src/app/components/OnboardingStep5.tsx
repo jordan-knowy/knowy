@@ -48,32 +48,40 @@ export default function OnboardingStep5() {
       completed_at: new Date().toISOString(),
     });
 
-    // 2. Launch real syncs with the Google token (best-effort)
+    // 2. Travail de fond RÉEL : calendrier → emails → découverte des personnes.
+    //    Le serveur rafraîchit les tokens via le connecteur (refresh_token), donc on
+    //    déclenche même si le token de session est absent/expiré. On attend la fin
+    //    pour que les données soient là quand le Dashboard s'ouvre.
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const providerToken = session?.provider_token;
       const accessToken = session?.access_token;
+      const providerToken = session?.provider_token ?? null;
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (!accessToken || !supabaseUrl) return;
 
-      if (providerToken && accessToken && supabaseUrl) {
-        const headers = { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+      const authProvider = (session?.user?.app_metadata as any)?.provider ?? '';
+      const isMsSession = authProvider === 'azure' || authProvider === 'microsoft';
+      const provider: 'google' | 'microsoft' = isMsSession ? 'microsoft' : 'google';
+      const headers = { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+      const call = (fn: string, body: Record<string, unknown>) =>
+        fetch(`${supabaseUrl}/functions/v1/${fn}`, { method: 'POST', headers, body: JSON.stringify(body) }).catch(() => null);
 
-        // Fire both syncs in parallel — don't wait (non-blocking)
-        Promise.allSettled([
-          fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ organizationId, providerToken }),
-          }),
-          fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ organizationId, providerToken, lookbackDays: 90 }),
-          }),
-        ]);
-      }
+      // 2a. Calendrier (réunions) — le serveur refresh le token si besoin
+      await call(isMsSession ? 'sync-outlook-calendar' : 'sync-google-calendar', { organizationId, providerToken });
+
+      // 2b. Emails (signaux + détection des comptes par domaine)
+      await call('ingest-communication', { organizationId, providerToken, provider, lookbackDays: 365 });
+
+      // 2c. Découverte des personnes à partir des échanges
+      await call('discover-contacts', {
+        organizationId,
+        googleToken: isMsSession ? null : providerToken,
+        microsoftToken: isMsSession ? providerToken : null,
+        lookbackDays: 365,
+        minExchanges: 1,
+      });
     } catch {
-      // Sync is best-effort — onboarding completes regardless
+      // Best-effort — l'onboarding se termine quoi qu'il arrive
     }
   }
 
@@ -117,12 +125,12 @@ export default function OnboardingStep5() {
         {/* Progress bar */}
         <div className="mb-12">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-muted-foreground">Étape 5 sur 5</span>
+            <span className="text-sm text-muted-foreground">Étape 4 sur 4</span>
             <span className="text-sm font-medium text-primary">100%</span>
           </div>
           <div className="w-full bg-border rounded-full h-2">
             <motion.div
-              initial={{ width: '80%' }}
+              initial={{ width: '75%' }}
               animate={{ width: '100%' }}
               transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
               className="bg-primary rounded-full h-2"

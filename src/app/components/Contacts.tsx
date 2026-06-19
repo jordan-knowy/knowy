@@ -26,6 +26,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import PageHeader from './knowr/PageHeader';
+import Coachmark from './knowr/Coachmark';
 import { supabase } from '../../lib/supabase';
 import { getActiveOrganizationId } from '../../lib/api/org';
 
@@ -873,15 +874,23 @@ export default function Contacts() {
                   {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                   <span className="hidden sm:inline">{syncing ? 'Sync…' : 'Actualiser'}</span>
                 </button>
-                <button
-                  onClick={discoverContacts}
-                  disabled={loadingSuggestions}
-                  className="px-4 py-2 bg-card border border-border hover:bg-muted/50 rounded-xl flex items-center gap-2 text-sm font-medium transition-colors disabled:opacity-50"
-                >
-                  {loadingSuggestions ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4 text-primary" />}
-                  <span className="hidden sm:inline">{loadingSuggestions ? 'Scan en cours…' : 'Découvrir via Mail'}</span>
-                  <span className="sm:hidden">{loadingSuggestions ? '…' : 'Mail'}</span>
-                </button>
+                <span className="relative">
+                  <button
+                    onClick={discoverContacts}
+                    disabled={loadingSuggestions}
+                    className="px-4 py-2 bg-card border border-border hover:bg-muted/50 rounded-xl flex items-center gap-2 text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {loadingSuggestions ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4 text-primary" />}
+                    <span className="hidden sm:inline">{loadingSuggestions ? 'Scan en cours…' : 'Découvrir via Mail'}</span>
+                    <span className="sm:hidden">{loadingSuggestions ? '…' : 'Mail'}</span>
+                  </button>
+                  <Coachmark
+                    id="personnes-discover"
+                    title="Découvrez vos contacts"
+                    text="Knowr scanne vos emails pour vous proposer les personnes avec qui vous échangez le plus."
+                    className="top-full right-0 mt-2"
+                  />
+                </span>
                 <button
                   onClick={() => setShowAddModal(true)}
                   className="px-4 py-2 bg-primary text-white hover:bg-accent rounded-xl flex items-center gap-2 text-sm font-medium transition-colors"

@@ -104,7 +104,7 @@ export default function OnboardingStep2() {
         step2: true,
         connected_providers: refreshedProviders,
       });
-      navigate('/onboarding/step3');
+      navigate('/onboarding/step4');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sauvegarde des connecteurs impossible.');
     }
@@ -119,11 +119,11 @@ export default function OnboardingStep2() {
       <div className="max-w-3xl mx-auto px-6 py-12">
         <div className="mb-12">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-muted-foreground">Étape 2 sur 5</span>
-            <span className="text-sm font-medium text-primary">40%</span>
+            <span className="text-sm text-muted-foreground">Étape 2 sur 4</span>
+            <span className="text-sm font-medium text-primary">50%</span>
           </div>
           <div className="w-full bg-border rounded-full h-2">
-            <motion.div initial={{ width: '20%' }} animate={{ width: '40%' }} className="bg-primary rounded-full h-2" />
+            <motion.div initial={{ width: '25%' }} animate={{ width: '50%' }} className="bg-primary rounded-full h-2" />
           </div>
         </div>
 

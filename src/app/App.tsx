@@ -7,7 +7,6 @@ import LandingPage from './components/LandingPage';
 import SignIn from './components/SignIn';
 import OnboardingStep1 from './components/OnboardingStep1';
 import OnboardingStep2 from './components/OnboardingStep2';
-import OnboardingStep3 from './components/OnboardingStep3';
 import OnboardingStep4 from './components/OnboardingStep4';
 import OnboardingStep5 from './components/OnboardingStep5';
 import Dashboard from './components/Dashboard';
@@ -133,7 +132,8 @@ export default function App() {
         {/* Onboarding routes — auto-skip if already complete */}
         <Route path="/onboarding/step1" element={<OnboardingRoute><OnboardingStep1 /></OnboardingRoute>} />
         <Route path="/onboarding/step2" element={<OnboardingRoute><OnboardingStep2 /></OnboardingRoute>} />
-        <Route path="/onboarding/step3" element={<OnboardingRoute><OnboardingStep3 /></OnboardingRoute>} />
+        {/* Step 3 (CRM v2) retiré — toute entrée legacy redirige vers l'étape 3 actuelle */}
+        <Route path="/onboarding/step3" element={<Navigate to="/onboarding/step4" replace />} />
         <Route path="/onboarding/step4" element={<OnboardingRoute><OnboardingStep4 /></OnboardingRoute>} />
         <Route path="/onboarding/step5" element={<OnboardingRoute><OnboardingStep5 /></OnboardingRoute>} />
 

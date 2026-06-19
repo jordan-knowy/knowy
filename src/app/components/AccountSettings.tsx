@@ -5,6 +5,7 @@ import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
 import { getActiveOrganizationId } from '../../lib/api/org';
+import PlanSummary from './knowr/PlanSummary';
 import {
   linkIdentityProvider,
   getConnectedIdentityProviders,
@@ -235,8 +236,9 @@ export default function AccountSettings() {
       .from('memberships').select('role').eq('user_id', u.id).maybeSingle();
     setIsAdmin((membership as any)?.role === 'admin');
 
-    const SUPER_ADMINS = ['jordan.knowy@gmail.com', 'jolacrypto1@gmail.com'];
-    setIsSuperAdmin(SUPER_ADMINS.includes(u.email ?? ''));
+    // Source de vérité = table super_admins (RLS user_id = auth.uid())
+    const { data: sa } = await supabase.from('super_admins').select('id').maybeSingle();
+    setIsSuperAdmin(!!sa);
   }, []);
 
   const handleRefresh = useCallback(async () => {
@@ -735,6 +737,9 @@ export default function AccountSettings() {
               </div>
             </SectionCard>
 
+            {/* Mon abonnement — plan actuel + offres + upgrade */}
+            <PlanSummary />
+
             {isSuperAdmin && (
               <button onClick={() => navigate('/super-admin')}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px',
@@ -963,7 +968,41 @@ export default function AccountSettings() {
               </div>
             </SectionCard>
 
-            {/* CRM — V2 */}
+            {/* Sync settings */}
+            <SectionCard>
+              <div style={{ padding: '20px 24px 0', borderBottom: '1px solid rgba(110,80,200,.08)' }}>
+                <EyebrowLabel>Préférences</EyebrowLabel>
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: '#1A1040', margin: '4px 0 16px', letterSpacing: '-0.02em' }}>
+                  Synchronisation
+                </h3>
+              </div>
+              <div style={{ padding: '16px 24px 20px' }}>
+                <p style={{ fontSize: 11, color: '#9082B8', marginBottom: 14, fontFamily: 'var(--mono, monospace)' }}>
+                  Préférences persistées en base de données.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {[
+                    { key: 'calendar' as const, icon: Calendar, label: 'Synchronisation calendrier', sub: 'Auto-détection des réunions' },
+                    { key: 'email'    as const, icon: Mail,     label: 'Analyse des emails',          sub: 'Contexte relationnel' },
+                    { key: 'enrichment' as const, icon: Network, label: 'Enrichissement automatique', sub: 'Données publiques LinkedIn, etc.' },
+                  ].map(({ key, icon: Icon, label, sub }) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '12px 14px', borderRadius: 10, background: 'rgba(110,80,200,.04)', border: '1px solid rgba(110,80,200,.08)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Icon style={{ width: 15, height: 15, color: '#6E50C8', flexShrink: 0 }} />
+                        <div>
+                          <p style={{ fontSize: 13, fontWeight: 700, color: '#1A1040', marginBottom: 1 }}>{label}</p>
+                          <p style={{ fontSize: 11, color: '#9082B8' }}>{sub}</p>
+                        </div>
+                      </div>
+                      <IOSToggle checked={syncSettings[key]} onChange={() => toggleSync(key)} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </SectionCard>
+
+            {/* CRM — V2 (placé sous les préférences) */}
             <SectionCard className="opacity-60">
               <div style={{ padding: '20px 24px 0', borderBottom: '1px solid rgba(110,80,200,.08)' }}>
                 <EyebrowLabel>Bientôt disponible</EyebrowLabel>
@@ -996,40 +1035,6 @@ export default function AccountSettings() {
                       </div>
                       <span style={{ fontSize: 11, padding: '5px 12px', borderRadius: 8, background: 'rgba(110,80,200,.06)',
                         color: '#9082B8', fontFamily: 'var(--mono, monospace)', fontWeight: 600 }}>Bientôt</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </SectionCard>
-
-            {/* Sync settings */}
-            <SectionCard>
-              <div style={{ padding: '20px 24px 0', borderBottom: '1px solid rgba(110,80,200,.08)' }}>
-                <EyebrowLabel>Préférences</EyebrowLabel>
-                <h3 style={{ fontSize: 16, fontWeight: 800, color: '#1A1040', margin: '4px 0 16px', letterSpacing: '-0.02em' }}>
-                  Synchronisation
-                </h3>
-              </div>
-              <div style={{ padding: '16px 24px 20px' }}>
-                <p style={{ fontSize: 11, color: '#9082B8', marginBottom: 14, fontFamily: 'var(--mono, monospace)' }}>
-                  Préférences persistées en base de données.
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {[
-                    { key: 'calendar' as const, icon: Calendar, label: 'Synchronisation calendrier', sub: 'Auto-détection des réunions' },
-                    { key: 'email'    as const, icon: Mail,     label: 'Analyse des emails',          sub: 'Contexte relationnel' },
-                    { key: 'enrichment' as const, icon: Network, label: 'Enrichissement automatique', sub: 'Données publiques LinkedIn, etc.' },
-                  ].map(({ key, icon: Icon, label, sub }) => (
-                    <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '12px 14px', borderRadius: 10, background: 'rgba(110,80,200,.04)', border: '1px solid rgba(110,80,200,.08)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <Icon style={{ width: 15, height: 15, color: '#6E50C8', flexShrink: 0 }} />
-                        <div>
-                          <p style={{ fontSize: 13, fontWeight: 700, color: '#1A1040', marginBottom: 1 }}>{label}</p>
-                          <p style={{ fontSize: 11, color: '#9082B8' }}>{sub}</p>
-                        </div>
-                      </div>
-                      <IOSToggle checked={syncSettings[key]} onChange={() => toggleSync(key)} />
                     </div>
                   ))}
                 </div>
