@@ -263,6 +263,7 @@ export default function ContactDetail() {
   const [mergeCandidates, setMergeCandidates] = useState<MergeCandidate[]>([]);
   const [merging, setMerging] = useState(false);
   const [emailAnalysis, setEmailAnalysis] = useState<any | null>(null);
+  const [enrichDetail, setEnrichDetail] = useState<any | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [syncingContactEmails, setSyncingContactEmails] = useState(false);
@@ -285,11 +286,12 @@ export default function ContactDetail() {
       let enrichmentData: any = {};
       try {
         const { data: ed } = await supabase.from('contacts')
-          .select('enrichment_status, last_enriched_at, web_bio, email_analysis')
+          .select('enrichment_status, last_enriched_at, web_bio, email_analysis, enrichment_data')
           .eq('id', id).maybeSingle();
         if (ed) {
           enrichmentData = ed;
           if ((ed as any).email_analysis) setEmailAnalysis((ed as any).email_analysis);
+          if ((ed as any).enrichment_data) setEnrichDetail((ed as any).enrichment_data);
         }
       } catch { /* migration pas encore appliquée */ }
 
@@ -506,8 +508,8 @@ export default function ContactDetail() {
     setEnriching(true);
     setEnrichError(null);
     try {
-      const { error } = await supabase.functions.invoke('enrich-contact', {
-        body: { contactId, organizationId: oid, forceRefresh: force },
+      const { error } = await supabase.functions.invoke('enrich-agent', {
+        body: { contactId, organizationId: oid },
       });
       if (error) {
         const msg = (error as any)?.message ?? String(error);
@@ -1092,6 +1094,67 @@ export default function ContactDetail() {
                       <span className="text-xs font-semibold" style={{ color: '#92400E' }}>Données web enrichies — Perplexity</span>
                     </div>
                     <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">{contact.web_bio}</p>
+                  </div>
+                )}
+
+                {/* Recherche IA — agent n8n (OpenRouter + Perplexity) */}
+                {enrichDetail && (
+                  <div className="mt-5 space-y-4">
+                    {enrichDetail.currentRole && (
+                      <p className="text-xs" style={{ color: 'var(--t2, #5A4880)' }}>
+                        <span className="font-semibold">{enrichDetail.currentRole}</span>
+                        {enrichDetail.currentCompany ? ` · ${enrichDetail.currentCompany}` : ''}
+                        {enrichDetail.roleConfidence === 'to_confirm' && <span className="ml-1 text-[10px] font-mono" style={{ color: 'var(--amber, #C97A20)' }}>(à confirmer)</span>}
+                      </p>
+                    )}
+
+                    {Array.isArray(enrichDetail.talkingPoints) && enrichDetail.talkingPoints.length > 0 && (
+                      <div>
+                        <p className="text-[11px] font-mono uppercase tracking-wide mb-1.5" style={{ color: 'var(--t3, #9082B8)' }}>Angles d'approche</p>
+                        <ul className="space-y-1">
+                          {enrichDetail.talkingPoints.slice(0, 5).map((t: string, i: number) => (
+                            <li key={i} className="text-sm flex gap-2"><span style={{ color: 'var(--violet, #6E50C8)' }}>›</span><span>{t}</span></li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {Array.isArray(enrichDetail.relatedPeople) && enrichDetail.relatedPeople.length > 0 && (
+                      <div>
+                        <p className="text-[11px] font-mono uppercase tracking-wide mb-1.5" style={{ color: 'var(--t3, #9082B8)' }}>Personnes pertinentes autour</p>
+                        <div className="space-y-1.5">
+                          {enrichDetail.relatedPeople.slice(0, 6).map((p: any, i: number) => (
+                            <div key={i} className="text-sm rounded-lg border border-border px-3 py-2">
+                              <span className="font-semibold">{p.name}</span>{p.role ? <span className="text-muted-foreground"> · {p.role}</span> : null}
+                              {p.why && <p className="text-xs text-muted-foreground mt-0.5">{p.why}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {Array.isArray(enrichDetail.recentActivity) && enrichDetail.recentActivity.length > 0 && (
+                      <div>
+                        <p className="text-[11px] font-mono uppercase tracking-wide mb-1.5" style={{ color: 'var(--t3, #9082B8)' }}>Actualité récente</p>
+                        <div className="space-y-1.5">
+                          {enrichDetail.recentActivity.slice(0, 5).map((a: any, i: number) => (
+                            <a key={i} href={a.url || undefined} target="_blank" rel="noreferrer"
+                               className="block text-sm rounded-lg border border-border px-3 py-2 hover:bg-muted/30 transition-colors">
+                              <span>{a.title}</span>
+                              <span className="text-[11px] text-muted-foreground"> {a.date ? `· ${a.date}` : ''}{a.source ? ` · ${a.source}` : ''}</span>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {Array.isArray(enrichDetail.sources) && enrichDetail.sources.length > 0 && (
+                      <p className="text-[11px] text-muted-foreground break-all">
+                        Sources : {enrichDetail.sources.slice(0, 6).map((s: string, i: number) => (
+                          <a key={i} href={s} target="_blank" rel="noreferrer" className="underline mr-2" style={{ color: 'var(--violet, #6E50C8)' }}>[{i + 1}]</a>
+                        ))}
+                      </p>
+                    )}
                   </div>
                 )}
               </CollapsibleSection>
