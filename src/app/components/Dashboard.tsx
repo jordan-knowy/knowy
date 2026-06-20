@@ -274,23 +274,19 @@ export default function Dashboard() {
             updated_at: new Date().toISOString(),
           }, { onConflict: 'organization_id,user_id,provider' });
         }
-        // Calendrier — le serveur résout/rafraîchit le token depuis le connecteur si la session n'en a pas
-        const calRes = await fetch(`${supabaseUrl}/functions/v1/sync-google-calendar`, {
-          method: 'POST', headers,
-          body: JSON.stringify({ organizationId: orgId, providerToken: providerToken ?? null }),
+        // Calendrier — invoke (JWT frais) ; le serveur résout/rafraîchit le token Google
+        const { data: calData, error: calErr } = await supabase.functions.invoke('sync-google-calendar', {
+          body: { organizationId: orgId, providerToken: providerToken ?? null },
         });
-        const calData = await calRes.json().catch(() => ({}));
-        if (calRes.ok) {
-          totalCreated += calData.stats?.created ?? 0;
+        if (!calErr) {
+          totalCreated += (calData as any)?.stats?.created ?? 0;
           syncedProviders.push('Google');
         }
         // Emails Gmail — ingest résout le token depuis connectors.metadata (refresh serveur)
-        const emailRes = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-          method: 'POST', headers,
-          body: JSON.stringify({ organizationId: orgId, providerToken: providerToken ?? null, provider: 'google', lookbackDays: 3650 }),
+        const { data: emailData, error: emailErr } = await supabase.functions.invoke('ingest-communication', {
+          body: { organizationId: orgId, providerToken: providerToken ?? null, provider: 'google', lookbackDays: 3650 },
         });
-        const emailData = await emailRes.json().catch(() => ({}));
-        if (emailRes.ok) totalEmails += emailData.stats?.messages ?? 0;
+        if (!emailErr) totalEmails += (emailData as any)?.stats?.messages ?? 0;
       }
 
       // ── Microsoft : calendrier Outlook/Teams + emails ─────────────────────
@@ -313,32 +309,24 @@ export default function Dashboard() {
           }, { onConflict: 'organization_id,user_id,provider' });
         }
 
-        if (msToken) {
-          const calRes = await fetch(`${supabaseUrl}/functions/v1/sync-outlook-calendar`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ organizationId: orgId, providerToken: msToken }),
-          });
-          const calData = await calRes.json();
-          if (calRes.ok) {
-            totalCreated += calData.stats?.created ?? 0;
-            syncedProviders.push('Outlook');
-            // Relit le token fraîchement stocké par sync-outlook-calendar
-            const { data: msConnFresh } = await supabase
-              .from('connectors').select('metadata')
-              .eq('organization_id', orgId).eq('provider', 'microsoft').eq('status', 'connected').maybeSingle();
-            const freshToken = (msConnFresh?.metadata as any)?.access_token;
-            if (freshToken) msToken = freshToken;
-          }
+        // Calendrier Outlook — invoke ; le serveur résout/rafraîchit le token depuis le connecteur
+        const { data: calData, error: calErr } = await supabase.functions.invoke('sync-outlook-calendar', {
+          body: { organizationId: orgId, providerToken: msToken ?? null },
+        });
+        if (!calErr) {
+          totalCreated += (calData as any)?.stats?.created ?? 0;
+          syncedProviders.push('Outlook');
+          const { data: msConnFresh } = await supabase
+            .from('connectors').select('metadata')
+            .eq('organization_id', orgId).eq('provider', 'microsoft').eq('status', 'connected').maybeSingle();
+          const freshToken = (msConnFresh?.metadata as any)?.access_token;
+          if (freshToken) msToken = freshToken;
         }
-        // Emails Outlook — utilise le token frais (après sync calendrier) ou celui en base
-        if (msToken) {
-          const emailRes = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ organizationId: orgId, providerToken: msToken, provider: 'microsoft', lookbackDays: 3650 }),
-          });
-          const emailData = await emailRes.json();
-          if (emailRes.ok) totalEmails += emailData.stats?.messages ?? 0;
-        }
+        // Emails Outlook
+        const { data: emailData, error: emailErr } = await supabase.functions.invoke('ingest-communication', {
+          body: { organizationId: orgId, providerToken: msToken ?? null, provider: 'microsoft', lookbackDays: 3650 },
+        });
+        if (!emailErr) totalEmails += (emailData as any)?.stats?.messages ?? 0;
       }
 
       // ── Auto-discover nouveaux contacts depuis les emails ─────────────────
@@ -354,16 +342,12 @@ export default function Dashboard() {
         if (hasGoogle) discoverBody.googleToken = providerToken ?? null;
         if (hasMicrosoft) discoverBody.microsoftToken = (isMsSession && providerToken) ? providerToken : ((msConnFresh?.metadata as any)?.access_token ?? null);
 
-        if (discoverBody.googleToken || discoverBody.microsoftToken) {
-          const discRes = await fetch(`${supabaseUrl}/functions/v1/discover-contacts`, {
-            method: 'POST', headers,
-            body: JSON.stringify(discoverBody),
-          });
-          if (discRes.ok) {
-            const discData = await discRes.json();
-            newSuggestions = discData.suggestions?.length ?? 0;
-            setNewContactsFound(newSuggestions);
-          }
+        const { data: discData, error: discErr } = await supabase.functions.invoke('discover-contacts', {
+          body: discoverBody,
+        });
+        if (!discErr) {
+          newSuggestions = (discData as any)?.suggestions?.length ?? 0;
+          setNewContactsFound(newSuggestions);
         }
       } catch { /* non-bloquant */ }
 

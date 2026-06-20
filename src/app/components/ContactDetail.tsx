@@ -422,8 +422,6 @@ export default function ContactDetail() {
       if (!session) { setSyncEmailsMsg('Session expirée — reconnectez-vous.'); return; }
       const oid = orgId ?? await getActiveOrganizationId();
       if (!oid) { setSyncEmailsMsg('Aucun workspace actif.'); return; }
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const headers = { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' };
       const providerToken = session.provider_token ?? null;
 
       const { data: conns } = await supabase.from('connectors').select('provider, status, metadata')
@@ -472,13 +470,12 @@ export default function ContactDetail() {
       const runIngest = async (token: string, provider: 'google' | 'microsoft') => {
         anyCall = true;
         try {
-          const r = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ organizationId: oid, providerToken: token, provider, contactEmails: [contact.email], lookbackDays: 3650, maxMessagesPerContact: 1000 }),
+          // invoke = JWT frais auto-attaché (évite les 401 dus à un access_token périmé)
+          const { data: d, error } = await supabase.functions.invoke('ingest-communication', {
+            body: { organizationId: oid, providerToken: token, provider, contactEmails: [contact.email], lookbackDays: 3650, maxMessagesPerContact: 1000 },
           });
-          const d = await r.json().catch(() => ({}));
-          if (r.ok) totalSynced += d?.stats?.messages ?? 0;
-          else if (r.status === 401 || /token|auth/i.test(d?.error ?? '')) tokenIssue = true;
+          if (error) { tokenIssue = true; return; }
+          totalSynced += (d as any)?.stats?.messages ?? 0;
         } catch { tokenIssue = true; }
       };
 

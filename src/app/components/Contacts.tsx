@@ -572,28 +572,20 @@ export default function Contacts() {
       let totalSynced = 0;
 
       if (hasGoogle) {
-        // Ne jamais utiliser le provider_token MS comme token Google
+        // Ne jamais utiliser le provider_token MS comme token Google. null OK : refresh serveur.
         const googleToken = (connected.get('google')?.metadata as any)?.access_token ?? (isMsSession ? null : providerToken) ?? null;
-        if (googleToken) {
-          const r = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ organizationId: resolvedOrgId, providerToken: googleToken, provider: 'google', lookbackDays: 3650 }),
-          });
-          const d = await r.json();
-          if (r.ok) totalSynced += d.stats?.messages ?? 0;
-        }
+        const { data: d, error } = await supabase.functions.invoke('ingest-communication', {
+          body: { organizationId: resolvedOrgId, providerToken: googleToken, provider: 'google', lookbackDays: 3650 },
+        });
+        if (!error) totalSynced += (d as any)?.stats?.messages ?? 0;
       }
 
       if (hasMicrosoft) {
         const msToken: string | null = (isMsSession && providerToken) ? providerToken : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null);
-        if (msToken) {
-          const r = await fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ organizationId: resolvedOrgId, providerToken: msToken, provider: 'microsoft', lookbackDays: 3650 }),
-          });
-          const d = await r.json();
-          if (r.ok) totalSynced += d.stats?.messages ?? 0;
-        }
+        const { data: d, error } = await supabase.functions.invoke('ingest-communication', {
+          body: { organizationId: resolvedOrgId, providerToken: msToken, provider: 'microsoft', lookbackDays: 3650 },
+        });
+        if (!error) totalSynced += (d as any)?.stats?.messages ?? 0;
       }
 
       setSyncMsg(totalSynced > 0 ? `✓ ${totalSynced} email${totalSynced > 1 ? 's' : ''} synchronisé${totalSynced > 1 ? 's' : ''}` : '✓ Actualisé');
@@ -651,23 +643,12 @@ export default function Contacts() {
         ? ((isMsSession && session.provider_token) ? session.provider_token : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null))
         : null;
 
-      const res = await fetch(`${supabaseUrl}/functions/v1/discover-contacts`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          organizationId: resolvedOrgId,
-          googleToken,
-          microsoftToken,
-          lookbackDays: 3650,
-          minExchanges: 1,
-        }),
+      // invoke = JWT frais auto-attaché (évite les 401)
+      const { data, error } = await supabase.functions.invoke('discover-contacts', {
+        body: { organizationId: resolvedOrgId, googleToken, microsoftToken, lookbackDays: 3650, minExchanges: 1 },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erreur lors de la découverte');
-      setSuggestions(data.suggestions ?? []);
+      if (error) throw new Error((error as any)?.message || 'Erreur lors de la découverte');
+      setSuggestions((data as any)?.suggestions ?? []);
       setSuggestionsOpen(true);
     } catch (e: any) {
       setSuggestionError(e.message ?? 'Erreur inattendue');
@@ -703,28 +684,22 @@ export default function Contacts() {
       // Auto-trigger email sync for this new contact
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const headers = { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' };
         const { data: conns } = await supabase.from('connectors').select('provider, status, metadata')
           .eq('organization_id', resolvedOrgId).eq('status', 'connected');
         const connected = new Map((conns ?? []).map((c: any) => [c.provider as string, c]));
+        const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
+        const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
         if (connected.has('google')) {
-          const googleToken = (connected.get('google')?.metadata as any)?.access_token ?? session.provider_token ?? null;
-          fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ organizationId: resolvedOrgId, providerToken: googleToken, provider: 'google', contactEmails: [s.email], lookbackDays: 3650, maxMessagesPerContact: 1000 }),
+          const googleToken = (connected.get('google')?.metadata as any)?.access_token ?? (isMsSession ? null : session.provider_token) ?? null;
+          supabase.functions.invoke('ingest-communication', {
+            body: { organizationId: resolvedOrgId, providerToken: googleToken, provider: 'google', contactEmails: [s.email], lookbackDays: 3650, maxMessagesPerContact: 1000 },
           }).catch(() => {});
         }
         if (connected.has('microsoft')) {
-          const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
-          const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
           const msToken: string | null = (isMsSession && session.provider_token) ? session.provider_token : ((connected.get('microsoft')?.metadata as any)?.access_token ?? null);
-          if (msToken) {
-            fetch(`${supabaseUrl}/functions/v1/ingest-communication`, {
-              method: 'POST', headers,
-              body: JSON.stringify({ organizationId: resolvedOrgId, providerToken: msToken, provider: 'microsoft', contactEmails: [s.email], lookbackDays: 3650, maxMessagesPerContact: 1000 }),
-            }).catch(() => {});
-          }
+          supabase.functions.invoke('ingest-communication', {
+            body: { organizationId: resolvedOrgId, providerToken: msToken, provider: 'microsoft', contactEmails: [s.email], lookbackDays: 3650, maxMessagesPerContact: 1000 },
+          }).catch(() => {});
         }
       }
     } catch (e: any) {
