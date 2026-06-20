@@ -410,6 +410,10 @@ export default function Contacts() {
   const [suggestionError, setSuggestionError] = useState<string | null>(null);
   const [mergingIds, setMergingIds] = useState<Set<string>>(new Set());
   const [duplicatesOpen, setDuplicatesOpen] = useState(true);
+  // Suggestions de fusion refusées (persistées) — clé = emails du groupe triés
+  const [dismissedDups, setDismissedDups] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('knowr.dup.dismissed') ?? '[]'); } catch { return []; }
+  });
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
@@ -720,16 +724,31 @@ export default function Contacts() {
     const byNorm = new Map<string, Contact[]>();
     for (const c of contacts) {
       if (!c.name || c.name === '—') continue;
+      if (c.source !== 'contact') continue; // fusion seulement entre vrais contacts (pas les participants)
       const norm = normalize(c.name);
       if (norm.length < 4) continue; // ignore noms trop courts
       if (!byNorm.has(norm)) byNorm.set(norm, []);
       byNorm.get(norm)!.push(c);
     }
-    // Seulement les groupes avec des emails différents (vraie collision)
+    // Groupes avec emails différents (vraie collision) ET non refusés
     return Array.from(byNorm.values()).filter(
-      group => group.length >= 2 && new Set(group.map(c => c.email)).size >= 2
+      group => group.length >= 2
+        && new Set(group.map(c => c.email)).size >= 2
+        && !dismissedDups.includes(dupKey(group))
     );
-  }, [contacts]);
+  }, [contacts, dismissedDups]);
+
+  function dupKey(group: Contact[]): string {
+    return group.map(c => (c.email || c.id).toLowerCase()).sort().join('|');
+  }
+  function dismissDuplicate(group: Contact[]) {
+    const k = dupKey(group);
+    setDismissedDups(prev => {
+      const next = Array.from(new Set([...prev, k]));
+      try { localStorage.setItem('knowr.dup.dismissed', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }
 
   async function mergeContact(primary: Contact, secondary: Contact) {
     if (!supabase || mergingIds.has(secondary.id)) return;
@@ -946,9 +965,18 @@ export default function Contacts() {
                 <div className="px-5 pb-5 space-y-3">
                   {duplicateGroups.map((group, gi) => (
                     <div key={gi} className="rounded-xl border border-amber-500/15 bg-background p-4">
-                      <p className="text-xs font-semibold text-amber-700 mb-3 uppercase tracking-wide">
-                        {group[0].name} — {group.length} comptes détectés
-                      </p>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                          {group[0].name} — {group.length} comptes détectés
+                        </p>
+                        <button
+                          onClick={() => dismissDuplicate(group)}
+                          title="Ce ne sont pas des doublons — ignorer définitivement"
+                          className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-border text-muted-foreground hover:bg-muted/50 transition-colors flex-shrink-0"
+                        >
+                          <X className="size-3" /> Refuser
+                        </button>
+                      </div>
                       <div className="space-y-2">
                         {group.map((c, ci) => (
                           <div key={c.id} className="flex items-center justify-between gap-3">
