@@ -264,6 +264,13 @@ export default function ContactDetail() {
   const [merging, setMerging] = useState(false);
   const [emailAnalysis, setEmailAnalysis] = useState<any | null>(null);
   const [enrichDetail, setEnrichDetail] = useState<any | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<Array<{ id: string; name: string }>>([]);
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [transferTo, setTransferTo] = useState('');
+  const [keepCopy, setKeepCopy] = useState(false);
+  const [transferring, setTransferring] = useState(false);
+  const [transferMsg, setTransferMsg] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [syncingContactEmails, setSyncingContactEmails] = useState(false);
@@ -360,6 +367,43 @@ export default function ContactDetail() {
   }, [id, orgId]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Membres de l'équipe (pour la passation) — mode entreprise si ≥ 2 membres
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!supabase) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (mounted) setCurrentUserId(user?.id ?? null);
+      const oid = orgId ?? await getActiveOrganizationId();
+      if (!oid) return;
+      const { data: mems } = await supabase.from('memberships').select('user_id').eq('organization_id', oid);
+      const ids = (mems ?? []).map((m: any) => m.user_id).filter((uid: string) => uid !== user?.id);
+      if (!ids.length) { if (mounted) setTeamMembers([]); return; }
+      const { data: profs } = await supabase.from('profiles').select('id, full_name').in('id', ids);
+      if (mounted) setTeamMembers((profs ?? []).map((p: any) => ({ id: p.id, name: p.full_name || 'Membre' })));
+    })();
+    return () => { mounted = false; };
+  }, [orgId]);
+
+  const handleTransfer = async () => {
+    if (!supabase || !id || !transferTo || transferring) return;
+    setTransferring(true); setTransferMsg(null);
+    try {
+      const { error } = await supabase.functions.invoke('transfer-contact', {
+        body: { contactId: id, toUserId: transferTo, keepCopy },
+      });
+      if (error) {
+        let msg: string | null = null;
+        try { const b = await (error as any)?.context?.json?.(); msg = b?.error ?? null; } catch { /* ignore */ }
+        setTransferMsg(msg ?? 'Échec du transfert');
+      } else {
+        setShowTransfer(false);
+        navigate('/contacts');
+      }
+    } catch (e: any) { setTransferMsg(e?.message ?? 'Erreur'); }
+    finally { setTransferring(false); }
+  };
 
   const handleMerge = async (secondaryId: string) => {
     if (!id || merging) return;
@@ -744,8 +788,57 @@ export default function ContactDetail() {
               <RefreshCw className={`size-3.5 ${enriching ? 'animate-spin' : ''}`} />
               {enriching ? 'Analyse…' : 'Ré-enrichir'}
             </button>
+            {teamMembers.length > 0 && (
+              <button
+                onClick={() => { setTransferTo(teamMembers[0]?.id ?? ''); setKeepCopy(false); setTransferMsg(null); setShowTransfer(true); }}
+                className="flex items-center gap-1.5 text-[11px] transition-colors"
+                style={{ color: 'rgba(255,255,255,0.3)' }}
+                title="Transférer ce contact à un membre de l'équipe"
+              >
+                <Users className="size-3.5" /> Transférer
+              </button>
+            )}
           </div>
         </motion.div>
+
+        {/* ══ MODALE PASSATION ══════════════════════════════════════════════ */}
+        {showTransfer && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowTransfer(false)}>
+            <div className="w-full max-w-md rounded-2xl bg-card border border-border p-5" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="size-5 text-primary" />
+                <h3 className="text-base font-bold">Transférer ce contact</h3>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Passe <span className="font-semibold">{contact?.full_name}</span> à un membre de ton équipe. L'historique des échanges suit le contact.
+              </p>
+              <label className="block text-xs font-semibold mb-1.5">Destinataire</label>
+              <select
+                value={transferTo} onChange={e => setTransferTo(e.target.value)}
+                className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+              <label className="flex items-center gap-2 text-sm mb-4 cursor-pointer">
+                <input type="checkbox" checked={keepCopy} onChange={e => setKeepCopy(e.target.checked)} className="size-4 rounded border-border" />
+                Garder une copie de ce contact pour moi
+              </label>
+              {transferMsg && <p className="text-xs text-destructive mb-3">{transferMsg}</p>}
+              <div className="flex items-center justify-end gap-2">
+                <button onClick={() => setShowTransfer(false)} className="px-3 py-2 text-sm rounded-xl border border-border hover:bg-muted/50">Annuler</button>
+                <button
+                  onClick={handleTransfer}
+                  disabled={transferring || !transferTo}
+                  className="px-4 py-2 text-sm font-semibold text-white rounded-xl disabled:opacity-50 flex items-center gap-1.5"
+                  style={{ background: '#6E50C8' }}
+                >
+                  {transferring ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  Transférer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ══ TENDANCE + PROCHAIN PAS (spec-28 §4) ══════════════════════════════ */}
         {profile && !enriching && (() => {
