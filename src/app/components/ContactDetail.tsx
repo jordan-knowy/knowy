@@ -13,6 +13,7 @@ import { getActiveOrganizationId } from '../../lib/api/org';
 import { findMergeCandidates, mergeContacts, type MergeCandidate } from '../../lib/api/contacts';
 import { trackEvent } from '../../lib/trackEvent';
 import CollapsibleSection from './knowr/CollapsibleSection';
+import SourcesPanel from './knowr/SourcesPanel';
 import ACard from './knowr/ACard';
 import SignalRail, { type Signal } from './knowr/SignalRail';
 import VerdictCard from './knowr/VerdictCard';
@@ -979,6 +980,17 @@ export default function ContactDetail() {
 
           {/* ── MAIN COL ─────────────────────────────────────────────────────── */}
           <div className="flex-1 min-w-0 space-y-4">
+
+            {/* SOURCES CONNECTÉES (hsrc) */}
+            <SourcesPanel
+              organizationId={orgId}
+              hasPublicData={Boolean(contact?.web_bio || enrichDetail)}
+              provenanceNote={
+                contact?.web_bio || enrichDetail
+                  ? 'Poste & contexte enrichis via sources publiques. Connecter le CRM consoliderait l’historique facturé.'
+                  : 'Relation suivie via la messagerie. Enrichir via sources publiques pour compléter le contexte.'
+              }
+            />
 
             {/* ACARD COMPTE */}
             {companyName && (

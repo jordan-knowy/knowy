@@ -1,12 +1,13 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft, Building2, Users, Calendar, Mail,
   Clock, Star, Loader2, AlertTriangle,
   TrendingUp, TrendingDown, Minus, RefreshCw, ChevronRight,
-  Globe, Sparkles,
+  Globe, Sparkles, Crown, Trophy, Puzzle, HeartPulse, Network,
 } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from '../../lib/supabase';
 import { getActiveOrganizationId } from '../../lib/api/org';
 import { computeVerdict } from '../../lib/scoring';
@@ -16,6 +17,7 @@ import ConfidenceRing from './knowr/ConfidenceRing';
 import ViewSwitcher from './knowr/ViewSwitcher';
 import SignalRail, { type Signal } from './knowr/SignalRail';
 import CollapsibleSection from './knowr/CollapsibleSection';
+import SourcesPanel from './knowr/SourcesPanel';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface CompanyRow {
@@ -128,6 +130,39 @@ function mapSignalTag(signal_type: string): Signal['tag'] {
   return 'Présence';
 }
 
+// Power Map cell (Miller Heiman) — dérivé des contacts du compte
+function PowerCell({ role, icon, tone, contact, note, src, onClick }: {
+  role: string; icon: ReactNode; tone: string;
+  contact: ContactRow; note: string; src: string; onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick}
+      className="w-full text-left rounded-xl border border-border p-3 hover:bg-muted/30 transition-colors group">
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+          style={{ color: tone, background: `${tone}1A` }}>
+          {icon} {role}
+        </span>
+      </div>
+      <div className="flex items-center gap-2.5">
+        <div className="size-8 flex-shrink-0 rounded-lg flex items-center justify-center text-xs font-bold text-white"
+          style={{ background: 'linear-gradient(135deg,#6E50C8,#9747FF)' }}>
+          {initials(contact.full_name)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold truncate group-hover:text-primary transition-colors">{contact.full_name}</p>
+          <p className="text-xs text-muted-foreground truncate">{contact.role_title || '—'}</p>
+        </div>
+        {contact.engagement_score !== null
+          ? <span className="text-sm font-black font-mono" style={{ color: scoreColor(contact.engagement_score) }}>{contact.engagement_score}</span>
+          : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(201,122,32,0.12)', color: '#C97A20' }}>à confirmer</span>}
+      </div>
+      <p className="text-[11px] text-muted-foreground leading-snug mt-2">{note}</p>
+      <p className="text-[9px] text-muted-foreground mt-1.5" style={{ fontFamily: 'var(--mono)' }}>{src}</p>
+    </button>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function CompanyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -145,6 +180,9 @@ export default function CompanyDetail() {
   const [companyEnrich, setCompanyEnrich] = useState<any | null>(null);
   const [enriching, setEnriching] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState<string | null>(null);
+  const [scoreHistory, setScoreHistory] = useState<{ date: string; score: number }[]>([]);
+  const [firstContactAt, setFirstContactAt] = useState<string | null>(null);
+  const [nextMeeting, setNextMeeting] = useState<MeetingRow | null>(null);
 
   const enrichCompany = async () => {
     if (!supabase || !company || enriching) return;
@@ -257,6 +295,37 @@ export default function CompanyDetail() {
             lastContactMap[mp.contact_id] = sa;
           }
         }
+
+        // 1er contact observé (plus ancien email du compte)
+        const oldest = (msgs ?? []).reduce<string | null>((min, m: any) =>
+          m.sent_at && (!min || m.sent_at < min) ? m.sent_at : min, null);
+        setFirstContactAt(oldest);
+      }
+
+      // ── 4b. Historique de score du compte (agrégé par mois) ────────────
+      if (contactIds.length) {
+        const { data: hist } = await supabase
+          .from('contact_score_history')
+          .select('score, snapshot_date')
+          .eq('organization_id', orgId)
+          .in('contact_id', contactIds)
+          .order('snapshot_date', { ascending: true });
+
+        const byDate: Record<string, { sum: number; n: number }> = {};
+        for (const h of (hist ?? []) as any[]) {
+          if (typeof h.score !== 'number') continue;
+          const d = h.snapshot_date as string;
+          (byDate[d] ??= { sum: 0, n: 0 });
+          byDate[d].sum += h.score; byDate[d].n += 1;
+        }
+        setScoreHistory(
+          Object.entries(byDate)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([d, { sum, n }]) => ({
+              date: new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+              score: Math.round(sum / n),
+            })),
+        );
       }
 
       const enrichedContacts: ContactRow[] = contactRows.map(c => ({
@@ -279,7 +348,13 @@ export default function CompanyDetail() {
         .order('starts_at', { ascending: false })
         .limit(20);
 
-      setMeetings((mtgs ?? []) as MeetingRow[]);
+      const meetingRows = (mtgs ?? []) as MeetingRow[];
+      setMeetings(meetingRows);
+      const now = Date.now();
+      const upcoming = meetingRows
+        .filter(m => m.starts_at && new Date(m.starts_at).getTime() > now)
+        .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+      setNextMeeting(upcoming[0] ?? null);
 
       // ── 6. Load behavioral signals for all contacts ────────────────────
       if (contactIds.length) {
@@ -377,6 +452,39 @@ export default function CompanyDetail() {
     provenance: (s.inference_level === 'observable' ? 'observable'
       : s.inference_level === 'inferred' ? 'inferred' : 'public') as Signal['provenance'],
   }));
+
+  // ── Santé relationnelle du compte (dérivée des données réelles) ─────────
+  const activeContacts = contacts.filter(c => {
+    const d = daysSince(c.last_contact_at);
+    return d !== null && d <= 30;
+  });
+  const coverage = activeContacts.length <= 1
+    ? { value: 'Mono-thread', note: activeContacts.length === 1
+        ? `Un seul contact actif (${activeContacts[0].full_name.split(' ')[0]}). Identifier un relais interne sécurise le compte.`
+        : 'Aucun contact actif sur 30 j. Réactiver un interlocuteur clé.', tone: 'warn' as const }
+    : { value: `Multi-contacts · ${activeContacts.length}`,
+        note: `${activeContacts.length} interlocuteurs actifs — couverture saine du compte.`, tone: 'ok' as const };
+
+  const nature = meetings.length > 0 && emailCount30d > 0
+    ? { value: 'Multi-canal', note: 'Réunions + échanges email récents — relation suivie sur plusieurs canaux.' }
+    : meetings.length > 0
+      ? { value: 'Rythmée par les RDV', note: 'Relation portée par les réunions. Maintenir le fil email entre deux RDV.' }
+      : emailCount30d > 0
+        ? { value: 'Transactionnelle', note: 'Échanges email centrés sur l’exécution — ouvrir un sujet « produit ».' }
+        : { value: 'En veille', note: 'Pas d’échange récent — relancer pour rouvrir le canal.' };
+
+  const nextContact = nextMeeting
+    ? { value: nextMeeting.title || 'RDV à venir', note: `Prochaine réunion le ${new Date(nextMeeting.starts_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}.` }
+    : { value: 'À planifier', note: 'Aucun RDV à venir. Proposer un prochain point pour entretenir la relation.' };
+
+  // ── Power Map · qui décide (Miller Heiman, dérivé des contacts) ─────────
+  const rankedContacts = [...contacts].sort((a, b) =>
+    (b.influence_level ?? 0) - (a.influence_level ?? 0) ||
+    (b.engagement_score ?? 0) - (a.engagement_score ?? 0));
+  const economicBuyer = rankedContacts[0] ?? null;
+  const champion = rankedContacts.find(c => (c.engagement_score ?? 0) >= 50 && c.id !== economicBuyer?.id) ?? null;
+  const toQualify = rankedContacts.filter(c =>
+    c.id !== economicBuyer?.id && c.id !== champion?.id).slice(0, 2);
 
   const visibleMeetings = showAllMeetings ? meetings : meetings.slice(0, 4);
 
@@ -571,6 +679,176 @@ export default function CompanyDetail() {
 
           {/* ── MAIN COL ─────────────────────────────────────────────────── */}
           <div className="flex-1 min-w-0 space-y-4">
+
+            {/* SOURCES CONNECTÉES (hsrc) */}
+            <SourcesPanel
+              organizationId={orgId}
+              hasPublicData={Boolean(companyEnrich || hasWebData)}
+              provenanceNote={
+                companyEnrich || hasWebData
+                  ? 'Firmographie via sources publiques (Pappers · Societe.com · LinkedIn). Relation opérationnelle via la messagerie.'
+                  : 'Relation suivie via la messagerie. Enrichir (IA) pour capter la firmographie publique.'
+              }
+            />
+
+            {/* LEVIER STRATÉGIQUE (depuis l'enrichissement IA) */}
+            {companyEnrich?.summary && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                className="rounded-2xl overflow-hidden" style={{ background: '#13111E' }}
+              >
+                <div className="px-5 pt-4 pb-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-[9px] font-bold uppercase tracking-widest"
+                      style={{ color: 'rgba(255,255,255,0.3)' }}>🎯 Levier stratégique</span>
+                    <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                  </div>
+                  <p className="text-base leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)', fontStyle: 'italic' }}>
+                    "{companyEnrich.summary}"
+                  </p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* MÉMOIRE RELATIONNELLE DU COMPTE (courbe de score) */}
+            {(scoreHistory.length > 1 || avgScore !== null) && (
+              <CollapsibleSection
+                title="Mémoire relationnelle du compte"
+                icon={<TrendingUp className="size-4" />}
+                defaultOpen={true}
+              >
+                {/* Métriques */}
+                <div className="flex items-center gap-5 mb-4 flex-wrap">
+                  {avgScore !== null && (
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Score compte</p>
+                      <span className="text-3xl font-black" style={{ color: scoreColor(avgScore) }}>{avgScore}</span>
+                    </div>
+                  )}
+                  {firstContactAt && (
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Début relation</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {new Date(firstContactAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">1ᵉʳ échange observé</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Dossiers</p>
+                    <p className="text-sm font-semibold text-foreground">{meetings.length || contacts.length}</p>
+                    <p className="text-[10px] text-muted-foreground">{meetings.length ? 'réunions' : 'contacts suivis'}</p>
+                  </div>
+                </div>
+
+                {scoreHistory.length > 1 ? (
+                  <>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Score relationnel du compte</p>
+                    <ResponsiveContainer width="100%" height={150}>
+                      <AreaChart data={scoreHistory} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                        <defs>
+                          <linearGradient id="coScoreGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#6E50C8" stopOpacity={0.35} />
+                            <stop offset="100%" stopColor="#6E50C8" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#9082B8' }} axisLine={false} tickLine={false} />
+                        <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9082B8' }} axisLine={false} tickLine={false} width={32} />
+                        <Tooltip
+                          contentStyle={{ borderRadius: 12, border: '1px solid #E8E3F5', fontSize: 12 }}
+                          formatter={(v: any) => [`${v}/100`, 'Score']}
+                        />
+                        <Area type="monotone" dataKey="score" stroke="#6E50C8" strokeWidth={2.5} fill="url(#coScoreGrad)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                    <div className="flex items-center gap-4 mt-1">
+                      <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <span className="size-2 rounded-full" style={{ background: '#2EA86A' }} /> Étape positive
+                      </span>
+                      <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <span className="size-2 rounded-full" style={{ background: '#D94F63' }} /> Friction
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border p-4 text-center">
+                    <p className="text-xs text-muted-foreground">
+                      Courbe de score — historique en cours de constitution (un point par mois d’activité).
+                    </p>
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground mt-3" style={{ fontFamily: 'var(--mono)' }}>
+                  Messagerie · Observable — recalculé à chaque synchro
+                </p>
+              </CollapsibleSection>
+            )}
+
+            {/* SANTÉ RELATIONNELLE DU COMPTE (diagnostics dérivés) */}
+            <CollapsibleSection
+              title="Santé relationnelle du compte"
+              icon={<HeartPulse className="size-4" />}
+              defaultOpen={true}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  { lbl: 'Couverture du compte', ...coverage, src: 'Messagerie · Observable' },
+                  { lbl: 'Nature de la relation', ...nature, tone: 'ok' as const, src: 'Messagerie · Observable' },
+                  { lbl: 'Prochain contact', ...nextContact, tone: (nextMeeting ? 'ok' : 'warn') as const, src: nextMeeting ? 'Agenda · Observable' : 'Inféré' },
+                ].map((d: any) => (
+                  <div key={d.lbl} className="rounded-xl border border-border bg-muted/20 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5" style={{ fontFamily: 'var(--mono)' }}>{d.lbl}</p>
+                    <p className="text-sm font-bold mb-1"
+                      style={{ color: d.tone === 'warn' ? '#C97A20' : d.tone === 'ok' ? '#2EA86A' : 'var(--color-foreground)' }}>
+                      {d.value}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground leading-snug mb-2">{d.note}</p>
+                    <p className="text-[9px] text-muted-foreground" style={{ fontFamily: 'var(--mono)' }}>{d.src}</p>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleSection>
+
+            {/* POWER MAP · QUI DÉCIDE (Miller Heiman, dérivé) */}
+            {contacts.length > 0 && (
+              <CollapsibleSection
+                title="Power Map · qui décide"
+                icon={<Network className="size-4" />}
+                defaultOpen={false}
+              >
+                <div className="space-y-2.5">
+                  {economicBuyer && (
+                    <PowerCell
+                      role="Economic Buyer" icon={<Crown className="size-3.5" />} tone="#C97A20"
+                      contact={economicBuyer}
+                      note="Contact le plus influent et engagé du compte — point d’entrée pour décider et signer."
+                      src={economicBuyer.engagement_score !== null ? 'Messagerie · Observable' : 'Inféré'}
+                      onClick={() => navigate(`/contact/${economicBuyer.id}`)}
+                    />
+                  )}
+                  {champion && (
+                    <PowerCell
+                      role="Champion" icon={<Trophy className="size-3.5" />} tone="#2EA86A"
+                      contact={champion}
+                      note="Relation chaude — relais interne pour porter le sujet."
+                      src="Messagerie · Observable"
+                      onClick={() => navigate(`/contact/${champion.id}`)}
+                    />
+                  )}
+                  {toQualify.map(c => (
+                    <PowerCell
+                      key={c.id}
+                      role="À qualifier" icon={<Puzzle className="size-3.5" />} tone="#9082B8"
+                      contact={c}
+                      note={c.engagement_score === null
+                        ? 'Aucun échange direct observé — rôle à confirmer en RDV.'
+                        : 'Co-décideur possible — statut à clarifier.'}
+                      src={c.engagement_score === null ? 'Mention · cc' : 'Messagerie · Observable'}
+                      onClick={() => navigate(`/contact/${c.id}`)}
+                    />
+                  ))}
+                </div>
+              </CollapsibleSection>
+            )}
 
             {/* SITE WEB & DESCRIPTION ENTREPRISE (spec-33) */}
             <CollapsibleSection
