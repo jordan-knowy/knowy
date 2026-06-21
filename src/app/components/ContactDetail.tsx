@@ -509,7 +509,7 @@ export default function ContactDetail() {
     setEnrichError(null);
     try {
       const { error } = await supabase.functions.invoke('enrich-agent', {
-        body: { contactId, organizationId: oid },
+        body: { contactId, organizationId: oid, forceRefresh: force },
       });
       if (error) {
         const msg = (error as any)?.message ?? String(error);
