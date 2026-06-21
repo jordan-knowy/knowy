@@ -364,6 +364,8 @@ export default function Dashboard() {
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', orgId);
       if (refreshedEmailCount !== null) setTotalEmails(refreshedEmailCount);
+      // Recalcule le scoring relationnel sur les contacts fraîchement synchronisés
+      try { await supabase.functions.invoke('score-batch', { body: { organizationId: orgId } }); } catch { /* non-bloquant */ }
       reloadMeetings?.();
     } catch (e: any) {
       setSyncMsg({ type: 'error', text: e.message });
