@@ -53,6 +53,7 @@ interface Contact {
   lastContactDays: number | null;
   isDecisionMaker: boolean;
   source: 'contact' | 'participant';
+  ownerUserId?: string | null;
 }
 
 interface CompanyGroup {
@@ -397,6 +398,9 @@ export default function Contacts() {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewType, setViewType] = useState<'people' | 'companies'>('people');
   const [sortBy, setSortBy] = useState<SortType>('meetings');
+  const [scope, setScope] = useState<'mine' | 'team'>('mine');
+  const [meId, setMeId] = useState<string | null>(null);
+  const [isTeam, setIsTeam] = useState(false);
   const [displayCount, setDisplayCount] = useState(50);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -421,6 +425,21 @@ export default function Contacts() {
     loadContacts();
   }, []);
 
+  // Détecte le mode équipe (org ≥ 2 membres) → active le filtre Mes/Équipe
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!supabase) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (mounted) setMeId(user?.id ?? null);
+      const oid = await getActiveOrganizationId();
+      if (!oid) return;
+      const { count } = await supabase.from('memberships').select('*', { count: 'exact', head: true }).eq('organization_id', oid);
+      if (mounted) setIsTeam((count ?? 0) > 1);
+    })();
+    return () => { mounted = false; };
+  }, []);
+
   // Si on arrive depuis Dashboard avec ?discover=1 → lancer automatiquement la découverte
   useEffect(() => {
     if (searchParams.get('discover') === '1') {
@@ -441,7 +460,7 @@ export default function Contacts() {
       const { data: dbContacts } = await supabase
         .from('contacts')
         .select(`
-          id, full_name, role_title, email, source_summary, updated_at,
+          id, full_name, role_title, email, source_summary, updated_at, owner_user_id,
           communication_messages(id),
           cognitive_profiles(engagement_score)
         `)
@@ -488,6 +507,7 @@ export default function Contacts() {
           lastContactDays: daysSince(c.updated_at),
           isDecisionMaker: false,
           source: 'contact',
+          ownerUserId: (c as any).owner_user_id ?? null,
         });
       }
 
@@ -776,6 +796,10 @@ export default function Contacts() {
 
   const sorted = useMemo(() => {
     let result = [...contacts];
+    // Mode équipe : "Mes" = mes contacts (dont participants de mes réunions) ; "Équipe" = tous
+    if (isTeam && scope === 'mine' && meId) {
+      result = result.filter(c => c.source === 'participant' || c.ownerUserId === meId || !c.ownerUserId);
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(c =>
@@ -793,7 +817,7 @@ export default function Contacts() {
       case 'alpha': result.sort((a, b) => a.name.localeCompare(b.name)); break;
     }
     return result;
-  }, [contacts, searchQuery, sortBy]);
+  }, [contacts, searchQuery, sortBy, isTeam, scope, meId]);
 
   const companies = useMemo<CompanyGroup[]>(() => {
     const map = new Map<string, CompanyGroup>();
@@ -1168,6 +1192,21 @@ export default function Contacts() {
                   {opt.label}
                 </button>
               ))}
+              {isTeam && (
+                <div className="ml-auto flex items-center gap-1 rounded-lg border border-border p-0.5">
+                  {([['mine', 'Mes contacts'], ['team', 'Équipe']] as const).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => setScope(val)}
+                      className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                        scope === val ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-muted/50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </motion.div>
 
             {/* Table */}
