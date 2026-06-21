@@ -5,7 +5,7 @@ import {
   ArrowLeft, Building2, Users, Calendar, Mail,
   Clock, Star, Loader2, AlertTriangle,
   TrendingUp, TrendingDown, Minus, RefreshCw, ChevronRight,
-  Globe,
+  Globe, Sparkles,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getActiveOrganizationId } from '../../lib/api/org';
@@ -141,6 +141,24 @@ export default function CompanyDetail() {
   const [loading,   setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showAllMeetings, setShowAllMeetings] = useState(false);
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const [companyEnrich, setCompanyEnrich] = useState<any | null>(null);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichMsg, setEnrichMsg] = useState<string | null>(null);
+
+  const enrichCompany = async () => {
+    if (!supabase || !company || enriching) return;
+    setEnriching(true); setEnrichMsg(null);
+    try {
+      const oid = orgId ?? await getActiveOrganizationId();
+      const { data, error } = await supabase.functions.invoke('enrich-agent', {
+        body: { companyId: company.id, organizationId: oid, forceRefresh: true },
+      });
+      if (error) { setEnrichMsg('Échec — vérifie que le workflow n8n est actif.'); }
+      else { if ((data as any)?.enrichment) setCompanyEnrich((data as any).enrichment); setEnrichMsg('✓ Compte enrichi'); }
+    } catch { setEnrichMsg('Erreur réseau'); }
+    finally { setEnriching(false); setTimeout(() => setEnrichMsg(null), 5000); }
+  };
 
   const loadData = useCallback(async () => {
     if (!supabase || !id) { setLoading(false); return; }
@@ -155,7 +173,7 @@ export default function CompanyDetail() {
       if (isUUID) {
         const { data } = await supabase
           .from('companies')
-          .select('id, name, domain, industry, size_label, public_context, account_type, account_type_confidence')
+          .select('id, name, domain, industry, size_label, public_context, account_type, account_type_confidence, enrichment_data')
           .eq('id', id)
           .eq('organization_id', orgId)
           .maybeSingle();
@@ -166,7 +184,7 @@ export default function CompanyDetail() {
       if (!companyData) {
         const { data } = await supabase
           .from('companies')
-          .select('id, name, domain, industry, size_label, public_context, account_type, account_type_confidence')
+          .select('id, name, domain, industry, size_label, public_context, account_type, account_type_confidence, enrichment_data')
           .eq('organization_id', orgId)
           .ilike('name', `%${decodeURIComponent(id)}%`)
           .limit(1)
@@ -176,6 +194,8 @@ export default function CompanyDetail() {
 
       if (!companyData) { setLoading(false); return; }
       setCompany(companyData);
+      setOrgId(orgId);
+      if ((companyData as any).enrichment_data) setCompanyEnrich((companyData as any).enrichment_data);
 
       // ── 2. Load contacts for this company ─────────────────────────────
       const { data: rawContacts } = await supabase
@@ -532,6 +552,17 @@ export default function CompanyDetail() {
                 : <RefreshCw className="size-3.5" />}
               Actualiser
             </button>
+            <button
+              onClick={enrichCompany}
+              disabled={enriching}
+              className="flex items-center gap-1.5 text-[11px] font-semibold transition-all cursor-pointer"
+              style={{ color: '#fff', background: '#6E50C8', border: '1px solid #6E50C8', borderRadius: 8, padding: '4px 10px', opacity: enriching ? 0.6 : 1 }}
+              title="Recherche IA approfondie (OpenRouter + Perplexity)"
+            >
+              {enriching ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+              {enriching ? 'Recherche…' : 'Enrichir (IA)'}
+            </button>
+            {enrichMsg && <span className="text-[11px]" style={{ color: enrichMsg.startsWith('✓') ? '#96DDB8' : '#F0A0AD' }}>{enrichMsg}</span>}
           </div>
         </motion.div>
 
@@ -600,6 +631,64 @@ export default function CompanyDetail() {
                 </div>
               )}
             </CollapsibleSection>
+
+            {/* RECHERCHE IA (agent n8n) */}
+            {companyEnrich && (
+              <CollapsibleSection title="Recherche IA" icon={<Sparkles className="size-4" />} defaultOpen={true}>
+                <div className="space-y-4">
+                  {companyEnrich.summary && (
+                    <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">{companyEnrich.summary}</p>
+                  )}
+                  {companyEnrich.company && (companyEnrich.company.industry || companyEnrich.company.size || companyEnrich.company.hq) && (
+                    <p className="text-xs" style={{ color: 'var(--t3, #9082B8)' }}>
+                      {[companyEnrich.company.industry, companyEnrich.company.size, companyEnrich.company.hq].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                  {Array.isArray(companyEnrich.company?.recentNews) && companyEnrich.company.recentNews.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-mono uppercase tracking-wide mb-1.5" style={{ color: 'var(--t3, #9082B8)' }}>Actualités récentes</p>
+                      <div className="space-y-1.5">
+                        {companyEnrich.company.recentNews.slice(0, 6).map((a: any, i: number) => (
+                          <a key={i} href={a.url || undefined} target="_blank" rel="noreferrer" className="block text-sm rounded-lg border border-border px-3 py-2 hover:bg-muted/30 transition-colors">
+                            {a.title}<span className="text-[11px] text-muted-foreground">{a.date ? ` · ${a.date}` : ''}{a.source ? ` · ${a.source}` : ''}</span>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {Array.isArray(companyEnrich.relatedPeople) && companyEnrich.relatedPeople.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-mono uppercase tracking-wide mb-1.5" style={{ color: 'var(--t3, #9082B8)' }}>Personnes clés</p>
+                      <div className="space-y-1.5">
+                        {companyEnrich.relatedPeople.slice(0, 8).map((p: any, i: number) => (
+                          <div key={i} className="text-sm rounded-lg border border-border px-3 py-2">
+                            <span className="font-semibold">{p.name}</span>{p.role ? <span className="text-muted-foreground"> · {p.role}</span> : null}
+                            {p.why && <p className="text-xs text-muted-foreground mt-0.5">{p.why}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {Array.isArray(companyEnrich.talkingPoints) && companyEnrich.talkingPoints.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-mono uppercase tracking-wide mb-1.5" style={{ color: 'var(--t3, #9082B8)' }}>Angles d'approche</p>
+                      <ul className="space-y-1">
+                        {companyEnrich.talkingPoints.slice(0, 5).map((t: string, i: number) => (
+                          <li key={i} className="text-sm flex gap-2"><span style={{ color: 'var(--violet, #6E50C8)' }}>›</span><span>{t}</span></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {Array.isArray(companyEnrich.sources) && companyEnrich.sources.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground break-all">
+                      Sources : {companyEnrich.sources.slice(0, 6).map((s: string, i: number) => (
+                        <a key={i} href={s} target="_blank" rel="noreferrer" className="underline mr-2" style={{ color: 'var(--violet, #6E50C8)' }}>[{i + 1}]</a>
+                      ))}
+                    </p>
+                  )}
+                </div>
+              </CollapsibleSection>
+            )}
 
             {/* CONTACTS */}
             <CollapsibleSection
