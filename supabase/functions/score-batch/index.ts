@@ -1,5 +1,7 @@
-// Scoring relationnel EN MASSE (doc 08) → écrit cognitive_profiles.engagement_score (lu par Home + fiche).
-// Calcul à partir des emails/réunions (aucune IA). Modes : cron (x-cron-secret, toutes orgs) ou user (org courante).
+// Scoring relationnel EN MASSE (doc 08) → cognitive_profiles.engagement_score (lu par Home + fiche)
+// + historique mensuel (contact_score_history) et NPS (nps_snapshots) reconstruits à partir des
+// dates réelles d'emails/réunions → les COURBES s'affichent immédiatement.
+// Calcul sans IA. Modes : cron (x-cron-secret, toutes orgs) ou user (org courante).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -24,13 +26,11 @@ function scoreIntensite(s: Stats): number {
   const emailFreqCapped = (s.initiationRatio > 0.85 || s.initiationRatio < 0.15) ? Math.min(emailFreqNorm, 0.50) : emailFreqNorm;
   const meetingFreqNorm = clamp((s.meetingsLast90 / 90) / (1 / 30));
   const richness = s.channelCount >= 3 ? 1.0 : s.channelCount === 2 ? 0.65 : 0.25;
-  const depthNorm = clamp(s.avgThreadDepth / 5);
-  return emailFreqCapped * 0.40 + meetingFreqNorm * 0.35 + richness * 0.15 + depthNorm * 0.10;
+  return emailFreqCapped * 0.40 + meetingFreqNorm * 0.35 + richness * 0.15 + clamp(s.avgThreadDepth / 5) * 0.10;
 }
 function scoreReciprocite(s: Stats): number {
   const asym = Math.abs(s.initiationRatio - 0.5) * 2;
-  const initiationScore = Math.max(0.40, 1.0 - asym * 0.60);
-  return initiationScore * 0.50 + clamp(s.responseRate) * 0.30 + clamp(s.responseTimeRatio / 2) * 0.20;
+  return Math.max(0.40, 1.0 - asym * 0.60) * 0.50 + clamp(s.responseRate) * 0.30 + clamp(s.responseTimeRatio / 2) * 0.20;
 }
 function scoreLongevite(s: Stats): { score: number; factor: number } {
   if (s.ageInDays < 30) return { score: 0, factor: 0 };
@@ -44,11 +44,12 @@ function scoreLongevite(s: Stats): { score: number; factor: number } {
       consistency = Math.max(0, 1.0 - (Math.sqrt(variance) / mean) / 2.0);
     }
   }
-  const raw = ageScore * 0.45 + consistency * 0.35 + (s.quartersWithMeetings / 4) * 0.20;
-  return { score: raw * factor, factor };
+  return { score: (ageScore * 0.45 + consistency * 0.35 + (s.quartersWithMeetings / 4) * 0.20) * factor, factor };
 }
-function buildStats(messages: any[], meetings: any[], firstSeen: string | null): Stats {
-  const now = Date.now(), c30 = now - 30 * 86400000, c90 = now - 90 * 86400000;
+function buildStats(allMsgs: any[], allMeets: any[], firstSeen: string | null, nowMs: number): Stats {
+  const messages = allMsgs.filter(m => m.sent_at && new Date(m.sent_at).getTime() <= nowMs);
+  const meetings = allMeets.filter(m => m.starts_at && new Date(m.starts_at).getTime() <= nowMs);
+  const c30 = nowMs - 30 * 86400000, c90 = nowMs - 90 * 86400000;
   const outbound = messages.filter(m => m.direction === 'outbound').length;
   const inbound = messages.filter(m => m.direction === 'inbound').length;
   const total = messages.length || 1;
@@ -61,48 +62,38 @@ function buildStats(messages: any[], meetings: any[], firstSeen: string | null):
   for (const m of messages) if (m.thread_id) threads.set(m.thread_id, (threads.get(m.thread_id) || 0) + 1);
   const avgThreadDepth = threads.size ? Array.from(threads.values()).reduce((a, b) => a + b, 0) / threads.size : 1;
   const channelCount = (messages.length > 0 ? 1 : 0) + (meetings.length > 0 ? 1 : 0);
-  const ageInDays = firstSeen ? Math.round((now - new Date(firstSeen).getTime()) / 86400000)
-    : messages.length > 0 ? Math.round((now - new Date(messages[messages.length - 1].sent_at).getTime()) / 86400000) : 0;
-  const allDates = [...messages.map(m => m.sent_at ? new Date(m.sent_at).getTime() : 0), ...meetings.map(m => m.starts_at ? new Date(m.starts_at).getTime() : 0)].filter(d => d > 0);
+  const ageInDays = firstSeen ? Math.round((nowMs - new Date(firstSeen).getTime()) / 86400000)
+    : messages.length > 0 ? Math.round((nowMs - new Date(messages[messages.length - 1].sent_at).getTime()) / 86400000) : 0;
+  const allDates = [...messages.map(m => new Date(m.sent_at).getTime()), ...meetings.map(m => new Date(m.starts_at).getTime())];
   const lastContact = allDates.length ? Math.max(...allDates) : 0;
-  const daysSinceLastContact = lastContact ? Math.round((now - lastContact) / 86400000) : 999;
+  const daysSinceLastContact = lastContact ? Math.round((nowMs - lastContact) / 86400000) : 999;
   const monthlyExchangeCounts: number[] = [];
   for (let i = 0; i < 6; i++) {
-    const start = now - (i + 1) * 30 * 86400000, end = now - i * 30 * 86400000;
-    monthlyExchangeCounts.push(messages.filter(m => { const t = m.sent_at ? new Date(m.sent_at).getTime() : 0; return t > start && t <= end; }).length);
+    const start = nowMs - (i + 1) * 30 * 86400000, end = nowMs - i * 30 * 86400000;
+    monthlyExchangeCounts.push(messages.filter(m => { const t = new Date(m.sent_at).getTime(); return t > start && t <= end; }).length);
   }
   const quartersWithMeetings = [0, 1, 2, 3].filter(q => {
-    const start = now - (q + 1) * 90 * 86400000, end = now - q * 90 * 86400000;
-    return meetings.some(m => { const t = m.starts_at ? new Date(m.starts_at).getTime() : 0; return t > start && t <= end; });
+    const start = nowMs - (q + 1) * 90 * 86400000, end = nowMs - q * 90 * 86400000;
+    return meetings.some(m => { const t = new Date(m.starts_at).getTime(); return t > start && t <= end; });
   }).length;
   return {
-    emailsLast30: messages.filter(m => m.sent_at && new Date(m.sent_at).getTime() > c30).length,
-    meetingsLast90: meetings.filter(m => m.starts_at && new Date(m.starts_at).getTime() > c90).length,
+    emailsLast30: messages.filter(m => new Date(m.sent_at).getTime() > c30).length,
+    meetingsLast90: meetings.filter(m => new Date(m.starts_at).getTime() > c90).length,
     avgThreadDepth, channelCount, initiationRatio, responseRate, responseTimeRatio, ageInDays, daysSinceLastContact,
     monthlyExchangeCounts, quartersWithMeetings, totalInteractions: messages.length + meetings.length * 4,
   };
 }
-
 function computeScore(stats: Stats, prevScore: number | null) {
   const si = scoreIntensite(stats), sr = scoreReciprocite(stats);
   const { score: sl, factor: lf } = scoreLongevite(stats);
-  const ew = lf < 1 ? {
-    intensite: W.intensite + W.longevite * (1 - lf) * 0.54,
-    reciprocite: W.reciprocite + W.longevite * (1 - lf) * 0.46,
-    longevite: W.longevite * lf,
-  } : W;
+  const ew = lf < 1 ? { intensite: W.intensite + W.longevite * (1 - lf) * 0.54, reciprocite: W.reciprocite + W.longevite * (1 - lf) * 0.46, longevite: W.longevite * lf } : W;
   const raw = si * ew.intensite + sr * ew.reciprocite + sl * ew.longevite;
-  const depth = clamp(stats.totalInteractions / 500);
-  const finalScore = Math.round(clamp(honeymoon(raw, stats.ageInDays) * temporalDecay(stats.daysSinceLastContact, depth)) * 100);
+  const finalScore = Math.round(clamp(honeymoon(raw, stats.ageInDays) * temporalDecay(stats.daysSinceLastContact, clamp(stats.totalInteractions / 500))) * 100);
   const delta = finalScore - (prevScore ?? finalScore);
   let phase: 'growth' | 'stagnant' | 'decline' = 'stagnant';
   if (delta >= PHASE_DELTA) phase = 'growth';
   else if (delta <= -PHASE_DELTA && finalScore <= PHASE_DECLINE_MAX) phase = 'decline';
-  return {
-    finalScore, delta, phase,
-    si: Math.round(si * 100), sr: Math.round(sr * 100), sl: Math.round(sl * 100),
-    confidence: Math.min(90, 30 + stats.totalInteractions * 3),
-  };
+  return { finalScore, delta, phase, si: Math.round(si * 100), sr: Math.round(sr * 100), sl: Math.round(sl * 100), confidence: Math.min(90, 30 + stats.totalInteractions * 3) };
 }
 
 Deno.serve(async (req) => {
@@ -119,7 +110,7 @@ Deno.serve(async (req) => {
     if (sec?.value && sec.value === cronHeader) isCron = true;
   }
 
-  let cq = supabase.from('contacts').select('id, organization_id, created_at').is('merged_into_contact_id', null);
+  let cq = supabase.from('contacts').select('id, organization_id, created_at, owner_user_id').is('merged_into_contact_id', null);
   if (!isCron) {
     const auth = req.headers.get('Authorization');
     if (!auth) return jsonResponse({ error: 'Missing authorization' }, 401);
@@ -132,12 +123,13 @@ Deno.serve(async (req) => {
   if (!contacts?.length) return jsonResponse({ success: true, scored: 0 });
 
   const ids = contacts.map((c: any) => c.id);
+  const orgIds = Array.from(new Set(contacts.map((c: any) => c.organization_id)));
 
-  // Bulk fetch messages + meeting participants + previous scores
-  const [{ data: msgs }, { data: parts }, { data: prevProfiles }] = await Promise.all([
-    supabase.from('communication_messages').select('contact_id, direction, sent_at, thread_id, metadata').in('contact_id', ids).limit(8000),
-    supabase.from('meeting_participants').select('contact_id, meetings(starts_at)').in('contact_id', ids).limit(8000),
+  const [{ data: msgs }, { data: parts }, { data: prevProfiles }, { data: mems }] = await Promise.all([
+    supabase.from('communication_messages').select('contact_id, direction, sent_at, thread_id, metadata').in('contact_id', ids).limit(10000),
+    supabase.from('meeting_participants').select('contact_id, meetings(starts_at)').in('contact_id', ids).limit(10000),
     supabase.from('cognitive_profiles').select('contact_id, engagement_score').in('contact_id', ids),
+    supabase.from('memberships').select('organization_id, user_id, role').in('organization_id', orgIds),
   ]);
 
   const msgsByC = new Map<string, any[]>();
@@ -146,28 +138,75 @@ Deno.serve(async (req) => {
   for (const p of (parts ?? [])) { const mt = (p as any).meetings; if (!mt) continue; if (!meetsByC.has(p.contact_id)) meetsByC.set(p.contact_id, []); meetsByC.get(p.contact_id)!.push(mt); }
   const prevByC = new Map<string, number>();
   for (const p of (prevProfiles ?? [])) if ((p as any).engagement_score != null) prevByC.set(p.contact_id, (p as any).engagement_score);
+  const orgOwner = new Map<string, string>();
+  for (const m of (mems ?? []) as any[]) { if (!orgOwner.has(m.organization_id) || m.role === 'owner') orgOwner.set(m.organization_id, m.user_id); }
 
-  const rows: any[] = [];
+  const profileRows: any[] = [];
+  const histRows: any[] = [];
+  const MONTHS = [5, 4, 3, 2, 1, 0];
+  const now = Date.now();
+
   for (const c of contacts as any[]) {
     const cm = (msgsByC.get(c.id) ?? []).sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime());
     const cmeet = meetsByC.get(c.id) ?? [];
-    const stats = buildStats(cm, cmeet, c.created_at);
-    if (stats.totalInteractions === 0 && stats.ageInDays < 30) continue; // données insuffisantes
-    const r = computeScore(stats, prevByC.get(c.id) ?? null);
-    rows.push({
-      organization_id: c.organization_id, contact_id: c.id, profile_version: 1,
-      engagement_score: r.finalScore, score_delta: r.delta, score_phase: r.phase,
-      score_intensite: r.si, score_reciprocite: r.sr, score_longevite: r.sl,
-      global_confidence: r.confidence, updated_at: new Date().toISOString(),
-    });
+    const userId = c.owner_user_id ?? orgOwner.get(c.organization_id) ?? null;
+    let lastScore: number | null = prevByC.get(c.id) ?? null;
+
+    for (const ma of MONTHS) {
+      const nowMs = ma === 0 ? now : now - ma * 30 * 86400000;
+      const stats = buildStats(cm, cmeet, c.created_at, nowMs);
+      if (stats.totalInteractions === 0) continue; // pas encore de relation à cette date
+      const r = computeScore(stats, ma === 0 ? (prevByC.get(c.id) ?? null) : lastScore);
+      lastScore = r.finalScore;
+      const snapDate = new Date(nowMs).toISOString().slice(0, 10);
+      if (userId) {
+        histRows.push({
+          organization_id: c.organization_id, contact_id: c.id, user_id: userId,
+          score: r.finalScore, phase: r.phase, score_intensite: r.si, score_reciprocite: r.sr, score_longevite: r.sl,
+          snapshot_date: snapDate,
+        });
+      }
+      if (ma === 0) {
+        profileRows.push({
+          organization_id: c.organization_id, contact_id: c.id, profile_version: 1,
+          engagement_score: r.finalScore, score_delta: r.delta, score_phase: r.phase,
+          score_intensite: r.si, score_reciprocite: r.sr, score_longevite: r.sl,
+          global_confidence: r.confidence, updated_at: new Date().toISOString(),
+        });
+      }
+    }
   }
 
   let scored = 0;
-  for (let i = 0; i < rows.length; i += 100) {
-    const chunk = rows.slice(i, i + 100);
-    const { error } = await supabase.from('cognitive_profiles').upsert(chunk, { onConflict: 'organization_id,contact_id,profile_version' });
-    if (!error) scored += chunk.length;
+  for (let i = 0; i < profileRows.length; i += 100) {
+    const { error } = await supabase.from('cognitive_profiles').upsert(profileRows.slice(i, i + 100), { onConflict: 'organization_id,contact_id,profile_version' });
+    if (!error) scored += Math.min(100, profileRows.length - i);
+  }
+  for (let i = 0; i < histRows.length; i += 200) {
+    await supabase.from('contact_score_history').upsert(histRows.slice(i, i + 200), { onConflict: 'organization_id,contact_id,user_id,snapshot_date', ignoreDuplicates: false });
   }
 
-  return jsonResponse({ success: true, scored, candidates: contacts.length, mode: isCron ? 'cron' : 'user' });
+  // NPS mensuel par org (à partir de l'historique) → courbe Home
+  const npsByOrgDate = new Map<string, { org: string; date: string; scores: number[] }>();
+  for (const h of histRows) {
+    const k = `${h.organization_id}|${h.snapshot_date}`;
+    if (!npsByOrgDate.has(k)) npsByOrgDate.set(k, { org: h.organization_id, date: h.snapshot_date, scores: [] });
+    npsByOrgDate.get(k)!.scores.push(h.score);
+  }
+  const npsRows = Array.from(npsByOrgDate.values()).map(v => {
+    const promoters = v.scores.filter(s => s >= 70).length;
+    const detractors = v.scores.filter(s => s <= 50).length;
+    const total = v.scores.length;
+    return {
+      organization_id: v.org, snapshot_date: v.date,
+      nps_value: Math.round((promoters / total) * 100 - (detractors / total) * 100),
+      avg_score: Math.round(v.scores.reduce((a, b) => a + b, 0) / total),
+      promoters, detractors, total,
+    };
+  });
+  for (let i = 0; i < npsRows.length; i += 200) {
+    await supabase.from('nps_snapshots').upsert(npsRows.slice(i, i + 200), { onConflict: 'organization_id,snapshot_date' });
+  }
+
+  return jsonResponse({ success: true, scored, history_points: histRows.length, nps_points: npsRows.length, mode: isCron ? 'cron' : 'user' });
 });
