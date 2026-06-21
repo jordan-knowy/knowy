@@ -222,6 +222,7 @@ export default function Dashboard() {
   const [displayedEmails, setDisplayedEmails] = useState<number>(0);
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
   const [nps, setNps] = useState<NpsData | null>(null);
+  const [npsHistory, setNpsHistory] = useState<Array<{ date: string; value: number; score: number }>>([]);
   const [signalsFeed, setSignalsFeed] = useState<SignalFeedItem[]>([]);
   const [companiesCount, setCompaniesCount] = useState<number>(0);
   const [comptesSort, setComptesSort] = useState<'prio' | 'nps'>('prio');
@@ -511,11 +512,29 @@ export default function Dashboard() {
           const promoters = allScores.filter(s => s >= 70).length;
           const detractors = allScores.filter(s => s <= 50).length;
           const passives = allScores.length - promoters - detractors;
-          setNps({
-            avgScore: Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length),
-            value: Math.round((promoters / allScores.length) * 100 - (detractors / allScores.length) * 100),
-            promoters, passives, detractors, count: allScores.length,
-          });
+          const avgScore = Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length);
+          const npsValue = Math.round((promoters / allScores.length) * 100 - (detractors / allScores.length) * 100);
+          setNps({ avgScore, value: npsValue, promoters, passives, detractors, count: allScores.length });
+
+          // Snapshot NPS du jour (idempotent) → la courbe se construit dans le temps
+          if (orgId) {
+            try {
+              await (supabase.from('nps_snapshots') as any).upsert({
+                organization_id: orgId, snapshot_date: new Date().toISOString().slice(0, 10),
+                nps_value: npsValue, avg_score: avgScore, promoters, detractors, total: allScores.length,
+              }, { onConflict: 'organization_id,snapshot_date' });
+              const { data: hist } = await supabase.from('nps_snapshots')
+                .select('snapshot_date, nps_value, avg_score')
+                .eq('organization_id', orgId)
+                .order('snapshot_date', { ascending: true }).limit(30);
+              if (mounted && hist) {
+                setNpsHistory((hist as any[]).map(h => ({
+                  date: new Date(h.snapshot_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+                  value: h.nps_value ?? 0, score: h.avg_score ?? 0,
+                })));
+              }
+            } catch { /* table absente / RLS — non bloquant */ }
+          }
         }
 
         if (mounted) setCompaniesCount(companiesRaw?.length ?? 0);
@@ -880,6 +899,31 @@ export default function Dashboard() {
                   </span>
                 )}
               </p>
+              {/* Courbe NPS (tendance) */}
+              {npsHistory.length >= 2 ? (
+                <svg width="160" height="34" viewBox="0 0 160 34" preserveAspectRatio="none" style={{ marginTop: 8, display: 'block', overflow: 'visible' }}>
+                  {(() => {
+                    const vals = npsHistory.map(h => h.score);
+                    const min = Math.min(...vals), max = Math.max(...vals);
+                    const range = (max - min) || 1;
+                    const pts = npsHistory.map((h, i) => {
+                      const x = (i / (npsHistory.length - 1)) * 158 + 1;
+                      const y = 32 - ((h.score - min) / range) * 28;
+                      return `${x.toFixed(1)},${y.toFixed(1)}`;
+                    });
+                    return (
+                      <>
+                        <polygon points={`1,33 ${pts.join(' ')} 159,33`} fill="rgba(255,255,255,0.14)" />
+                        <polyline points={pts.join(' ')} fill="none" stroke="rgba(255,255,255,0.92)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                      </>
+                    );
+                  })()}
+                </svg>
+              ) : (
+                <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 8, color: 'rgba(255,255,255,0.4)', marginTop: 6 }}>
+                  Courbe NPS — historique en cours
+                </p>
+              )}
             </div>
           </div>
 
