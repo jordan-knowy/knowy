@@ -166,6 +166,54 @@ function extractEmail(raw: string): string {
   return m ? m[1].trim().toLowerCase() : raw.trim().toLowerCase();
 }
 
+// Nettoie/valide un nom d'affichage issu d'un email (en-tête From / Graph).
+// Rejette les emails bruts et les libellés génériques (noreply, contact, support…).
+function cleanDisplayName(raw: string): string {
+  if (!raw) return '';
+  let s = raw.trim().replace(/^["']|["']$/g, '').trim();
+  if (!s || s.includes('@')) return '';
+  // « Nom, Prénom » → « Prénom Nom »
+  if (/^[^,]+,\s*[^,]+$/.test(s)) {
+    const [last, first] = s.split(',').map(x => x.trim());
+    s = `${first} ${last}`;
+  }
+  const generic = /^(no.?reply|do.?not.?reply|ne.?pas.?repondre|contact|info|infos|hello|bonjour|support|sales|commercial|equipe|team|admin|service|client|clients|newsletter|notification|notifications|mailer|postmaster)$/i;
+  if (generic.test(s)) return '';
+  if (!/[a-zà-ÿ]/i.test(s)) return '';        // doit contenir une lettre
+  if (s.length > 120) s = s.slice(0, 120);
+  return s;
+}
+
+// Extrait le nom d'affichage d'un en-tête From Gmail : « "Camille Rambert" <x@y.com> » → « Camille Rambert ».
+function extractName(rawFrom: string): string {
+  let s = (rawFrom ?? '').trim();
+  const lt = s.indexOf('<');
+  s = lt > 0 ? s.slice(0, lt) : '';            // partie avant <email> ; sinon pas de nom
+  return cleanDisplayName(s);
+}
+
+// Renseigne contacts.full_name UNIQUEMENT s'il est vide ou générique (= email / partie locale).
+// Permet d'identifier « qui se cache » derrière contact@domaine.com à partir de la signature/From.
+async function maybeSetContactName(
+  supabase: any, contactId: string, contactEmail: string, resolvedName: string,
+): Promise<void> {
+  if (!resolvedName) return;
+  const { data: cRow } = await supabase
+    .from('contacts').select('full_name').eq('id', contactId).maybeSingle();
+  const cur = (cRow?.full_name ?? '').trim().toLowerCase();
+  const local = (contactEmail.split('@')[0] ?? '').toLowerCase();
+  const isPlaceholder =
+    !cur ||
+    cur === contactEmail.toLowerCase() ||
+    cur === local ||
+    cur === local.replace(/[._-]+/g, ' ');
+  if (isPlaceholder && resolvedName.toLowerCase() !== cur) {
+    await supabase.from('contacts')
+      .update({ full_name: resolvedName, updated_at: new Date().toISOString() })
+      .eq('id', contactId);
+  }
+}
+
 function isOutbound(headers: Array<{ name: string; value: string }>, labelIds: string[], userEmail: string): boolean {
   if (labelIds.includes('SENT')) return true;
   const from = extractEmail(headerVal(headers, 'From'));
@@ -286,6 +334,7 @@ async function processContact(
   msgDetails.sort((a, b) => parseInt(a.internalDate ?? '0') - parseInt(b.internalDate ?? '0'));
 
   const msgPayloads: any[] = [];
+  let resolvedName = '';   // nom d'affichage du contact (depuis ses emails entrants)
   for (const msg of msgDetails) {
     const headers: Array<{ name: string; value: string }> = msg.payload?.headers ?? [];
     const labelIds: string[] = msg.labelIds ?? [];
@@ -302,6 +351,12 @@ async function processContact(
     const outbound = isOutbound(headers, labelIds, userEmail);
     const direction = outbound ? 'outbound' : 'inbound';
     const subject = headerVal(headers, 'Subject') || null;
+
+    // Le From d'un message entrant porte le nom du contact (le + récent l'emporte)
+    if (!outbound) {
+      const n = extractName(headerVal(headers, 'From'));
+      if (n) resolvedName = n;
+    }
 
     // Response time estimation
     let responseTimeHours: number | null = null;
@@ -354,6 +409,9 @@ async function processContact(
       .eq('id', contactId)
       .eq('enrichment_status', 'done'); // only reset if previously done
   }
+
+  // 8. Identifier le contact (nom réel derrière un email générique) si manquant
+  await maybeSetContactName(supabase, contactId, contactEmail, resolvedName);
 
   return { messages: inserted, threads: threadMap.size };
 }
@@ -706,6 +764,7 @@ async function processOutlookContact(
 
   // ── Messages ──────────────────────────────────────────────────────────────
   const payloads: any[] = [];
+  let resolvedName = '';   // nom d'affichage du contact (depuis ses emails entrants)
   for (const m of msgs) {
     const threadUUID = threadUUIDMap.get(m.conversationId);
     if (!threadUUID) continue;
@@ -715,6 +774,12 @@ async function processOutlookContact(
 
     const fromAddr = m.from?.emailAddress?.address?.toLowerCase() ?? '';
     const outbound = fromAddr === userEmail.toLowerCase();
+
+    // Graph fournit déjà le nom d'affichage du contact sur les messages entrants
+    if (!outbound) {
+      const n = cleanDisplayName(m.from?.emailAddress?.name ?? '');
+      if (n) resolvedName = n;
+    }
 
     payloads.push({
       organization_id: organizationId,
@@ -749,6 +814,9 @@ async function processOutlookContact(
       .eq('id', contactId)
       .eq('enrichment_status', 'done');
   }
+
+  // Identifier le contact (nom réel derrière un email générique) si manquant
+  await maybeSetContactName(supabase, contactId, contactEmail, resolvedName);
 
   return { messages: inserted, threads: convMap.size };
 }
