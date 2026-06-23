@@ -98,6 +98,10 @@ export default function MeetingAnalysis() {
   const [analyzingRecap, setAnalyzingRecap] = useState(false);
   const [recapErr, setRecapErr] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  // Enrichissement IA des participants + compte de la réunion (spec enrichissement)
+  const [enriching, setEnriching] = useState(false);
+  const [enrichMsg, setEnrichMsg] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   async function readFile(file: File) {
     setRecapErr(null);
@@ -111,6 +115,47 @@ export default function MeetingAnalysis() {
       setRecapText(prev => (prev ? prev + '\n\n' : '') + text);
     } catch {
       setRecapErr('Impossible de lire le fichier.');
+    }
+  }
+
+  // Enrichit (IA) les participants de la réunion + le compte lié, puis régénère le brief.
+  async function enrichMeeting() {
+    if (!supabase || enriching) return;
+    const contactIds = loadedParticipants.map(p => p.id).filter(Boolean);
+    if (contactIds.length === 0 && !companyId) {
+      setEnrichMsg('Aucun participant à enrichir.');
+      setTimeout(() => setEnrichMsg(null), 4000);
+      return;
+    }
+    setEnriching(true); setEnrichMsg(null);
+    try {
+      const orgId = await getActiveOrganizationId();
+      // Participants (contacts) — recherche IA approfondie, forcée
+      await Promise.allSettled(
+        contactIds.map(cid =>
+          supabase!.functions.invoke('enrich-agent', {
+            body: { contactId: cid, organizationId: orgId, forceRefresh: true },
+          })),
+      );
+      // Compte lié
+      if (companyId) {
+        await supabase.functions.invoke('enrich-agent', {
+          body: { companyId, organizationId: orgId, forceRefresh: true },
+        }).catch(() => {});
+      }
+      // Régénère le brief avec les nouvelles données
+      if (id) {
+        await supabase.functions.invoke('generate-brief', {
+          body: { organizationId: orgId, meetingId: id, forceRefresh: true },
+        }).catch(() => {});
+      }
+      setEnrichMsg('✓ Réunion enrichie');
+      setReloadKey(k => k + 1); // recharge profils + brief
+    } catch {
+      setEnrichMsg('Échec — vérifie le workflow n8n.');
+    } finally {
+      setEnriching(false);
+      setTimeout(() => setEnrichMsg(null), 6000);
     }
   }
 
@@ -257,7 +302,7 @@ export default function MeetingAnalysis() {
 
     load();
     return () => { mounted = false; };
-  }, [id]);
+  }, [id, reloadKey]);
 
   // ── Behavioral tracking ────────────────────────────────────────────────────
   const openedAt = useRef<number>(Date.now());
@@ -756,6 +801,24 @@ export default function MeetingAnalysis() {
 
               {/* Actions */}
               <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Enrichir (IA) — recherche approfondie participants + compte, régénère le brief */}
+                <button
+                  onClick={enrichMeeting}
+                  disabled={enriching}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-60"
+                  style={{ background: '#6E50C8', color: '#fff' }}
+                  title="Recherche IA approfondie sur les participants et le compte, puis régénère le brief"
+                >
+                  {enriching
+                    ? <><Loader2 className="size-3.5 animate-spin" /> Enrichissement…</>
+                    : <><Sparkles className="size-3.5" /> Enrichir (IA)</>}
+                </button>
+                {enrichMsg && (
+                  <span className="text-[10px] max-w-[150px]"
+                    style={{ color: enrichMsg.startsWith('✓') ? '#96DDB8' : '#F0A0AD' }}>
+                    {enrichMsg}
+                  </span>
+                )}
                 {!isPast && realMeeting?.briefStatus !== 'to_generate' && (
                   <button
                     onClick={handleSendBriefEmail}
