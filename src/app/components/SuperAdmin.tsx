@@ -42,6 +42,9 @@ interface UserRow {
   full_name: string | null;
   created_at: string;
   orgName: string | null;
+  orgId: string | null;
+  planId: string;
+  isSuperAdmin: boolean;
   meetingCount: number;
   lastSeen: string | null;
 }
@@ -174,6 +177,30 @@ export default function SuperAdmin() {
   const [engagement, setEngagement] = useState<EngagementStats | null>(null);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [savingPlanOrg, setSavingPlanOrg] = useState<string | null>(null);
+  const [savingUser, setSavingUser] = useState<string | null>(null);
+
+  // Définir le plan (test/super_admin/…) de l'org d'un utilisateur — RPC SECURITY DEFINER
+  const setUserPlan = async (userId: string, planId: string) => {
+    if (!supabase) return;
+    setSavingUser(userId);
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, planId } : u)); // optimiste
+    try {
+      const { error } = await supabase.rpc('admin_set_user_plan', { target_user: userId, new_plan: planId });
+      if (error) { await load(); }
+      else { setOrgs(prev => prev.map(o => { const u = users.find(x => x.id === userId); return u && o.id === u.orgId ? { ...o, planId } : o; })); }
+    } finally { setSavingUser(null); }
+  };
+
+  // Basculer le statut super admin d'un utilisateur — RPC SECURITY DEFINER
+  const toggleSuperAdmin = async (userId: string, makeAdmin: boolean) => {
+    if (!supabase) return;
+    setSavingUser(userId);
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, isSuperAdmin: makeAdmin } : u)); // optimiste
+    try {
+      const { error } = await supabase.rpc('admin_set_super_admin', { target_user: userId, make_admin: makeAdmin });
+      if (error) { await load(); }
+    } finally { setSavingUser(null); }
+  };
 
   // Assigner manuellement un plan à une org (super admin uniquement — RLS subscriptions_super_admin_update)
   const assignPlan = async (organizationId: string, planId: string) => {
@@ -278,21 +305,20 @@ export default function SuperAdmin() {
     }));
     setOrgs(orgDetails);
 
-    // ── Users detail ─────────────────────────────────────────────────────
-    const { data: userRows } = await supabase.from('profiles').select('id, full_name, created_at').order('created_at', { ascending: false }).limit(50);
+    // ── Users detail (RPC SECURITY DEFINER : email + plan + statut super admin) ─
+    const { data: userRows } = await supabase.rpc('admin_list_users');
 
-    const userDetails: UserRow[] = await Promise.all((userRows || []).map(async (u) => {
-      const { data: membership } = await supabase.from('memberships').select('organizations(name)').eq('user_id', u.id).maybeSingle();
-      const { count: meetingCount } = await supabase.from('meetings').select('*', { count: 'exact', head: true }).eq('owner_user_id', u.id);
-      return {
-        id: u.id,
-        email: '',
-        full_name: u.full_name,
-        created_at: u.created_at,
-        orgName: (membership?.organizations as any)?.name ?? null,
-        meetingCount: meetingCount ?? 0,
-        lastSeen: null,
-      };
+    const userDetails: UserRow[] = (userRows ?? []).map((u: any) => ({
+      id: u.user_id,
+      email: u.email ?? '',
+      full_name: u.full_name,
+      created_at: u.created_at,
+      orgName: u.org_name ?? null,
+      orgId: u.org_id ?? null,
+      planId: u.plan_id ?? 'free',
+      isSuperAdmin: u.is_super_admin ?? false,
+      meetingCount: Number(u.meeting_count ?? 0),
+      lastSeen: null,
     }));
     setUsers(userDetails);
 
@@ -351,8 +377,8 @@ export default function SuperAdmin() {
 
       const perUser: UserEngagement[] = await Promise.all(
         Object.entries(userMap).map(async ([uid, ev]) => {
-          const profileRow = userRows?.find(u => u.id === uid);
           const memb = userDetails.find(u => u.id === uid);
+          const profileRow = memb;
           const avgBrief = ev.closes.length > 0
             ? Math.round(ev.closes.reduce((s, e) => s + (e.duration_ms ?? 0), 0) / ev.closes.length)
             : 0;
@@ -683,14 +709,27 @@ export default function SuperAdmin() {
         {activeTab === 'users' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <KnowrCard className="overflow-hidden">
-              <div className="p-4 border-b border-border">
+              <div className="p-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
                 <h3 className="font-bold">{users.length} utilisateurs</h3>
+                <div className="flex items-center gap-2">
+                  {users.filter(u => u.planId === 'tester').length > 0 && (
+                    <span className="text-xs font-semibold px-3 py-1.5 rounded-full"
+                      style={{ background: '#FBF0E2', color: '#C97A20' }}>
+                      {users.filter(u => u.planId === 'tester').length} testeur{users.filter(u => u.planId === 'tester').length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {users.filter(u => u.isSuperAdmin).length > 0 && (
+                    <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-primary/10 text-primary">
+                      {users.filter(u => u.isSuperAdmin).length} super admin
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
-                      {['Utilisateur', 'Organisation', 'Réunions', 'Inscrit le'].map(h => (
+                      {['Utilisateur', 'Organisation', 'Plan', 'Super admin', 'Réunions', 'Inscrit le'].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
@@ -703,9 +742,9 @@ export default function SuperAdmin() {
                             <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
                               {(u.full_name || u.email || '?')[0].toUpperCase()}
                             </div>
-                            <div>
-                              <div className="font-medium">{u.full_name || '—'}</div>
-                              <div className="text-xs text-muted-foreground">{u.id.slice(0, 8)}…</div>
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{u.full_name || '—'}</div>
+                              <div className="text-xs text-muted-foreground truncate">{u.email || `${u.id.slice(0, 8)}…`}</div>
                             </div>
                           </div>
                         </td>
@@ -715,6 +754,30 @@ export default function SuperAdmin() {
                             : <span className="text-muted-foreground text-xs">Aucune</span>
                           }
                         </td>
+                        <td className="px-4 py-3">
+                          <select
+                            value={u.planId}
+                            disabled={savingUser === u.id || !u.orgId}
+                            onChange={(e) => setUserPlan(u.id, e.target.value)}
+                            className="text-xs font-semibold rounded-lg border border-border bg-card px-2 py-1.5 capitalize focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                            title={u.orgId ? "Définir le plan de l'organisation de cet utilisateur" : "Aucune organisation — plan non assignable"}
+                          >
+                            {PLAN_OPTIONS.map(p => (
+                              <option key={p} value={p}>{p.replace('_', ' ')}</option>
+                            ))}
+                          </select>
+                          {savingUser === u.id && <span className="ml-1 text-[10px] text-muted-foreground">…</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => toggleSuperAdmin(u.id, !u.isSuperAdmin)}
+                            disabled={savingUser === u.id}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${u.isSuperAdmin ? 'bg-primary' : 'bg-muted'}`}
+                            title={u.isSuperAdmin ? 'Retirer le statut super admin' : 'Promouvoir super admin'}
+                          >
+                            <span className={`inline-block size-4 transform rounded-full bg-white transition-transform ${u.isSuperAdmin ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </td>
                         <td className="px-4 py-3 font-mono">{u.meetingCount}</td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">
                           {new Date(u.created_at).toLocaleDateString('fr-FR')}
@@ -723,6 +786,9 @@ export default function SuperAdmin() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="p-3 border-t border-border text-[11px] text-muted-foreground">
+                Le plan s'applique à l'organisation de l'utilisateur (gating réel). « tester » = accès niveau Business pour suivi. Modifications réservées aux super admins (RPC sécurisées).
               </div>
             </KnowrCard>
           </motion.div>
