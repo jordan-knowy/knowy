@@ -269,6 +269,8 @@ export default function ContactDetail() {
   const [teamMembers, setTeamMembers] = useState<Array<{ id: string; name: string }>>([]);
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferTo, setTransferTo] = useState('');
+  const [genBrief, setGenBrief] = useState(false);
+  const [genErr, setGenErr] = useState<string | null>(null);
   const [keepCopy, setKeepCopy] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [transferMsg, setTransferMsg] = useState<string | null>(null);
@@ -578,6 +580,71 @@ export default function ContactDetail() {
     }
   };
 
+  // ── Générer une fiche « Recommandations » sans réunion planifiée ──────────────
+  // Crée une réunion ad-hoc (préparation d'un prochain échange), génère le brief
+  // puis ouvre la fiche /meeting/:id. Réutilise la réunion ad-hoc si déjà créée.
+  const generateRecommendations = async () => {
+    if (!supabase || !id || genBrief) return;
+    setGenBrief(true); setGenErr(null);
+    try {
+      const oid = orgId ?? await getActiveOrganizationId();
+      if (!oid) { setGenErr('Organisation introuvable'); return; }
+
+      // 1. Réutiliser une réunion ad-hoc déjà générée pour ce contact
+      const { data: existing } = await supabase
+        .from('meetings')
+        .select('id')
+        .eq('organization_id', oid)
+        .eq('raw_payload->>adhoc_contact', id)
+        .limit(1)
+        .maybeSingle();
+
+      let meetingId = (existing as any)?.id as string | undefined;
+
+      if (!meetingId) {
+        // 2. Créer la réunion ad-hoc (prochain échange à préparer)
+        const startsAt = new Date(Date.now() + 3600_000).toISOString();
+        const { data: created, error: cErr } = await supabase
+          .from('meetings')
+          .insert({
+            organization_id: oid,
+            title: `Préparation — ${contact?.full_name ?? 'échange'}`,
+            company_id: companyId,
+            owner_user_id: currentUserId,
+            meeting_type: 'commercial',
+            starts_at: startsAt,
+            is_external: true,
+            raw_payload: { adhoc: true, adhoc_contact: id, source: 'recommendation' },
+          })
+          .select('id')
+          .single();
+        if (cErr || !created) { setGenErr("Impossible de créer la fiche."); return; }
+        meetingId = created.id;
+
+        // Lier le contact comme participant
+        await supabase.from('meeting_participants').insert({
+          meeting_id: meetingId,
+          organization_id: oid,
+          contact_id: id,
+          name: contact?.full_name ?? null,
+          email: contact?.email ?? null,
+        });
+      }
+
+      // 3. Générer le brief IA (best-effort — la fiche s'affiche depuis les profils cognitifs)
+      try {
+        await supabase.functions.invoke('generate-brief', { body: { organizationId: oid, meetingId } });
+      } catch { /* la fiche reste consultable sans le brief IA */ }
+
+      // 4. Ouvrir la fiche recommandations
+      navigate(`/meeting/${meetingId}`);
+    } catch {
+      setGenErr('Erreur lors de la génération.');
+    } finally {
+      setGenBrief(false);
+    }
+  };
+
   // ── Loading & error states ────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -660,13 +727,27 @@ export default function ContactDetail() {
         </button>
 
         {/* Commutateur de vue Réunion · Personne · Compte (spec-25 §B) */}
-        <div className="flex justify-center mb-4">
+        <div className="flex flex-col items-center gap-2 mb-4">
           <ViewSwitcher
             active="personne"
             meetingId={recentMeetings[0]?.id ?? null}
             contactId={id}
             companyId={companyId}
           />
+          {/* Générer une fiche Recommandations sans réunion planifiée */}
+          {recentMeetings.length === 0 && (
+            <button
+              onClick={generateRecommendations}
+              disabled={genBrief}
+              className="flex items-center gap-1.5 text-xs font-semibold rounded-full px-3.5 py-1.5 transition-all disabled:opacity-60"
+              style={{ background: '#6E50C8', color: '#fff', boxShadow: '0 2px 10px rgba(110,80,200,0.3)' }}
+              title="Générer des recommandations sans réunion planifiée"
+            >
+              {genBrief ? <Loader2 className="size-3.5 animate-spin" /> : <Target className="size-3.5" />}
+              {genBrief ? 'Génération…' : 'Générer des recommandations'}
+            </button>
+          )}
+          {genErr && <span className="text-[11px] text-destructive">{genErr}</span>}
         </div>
 
         {/* ══ HERO HEADER DARK ══════════════════════════════════════════════════ */}
