@@ -62,8 +62,37 @@ STRUCTURE DU BRIEF À GÉNÉRER (format JSON strict) :
     "key_insight": "<1 phrase — insight le plus important>",
     "priority_action": "<1 phrase — action concrète>",
     "main_risk": "<1 phrase — risque principal>",
-    "opening_question": "<question d'ouverture exacte, prête à dire>",
-    "interaction_modes_primary": ["challenger|validator|strategist|operator|consensus_builder|explorer"]
+    "opening_question": "<question d'ouverture exacte, prête à dire — = '1ère phrase à dire'>",
+    "interaction_modes_primary": ["challenger|validator|strategist|operator|consensus_builder|explorer"],
+    "expectation": "<ce que l'interlocuteur attend de ce RDV, 1 phrase>",
+    "to_obtain": "<ce qu'il faut OBTENIR concrètement de ce RDV>",
+    "anti_pattern": "<le piège à éviter absolument pendant ce RDV>",
+    "success_signal": "<le signal observable qui prouvera que le RDV est réussi>"
+  },
+  "objectives": {
+    "minimal": "<succès minimal — le strict nécessaire à décrocher>",
+    "nominal": "<objectif nominal — le résultat visé>",
+    "stretch": "<stretch goal — le meilleur scénario réaliste>"
+  },
+  "spin_questions": [
+    {"type": "situation|problem|implication|need_payoff", "question": "<question exacte à poser, prête à dire>", "rationale": "<ce qu'elle fait émerger>"}
+  ],
+  "pivots": [
+    {"signal": "<phrase/objection que l'interlocuteur pourrait dire>", "script": "<réponse exacte à dire pour rebondir>", "goal": "<ce que ce pivot cherche à obtenir>"}
+  ],
+  "why_now": {
+    "signal_verbatim": "<verbatim du signal d'achat, entre guillemets, si observable — sinon null>",
+    "date": "<date du signal | null>",
+    "source": "<source | null>",
+    "interpretation": "<pourquoi c'est le bon moment, 1-2 phrases>"
+  },
+  "recommended_action": {
+    "type": "send_email|book_meeting|wait|call|null",
+    "label": "<libellé court de l'action, ex. 'Envoyer un mail'>",
+    "rationale": "<pourquoi le moteur recommande ça maintenant>",
+    "email_recipient": "<email destinataire | null>",
+    "email_subject": "<objet du mail prêt à envoyer | null>",
+    "email_body": "<corps du mail personnalisé, prêt à envoyer, ancré sur le signal | null>"
   },
   "context": {
     "executive_summary": {
@@ -133,6 +162,11 @@ STRUCTURE DU BRIEF À GÉNÉRER (format JSON strict) :
         "perceived_positioning": "<string|null>",
         "likely_skepticism_areas": "<string|null>",
         "credibility_gaps": "<string|null>",
+        "knows": ["<ce qu'il/elle SAIT déjà — faits acquis>"],
+        "doesnt_know": ["<ce qu'il/elle NE SAIT PAS encore — à révéler>"],
+        "believes": ["<ce qu'il/elle CROIT probablement (à recadrer)>"],
+        "mood": "<humeur probable à l'entrée du RDV, 1 phrase | null>",
+        "risk": "<le risque de perception principal + comment le cadrer | null>",
         "confidence": <0.0-1.0|null>
       }
     }
@@ -144,6 +178,7 @@ STRUCTURE DU BRIEF À GÉNÉRER (format JSON strict) :
       "economic_buyer": {"value": "<string|null>", "level": "...", "confidence": null, "sources": []},
       "decision_criteria": {"value": "<string|null>", "level": "...", "confidence": null, "sources": []},
       "decision_process": {"value": "<string|null>", "level": "...", "confidence": null, "sources": []},
+      "paper_process": {"value": "<string|null — modalités contractuelles/achat>", "level": "...", "confidence": null, "sources": []},
       "identify_pain": {"value": "<string|null>", "level": "...", "confidence": null, "sources": []},
       "champion": {"value": "<string|null>", "level": "...", "confidence": null, "sources": []},
       "competition": {"value": "<string|null>", "level": "...", "confidence": null, "sources": []}
@@ -170,7 +205,7 @@ STRUCTURE DU BRIEF À GÉNÉRER (format JSON strict) :
       {"order": 1, "phase": "<phase temporelle>", "action": "<action concrète>", "rationale": "<ancré sur signal>", "source_signal": "<string|null>", "influence_lever_used": "<string|null>", "adapted_for_cognitive_mode": "<string|null>"}
     ],
     "objections": [
-      {"verbatim": "<comme ils le diraient>", "probability": <0.0-1.0>, "objection_type": "...", "source_signal": "...", "prepared_response": "...", "cialdini_lever_to_activate": "<string|null>"}
+      {"verbatim": "<comme ils le diraient>", "probability": <0.0-1.0>, "objection_type": "...", "source_signal": "...", "prepared_response": "...", "anti_pattern": "<l'erreur à NE PAS faire face à cette objection>", "cialdini_lever_to_activate": "<string|null>"}
     ],
     "internal_selling": null,
     "risks": [
@@ -182,13 +217,24 @@ STRUCTURE DU BRIEF À GÉNÉRER (format JSON strict) :
   }
 }
 
+RÈGLES SECTIONS RÉUNION (maquette de référence) :
+- express : remplir expectation / to_obtain / anti_pattern / success_signal — concrets, jamais génériques. opening_question = la 1ère phrase exacte à dire.
+- objectives : TOUJOURS 3 tiers (minimal / nominal / stretch), réalistes et mesurables.
+- spin_questions : 3 questions minimum (situation/problem, implication, need_payoff), formulées prêtes à dire, ancrées sur le contexte réel (signaux, échanges). Pas de questions génériques.
+- theory_of_mind : remplir knows / doesnt_know / believes (listes courtes) + mood + risk depuis les signaux observables. Si peu de données → listes plus courtes, jamais inventées.
+- pivots : 2-3 pivots (signal probable → script de réponse → but). Ancrés sur les objections/signaux réels.
+- why_now : si un signal d'achat existe (verbatim email/observable), le citer mot pour mot + date + source. Sinon interpretation prudente, verbatim=null.
+- recommended_action : UNE action que « le moteur a tranché ». Si un mail est pertinent (perche chaude, pas de RDV calé), type=send_email + email_subject + email_body personnalisés et prêts (signature à ajouter côté app). Sinon book_meeting/call/wait.
+- objections : chaque objection a prepared_response ET anti_pattern.
+
 ANTI-PATTERNS INTERDITS :
 - MEDDPICC complet inventé → null sur chaque case
 - Urgence artificielle → jamais
 - Section Objections vide → minimum 1 obligatoire
 - Profil interactionnel sans niveau d'inférence → interdit
 - Analyse comportementale depuis le titre → jamais
-- JTBD générique → null si pas de signal`;
+- JTBD générique → null si pas de signal
+- spin_questions / objectives génériques (copiables sur n'importe quel deal) → interdit, ancrer sur le réel`;
 
 // ── Build context for the LLM ────────────────────────────────────────────────
 function buildUserMessage(ctx: BriefContext): string {

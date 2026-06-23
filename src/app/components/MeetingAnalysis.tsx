@@ -6,13 +6,14 @@ import {
   CheckCircle2, AlertTriangle, Target, Sparkles, Loader2,
   Clock, Video, Calendar, ExternalLink, Users,
   Brain, ArrowRight, ChevronRight, Shield, TrendingDown,
-  TrendingUp, Minus, Check, ListChecks, FileText, RefreshCw,
+  TrendingUp, Minus, Check, ListChecks, FileText, RefreshCw, Zap, X,
 } from 'lucide-react';
 import KnowrBadge from './knowr/KnowrBadge';
 import ACard from './knowr/ACard';
 import CollapsibleSection from './knowr/CollapsibleSection';
 import SignalRail, { type Signal } from './knowr/SignalRail';
 import ViewSwitcher from './knowr/ViewSwitcher';
+import SourcesPanel from './knowr/SourcesPanel';
 import { getMeeting, getMeetingParticipants } from '../../lib/api/meetings';
 import { getActiveOrganizationId } from '../../lib/api/org';
 import { supabase } from '../../lib/supabase';
@@ -102,6 +103,24 @@ export default function MeetingAnalysis() {
   const [enriching, setEnriching] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Brief IA complet (généré par generate-brief, stocké dans briefs.content)
+  const [brief, setBrief] = useState<any | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(null);
+  // Modale mail pré-RDV (action recommandée)
+  const [showMail, setShowMail] = useState(false);
+  const [mailConfirm, setMailConfirm] = useState(false);
+  const [mailTo, setMailTo] = useState('');
+  const [mailSubject, setMailSubject] = useState('');
+  const [mailBody, setMailBody] = useState('');
+
+  const openMail = () => {
+    const rec = brief?.recommended_action ?? {};
+    setMailTo(rec.email_recipient ?? '');
+    setMailSubject(rec.email_subject ?? '');
+    setMailBody(rec.email_body ?? '');
+    setMailConfirm(false);
+    setShowMail(true);
+  };
 
   async function readFile(file: File) {
     setRecapErr(null);
@@ -295,6 +314,20 @@ export default function MeetingAnalysis() {
         const { data: psum } = await supabase
           .from('meeting_post_summaries').select('*').eq('meeting_id', id!).maybeSingle();
         if (mounted) setPostSummary(psum ?? null);
+      }
+
+      // Brief IA complet (le + récent) — pilote les sections de préparation
+      if (supabase) {
+        const oid = await getActiveOrganizationId();
+        if (mounted) setOrgId(oid);
+        const { data: briefRow } = await supabase
+          .from('briefs')
+          .select('content')
+          .eq('meeting_id', id!)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (mounted) setBrief((briefRow as any)?.content ?? null);
       }
 
       if (mounted) setLoading(false);
@@ -928,6 +961,13 @@ export default function MeetingAnalysis() {
             {/* ══ VUE PRÉPARATION (état « Avant ») ═══════════════════════════ */}
             {viewMode === 'prep' && (<>
 
+            {/* ── SOURCES CONNECTÉES ──────────────────────────────────────────── */}
+            <SourcesPanel
+              organizationId={orgId}
+              hasPublicData={Boolean(brief?.context?.company_context?.sector || Object.keys(fullProfiles).length > 0)}
+              provenanceNote="Brief construit depuis la messagerie (échanges réels) + profils cognitifs. Enrichir (IA) complète via sources publiques."
+            />
+
             {/* ── MODE 5 MIN ──────────────────────────────────────────────────── */}
             <motion.div
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
@@ -939,29 +979,231 @@ export default function MeetingAnalysis() {
               </div>
               <div className="flex divide-x divide-border overflow-x-auto">
                 <M5Cell
-                  label="Contexte"
-                  value={firstExecSummary ?? (meeting.company !== '—' ? `${meeting.company} — ${participants.length} participant${participants.length > 1 ? 's' : ''}` : `${participants.length} participant${participants.length > 1 ? 's' : ''}`)}
+                  label="Ce qu'il·elle attend"
+                  value={brief?.express?.expectation ?? firstExecSummary ?? (meeting.company !== '—' ? `${meeting.company} — ${participants.length} participant${participants.length > 1 ? 's' : ''}` : 'À qualifier')}
                 />
                 <M5Cell
-                  label="Objectif"
-                  value={firstJTBD?.text ?? 'À qualifier en ouverture de réunion'}
+                  label="1ʳᵉ phrase à dire"
+                  value={brief?.express?.opening_question ?? firstOpeningQ ?? 'Poser en ouverture : «Quels sont vos critères de succès ?»'}
                 />
                 <M5Cell
-                  label="Posture"
-                  value={tomData ? (tomData.data.likely_skepticism ? `Zone de scepticisme : ${tomData.data.likely_skepticism}` : 'Posture à confirmer') : 'Enrichir pour activer'}
-                  warn={!!tomData?.data.likely_skepticism}
+                  label="À obtenir"
+                  value={brief?.express?.to_obtain ?? firstJTBD?.text ?? 'À qualifier en ouverture de réunion'}
                 />
                 <M5Cell
-                  label="Question clé"
-                  value={firstOpeningQ ?? 'Poser en ouverture : «Quels sont vos critères de succès ?»'}
+                  label="Anti-pattern"
+                  value={brief?.express?.anti_pattern ?? (tomData?.data.likely_skepticism ? `Éviter : ${tomData.data.likely_skepticism}` : 'Laisser le RDV dériver hors objectif')}
+                  warn
                 />
                 <M5Cell
-                  label="Action"
-                  value={mainAtRisk ? `⚠️ Réactiver ${mainAtRisk.name}` : (participants.length > 0 ? `Qualifier JTBD · ${participants[0].name}` : 'Préparer les prochaines étapes')}
-                  warn={!!mainAtRisk}
+                  label="Signal de succès"
+                  value={brief?.express?.success_signal ?? (mainAtRisk ? `⚠️ Réactiver ${mainAtRisk.name}` : 'Accord sur une prochaine étape concrète')}
+                  warn={!brief && !!mainAtRisk}
                 />
               </div>
             </motion.div>
+
+            {/* ══ SECTIONS BRIEF IA (maquette réunion) ══════════════════════════ */}
+            {brief && (() => {
+              const ex = brief.express ?? {};
+              const obj = brief.objectives ?? {};
+              const spin: any[] = Array.isArray(brief.spin_questions) ? brief.spin_questions : [];
+              const tom = brief.people?.primary_profile?.theory_of_mind ?? {};
+              const md = brief.deal?.meddpicc ?? {};
+              const objections: any[] = Array.isArray(brief.action?.objections) ? brief.action.objections : [];
+              const pivots: any[] = Array.isArray(brief.pivots) ? brief.pivots : [];
+              const why = brief.why_now ?? {};
+              const rec = brief.recommended_action ?? {};
+              const dotsFor = (lvl?: string) => lvl === 'observable' ? 3 : lvl === 'inferred' ? 2 : lvl === 'hypothetical' ? 1 : 0;
+              const SPIN_LABEL: Record<string, string> = { situation: 'Situation', problem: 'Problème', implication: 'Implication', need_payoff: 'Need-payoff' };
+              const MEDDPICC: { k: string; key: string; label: string }[] = [
+                { k: 'M', key: 'metrics', label: 'Metrics' },
+                { k: 'E', key: 'economic_buyer', label: 'Economic Buyer' },
+                { k: 'D', key: 'decision_criteria', label: 'Decision Criteria' },
+                { k: 'D', key: 'decision_process', label: 'Decision Process' },
+                { k: 'P', key: 'paper_process', label: 'Paper Process' },
+                { k: 'I', key: 'identify_pain', label: 'Identify Pain' },
+                { k: 'C', key: 'champion', label: 'Champion' },
+                { k: 'C', key: 'competition', label: 'Competition' },
+              ];
+              return (
+                <div className="space-y-4">
+
+                  {/* POURQUOI MAINTENANT */}
+                  {(why.interpretation || why.signal_verbatim) && (
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                      className="rounded-2xl p-5 border" style={{ background: 'rgba(110,80,200,0.06)', borderColor: 'rgba(110,80,200,0.2)' }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Zap className="size-4 text-primary" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Pourquoi maintenant</span>
+                      </div>
+                      {why.signal_verbatim && (
+                        <p className="text-sm italic text-foreground mb-1.5">« {why.signal_verbatim} »</p>
+                      )}
+                      {why.interpretation && <p className="text-sm text-muted-foreground">{why.interpretation}</p>}
+                      {(why.date || why.source) && (
+                        <p className="text-[10px] text-muted-foreground mt-2" style={{ fontFamily: 'var(--mono)' }}>
+                          {[why.source, why.date].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
+                    </motion.div>
+                  )}
+
+                  {/* ACTION RECOMMANDÉE */}
+                  {(rec.label || rec.rationale) && (
+                    <div className="rounded-2xl overflow-hidden border border-primary/30 bg-card">
+                      <div className="flex items-center gap-2 px-5 py-3 border-b border-border" style={{ background: 'rgba(110,80,200,0.05)' }}>
+                        <Target className="size-4 text-primary" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Action recommandée · le moteur a tranché</span>
+                      </div>
+                      <div className="p-5 flex flex-wrap items-center gap-4">
+                        <div className="flex-1 min-w-[200px]">
+                          <p className="text-base font-bold text-foreground">{rec.label ?? 'Prochaine action'}</p>
+                          {rec.rationale && <p className="text-sm text-muted-foreground mt-0.5">{rec.rationale}</p>}
+                        </div>
+                        {rec.type === 'send_email' && rec.email_body && (
+                          <button
+                            onClick={openMail}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
+                            style={{ background: '#6E50C8' }}
+                          >
+                            <Mail className="size-4" /> Ouvrir le mail
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* OBJECTIF · 3 TIERS */}
+                  {(obj.minimal || obj.nominal || obj.stretch) && (
+                    <CollapsibleSection title="Objectif · 3 tiers" icon={<Target className="size-4" />} defaultOpen>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {[
+                          { lbl: 'Succès minimal', val: obj.minimal, c: '#C97A20' },
+                          { lbl: 'Objectif nominal', val: obj.nominal, c: '#6E50C8' },
+                          { lbl: 'Stretch goal', val: obj.stretch, c: '#2EA86A' },
+                        ].filter(t => t.val).map(t => (
+                          <div key={t.lbl} className="rounded-xl border border-border bg-muted/20 p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: t.c, fontFamily: 'var(--mono)' }}>{t.lbl}</p>
+                            <p className="text-sm text-foreground leading-snug">{t.val}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleSection>
+                  )}
+
+                  {/* QUESTIONS DE DÉCOUVERTE · SPIN */}
+                  {spin.length > 0 && (
+                    <CollapsibleSection title="Questions de découverte · SPIN" icon={<MessageSquare className="size-4" />} defaultOpen>
+                      <div className="space-y-3">
+                        {spin.map((q, i) => (
+                          <div key={i} className="rounded-xl border border-border p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-primary mb-1.5">{SPIN_LABEL[q.type] ?? q.type}</p>
+                            <p className="text-sm text-foreground font-medium">« {q.question} »</p>
+                            {q.rationale && <p className="text-[11px] text-muted-foreground mt-1">→ {q.rationale}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleSection>
+                  )}
+
+                  {/* THEORY OF MIND (enrichie depuis le brief) */}
+                  {(Array.isArray(tom.knows) && tom.knows.length > 0) || (Array.isArray(tom.believes) && tom.believes.length > 0) || tom.mood || tom.risk ? (
+                    <CollapsibleSection title="Theory of Mind — ce qu'il·elle pense du RDV" icon={<Brain className="size-4" />}
+                      defaultOpen={false}>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                        {[
+                          { t: '✅ Ce qu\'il·elle sait', arr: tom.knows, c: '#2EA86A' },
+                          { t: '❓ Ce qu\'il·elle ignore', arr: tom.doesnt_know, c: '#C97A20' },
+                          { t: '⚠️ Ce qu\'il·elle croit', arr: tom.believes, c: '#D94F63' },
+                        ].filter(b => Array.isArray(b.arr) && b.arr.length).map(b => (
+                          <div key={b.t} className="rounded-xl border border-border bg-muted/20 p-3">
+                            <p className="text-[11px] font-bold mb-1.5" style={{ color: b.c }}>{b.t}</p>
+                            <ul className="space-y-1">
+                              {b.arr.map((x: string, i: number) => <li key={i} className="text-[12px] text-foreground leading-snug">• {x}</li>)}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        {tom.mood && <p className="text-xs text-muted-foreground flex-1 min-w-[200px]">💡 <span className="font-semibold text-foreground">Humeur :</span> {tom.mood}</p>}
+                        {tom.risk && <p className="text-xs text-muted-foreground flex-1 min-w-[200px]">🎯 <span className="font-semibold text-foreground">Risque :</span> {tom.risk}</p>}
+                      </div>
+                    </CollapsibleSection>
+                  ) : null}
+
+                  {/* DEAL · MEDDPICC */}
+                  {MEDDPICC.some(m => md[m.key]?.value) && (
+                    <CollapsibleSection title="Deal · MEDDPICC" icon={<Target className="size-4" />}
+                      badge={md.health_score != null ? `${md.health_score}/8` : undefined} defaultOpen={false}>
+                      <div className="space-y-2">
+                        {MEDDPICC.map(m => {
+                          const cell = md[m.key] ?? {};
+                          const n = dotsFor(cell.level);
+                          return (
+                            <div key={m.key} className="flex items-start gap-3 rounded-xl border border-border p-3">
+                              <span className="size-6 flex-shrink-0 rounded-md flex items-center justify-center text-[11px] font-black"
+                                style={{ background: 'rgba(110,80,200,0.12)', color: '#6E50C8' }}>{m.k}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2 mb-0.5">
+                                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{m.label}</span>
+                                  <span className="flex gap-0.5 flex-shrink-0">
+                                    {[0,1,2].map(d => (
+                                      <span key={d} className="size-1.5 rounded-full" style={{ background: d < n ? '#6E50C8' : '#E0DAF0' }} />
+                                    ))}
+                                  </span>
+                                </div>
+                                <p className="text-[13px] text-foreground leading-snug">{cell.value ?? <span className="text-muted-foreground italic">Trou à lever — à confirmer</span>}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CollapsibleSection>
+                  )}
+
+                  {/* OBJECTIONS */}
+                  {objections.length > 0 && (
+                    <CollapsibleSection title="Objections · réponse · anti-pattern" icon={<AlertTriangle className="size-4" />}
+                      badge={String(objections.length)} defaultOpen={false}>
+                      <div className="space-y-3">
+                        {objections.map((o, i) => (
+                          <div key={i} className="rounded-xl border border-border p-3">
+                            <p className="text-sm font-semibold text-foreground mb-1.5">« {o.verbatim} »</p>
+                            {o.prepared_response && (
+                              <p className="text-[13px] text-foreground mb-1.5">
+                                <span className="text-[10px] font-bold uppercase text-success mr-1">Réponse</span>{o.prepared_response}
+                              </p>
+                            )}
+                            {o.anti_pattern && (
+                              <p className="text-[12px] text-muted-foreground">
+                                <span className="text-[10px] font-bold uppercase text-destructive mr-1">Anti-pattern</span>{o.anti_pattern}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleSection>
+                  )}
+
+                  {/* PIVOTS EN RÉUNION */}
+                  {pivots.length > 0 && (
+                    <CollapsibleSection title="Pivots en réunion" icon={<RefreshCw className="size-4" />} defaultOpen={false}>
+                      <div className="space-y-3">
+                        {pivots.map((p, i) => (
+                          <div key={i} className="rounded-xl border border-border p-3">
+                            <p className="text-[12px] text-muted-foreground mb-1">Signal · « {p.signal} »</p>
+                            <p className="text-sm text-foreground font-medium">{p.script}</p>
+                            {p.goal && <p className="text-[11px] text-muted-foreground mt-1">→ {p.goal}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleSection>
+                  )}
+
+                </div>
+              );
+            })()}
 
             {/* ── RÉSUMÉ POST-RÉUNION (si passée) ─────────────────────────────── */}
             {isPast && postSummary && (
@@ -1409,6 +1651,68 @@ export default function MeetingAnalysis() {
 
         </div>
       </div>
+
+      {/* ══ MODALE MAIL PRÉ-RDV (action recommandée) ══════════════════════════ */}
+      {showMail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(19,17,30,0.6)' }}
+          onClick={() => setShowMail(false)}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg rounded-2xl bg-card border border-border shadow-xl overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Mail className="size-4 text-primary" />
+                <span className="text-sm font-bold">Mail pré-RDV</span>
+              </div>
+              <button onClick={() => setShowMail(false)} className="text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Destinataire</label>
+                <input value={mailTo} onChange={e => setMailTo(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-sm" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Objet</label>
+                <input value={mailSubject} onChange={e => setMailSubject(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-sm" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Message</label>
+                <textarea value={mailBody} onChange={e => setMailBody(e.target.value)} rows={8}
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-sm resize-y" />
+              </div>
+              {!mailConfirm ? (
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button onClick={() => setShowMail(false)} className="px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-muted">Annuler</button>
+                  <button onClick={() => setMailConfirm(true)}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: '#6E50C8' }}>
+                    Envoyer →
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber/30 bg-amber/10 p-3">
+                  <p className="text-xs text-foreground mb-2">
+                    ⚠ Le mail s'ouvrira dans ta messagerie, pré-rempli, vers <span className="font-semibold">{mailTo || '—'}</span>. Tu valides l'envoi depuis ta boîte.
+                  </p>
+                  <div className="flex items-center justify-end gap-2">
+                    <button onClick={() => setMailConfirm(false)} className="px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-muted">Annuler</button>
+                    <a
+                      href={`mailto:${encodeURIComponent(mailTo)}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`}
+                      onClick={() => setShowMail(false)}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold text-white inline-flex items-center gap-1.5" style={{ background: '#2EA86A' }}
+                    >
+                      <Check className="size-3.5" /> Ouvrir & envoyer
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
