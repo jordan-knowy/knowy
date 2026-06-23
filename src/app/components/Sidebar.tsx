@@ -14,6 +14,7 @@ import {
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { supabase } from '../../lib/supabase';
 import OnboardingCard from './knowr/OnboardingCard';
+import BrandLogo from './knowr/BrandLogo';
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -93,14 +94,7 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
     >
       {/* Logo */}
       <div className="px-5 py-5 border-b border-sidebar-border">
-        <div className="flex flex-col gap-0.5">
-          <h1 style={{ fontFamily: 'Epilogue, sans-serif', fontWeight: 900, fontSize: '20px', letterSpacing: '-0.03em', color: 'var(--t1, #1A1040)', lineHeight: 1 }}>
-            Know<span style={{ color: 'var(--violet, #6E50C8)' }}>r</span>
-          </h1>
-          <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '9px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.10em', color: 'var(--t3, #9082B8)' }}>
-            OS Relationnel
-          </p>
-        </div>
+        <BrandLogo />
       </div>
 
       {/* Main navigation */}

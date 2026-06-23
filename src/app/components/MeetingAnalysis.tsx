@@ -14,6 +14,7 @@ import CollapsibleSection from './knowr/CollapsibleSection';
 import SignalRail, { type Signal } from './knowr/SignalRail';
 import ViewSwitcher from './knowr/ViewSwitcher';
 import SourcesPanel from './knowr/SourcesPanel';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { getMeeting, getMeetingParticipants } from '../../lib/api/meetings';
 import { getActiveOrganizationId } from '../../lib/api/org';
 import { supabase } from '../../lib/supabase';
@@ -106,6 +107,8 @@ export default function MeetingAnalysis() {
   // Brief IA complet (généré par generate-brief, stocké dans briefs.content)
   const [brief, setBrief] = useState<any | null>(null);
   const [orgId, setOrgId] = useState<string | null>(null);
+  // Courbe d'évolution du score relationnel (participant principal)
+  const [relHistory, setRelHistory] = useState<{ date: string; score: number }[]>([]);
   // Modale mail pré-RDV (action recommandée)
   const [showMail, setShowMail] = useState(false);
   const [mailConfirm, setMailConfirm] = useState(false);
@@ -328,6 +331,22 @@ export default function MeetingAnalysis() {
           .limit(1)
           .maybeSingle();
         if (mounted) setBrief((briefRow as any)?.content ?? null);
+
+        // Courbe relationnelle du participant principal
+        const primaryId = parts[0]?.contact.id;
+        if (primaryId && oid) {
+          const { data: hist } = await supabase
+            .from('contact_score_history')
+            .select('score, snapshot_date')
+            .eq('organization_id', oid)
+            .eq('contact_id', primaryId)
+            .order('snapshot_date', { ascending: true })
+            .limit(30);
+          if (mounted) setRelHistory((hist ?? []).map((h: any) => ({
+            date: new Date(h.snapshot_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+            score: h.score,
+          })));
+        }
       }
 
       if (mounted) setLoading(false);
@@ -1204,6 +1223,45 @@ export default function MeetingAnalysis() {
                 </div>
               );
             })()}
+
+            {/* ── RELATION AVEC LE COMPTE · HISTORIQUE (courbe) ───────────────── */}
+            {relHistory.length > 1 && (
+              <CollapsibleSection title="Relation avec le compte · historique" icon={<TrendingUp className="size-4" />} defaultOpen>
+                <div className="flex items-center gap-4 mb-3 flex-wrap">
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-0.5">Score relation</p>
+                    <span className="text-3xl font-black" style={{ color: SCORE_COLOR(relHistory[relHistory.length - 1].score) }}>
+                      {relHistory[relHistory.length - 1].score}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 ml-auto">
+                    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="size-2 rounded-full" style={{ background: '#2EA86A' }} /> Étape positive
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="size-2 rounded-full" style={{ background: '#D94F63' }} /> Friction
+                    </span>
+                  </div>
+                </div>
+                <ResponsiveContainer width="100%" height={150}>
+                  <AreaChart data={relHistory} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                    <defs>
+                      <linearGradient id="relScoreGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#6E50C8" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="#6E50C8" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#9082B8' }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9082B8' }} axisLine={false} tickLine={false} width={32} />
+                    <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E8E3F5', fontSize: 12 }} formatter={(v: any) => [`${v}/100`, 'Score']} />
+                    <Area type="monotone" dataKey="score" stroke="#6E50C8" strokeWidth={2.5} fill="url(#relScoreGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+                <p className="text-[10px] text-muted-foreground mt-2" style={{ fontFamily: 'var(--mono)' }}>
+                  Messagerie · Observable — recalculé à chaque synchro
+                </p>
+              </CollapsibleSection>
+            )}
 
             {/* ── RÉSUMÉ POST-RÉUNION (si passée) ─────────────────────────────── */}
             {isPast && postSummary && (

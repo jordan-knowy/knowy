@@ -169,6 +169,73 @@ export default function AccountSettings() {
   const [linkedinSaved, setLinkedinSaved] = useState(false);
   const [linkedinSaving, setLinkedinSaving] = useState(false);
 
+  // ── Logo de marque (org) ────────────────────────────────────────────────
+  const [logoOrgId, setLogoOrgId] = useState<string | null>(null);
+  const [orgLogo, setOrgLogo] = useState<string | null>(null);
+  const [logoSaving, setLogoSaving] = useState(false);
+  const [logoErr, setLogoErr] = useState<string | null>(null);
+  const [logoDrag, setLogoDrag] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!supabase) return;
+      const oid = await getActiveOrganizationId();
+      if (cancelled || !oid) return;
+      setLogoOrgId(oid);
+      const { data } = await supabase.from('organizations').select('logo_url').eq('id', oid).maybeSingle();
+      if (!cancelled) setOrgLogo((data as any)?.logo_url ?? null);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Convertit une image en webp (redimensionnée) → data URL
+  async function toWebpDataUrl(file: File, maxSize = 256): Promise<string> {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    return await new Promise<string>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) { reject(new Error('webp')); return; }
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.onerror = () => reject(new Error('read'));
+        r.readAsDataURL(blob);
+      }, 'image/webp', 0.9);
+    });
+  }
+
+  async function handleLogoFile(file: File | null | undefined) {
+    if (!file || !supabase || !logoOrgId) return;
+    setLogoErr(null);
+    if (!file.type.startsWith('image/')) { setLogoErr('Format image uniquement (PNG, JPG, SVG…).'); return; }
+    setLogoSaving(true);
+    try {
+      const dataUrl = await toWebpDataUrl(file);
+      const { error } = await supabase.rpc('set_org_logo', { p_org: logoOrgId, p_logo: dataUrl });
+      if (error) { setLogoErr('Échec de l’enregistrement.'); }
+      else { setOrgLogo(dataUrl); }
+    } catch {
+      setLogoErr('Impossible de convertir l’image.');
+    } finally {
+      setLogoSaving(false);
+    }
+  }
+
+  async function removeLogo() {
+    if (!supabase || !logoOrgId) return;
+    setLogoSaving(true); setLogoErr(null);
+    try {
+      const { error } = await supabase.rpc('set_org_logo', { p_org: logoOrgId, p_logo: null });
+      if (!error) setOrgLogo(null);
+    } finally { setLogoSaving(false); }
+  }
+
   const connectedProviders = getConnectedIdentityProviders(user);
 
   const PROVIDER_MAP: Record<string, OnboardingProvider> = {
@@ -807,6 +874,49 @@ export default function AccountSettings() {
                       <input type="text" defaultValue="knowy.ai"
                         style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(110,80,200,.15)', background: '#F9F8FC', fontSize: 13, color: '#1A1040', outline: 'none', boxSizing: 'border-box' }} />
                     </div>
+                  </div>
+
+                  {/* Logo de marque — glisser-déposer → webp → base */}
+                  <div style={{ marginTop: 20 }}>
+                    <label style={{ display: 'block', fontSize: 11, color: '#9082B8', marginBottom: 6, fontWeight: 600 }}>
+                      Logo (affiché dans la barre latérale · converti en WebP)
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center justify-center rounded-xl border flex-shrink-0"
+                        style={{ width: 88, height: 64, background: '#F9F8FC', borderColor: 'rgba(110,80,200,.15)' }}>
+                        {orgLogo
+                          ? <img src={orgLogo} alt="Logo" style={{ maxHeight: 48, maxWidth: 76, objectFit: 'contain' }} />
+                          : <span style={{ fontFamily: 'Epilogue, sans-serif', fontWeight: 900, fontSize: 18, color: '#1A1040' }}>Know<span style={{ color: '#6E50C8' }}>r</span></span>}
+                      </div>
+                      <label
+                        onDragOver={(e) => { e.preventDefault(); setLogoDrag(true); }}
+                        onDragLeave={() => setLogoDrag(false)}
+                        onDrop={(e) => { e.preventDefault(); setLogoDrag(false); handleLogoFile(e.dataTransfer.files?.[0]); }}
+                        className="flex-1 flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed cursor-pointer transition-colors"
+                        style={{
+                          padding: '16px', minHeight: 64,
+                          borderColor: logoDrag ? '#6E50C8' : 'rgba(110,80,200,.25)',
+                          background: logoDrag ? 'rgba(110,80,200,.06)' : 'transparent',
+                        }}
+                      >
+                        <input type="file" accept="image/*" hidden
+                          onChange={(e) => handleLogoFile(e.target.files?.[0])} />
+                        <span style={{ fontSize: 12.5, color: '#6E50C8', fontWeight: 700 }}>
+                          {logoSaving ? 'Conversion…' : 'Glisser-déposer ou cliquer'}
+                        </span>
+                        <span style={{ fontSize: 11, color: '#9082B8' }}>PNG · JPG · SVG → WebP (max 256px)</span>
+                      </label>
+                      {orgLogo && (
+                        <button onClick={removeLogo} disabled={logoSaving}
+                          className="text-xs font-semibold text-destructive hover:underline flex-shrink-0">
+                          Retirer
+                        </button>
+                      )}
+                    </div>
+                    {logoErr && <p style={{ fontSize: 11, color: '#D94F63', marginTop: 8 }}>{logoErr}</p>}
+                    {orgLogo && !logoErr && !logoSaving && (
+                      <p style={{ fontSize: 11, color: '#2EA86A', marginTop: 8 }}>✓ Logo enregistré — rechargez la page pour le voir dans la barre latérale.</p>
+                    )}
                   </div>
                 </div>
               </SectionCard>
