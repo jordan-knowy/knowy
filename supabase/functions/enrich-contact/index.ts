@@ -825,7 +825,7 @@ Instructions spécifiques :
       headers: {
         'Authorization': `Bearer ${Deno.env.get('OPENROUTER_API_KEY')}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://knowy.ai',
+        'HTTP-Referer': 'https://knowr-ai.netlify.app',
         'X-Title': 'Knowr Contact Enrichment',
       },
       body: JSON.stringify({

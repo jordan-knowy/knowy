@@ -87,7 +87,7 @@ Produis ce JSON (français, concis, fidèle au texte) :
       headers: {
         'Authorization': `Bearer ${key}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://knowy.ai',
+        'HTTP-Referer': 'https://knowr-ai.netlify.app',
         'X-Title': 'Knowr Meeting Recap',
       },
       body: JSON.stringify({

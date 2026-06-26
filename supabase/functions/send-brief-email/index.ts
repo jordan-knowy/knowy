@@ -18,7 +18,7 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 const RESEND_API = 'https://api.resend.com/emails';
-const APP_URL = 'https://knowy-ai.netlify.app';
+const APP_URL = 'https://knowr-ai.netlify.app';
 const SUPABASE_URL = 'https://bgmtzwfafcgjklgygvtx.supabase.co';
 const FROM_EMAIL = 'Knowy <briefs@notifications.knowy.ai>';
 
@@ -150,8 +150,8 @@ function buildEmailHtml(opts: {
         <!-- Footer -->
         <tr><td style="background:#F9FAFB;border-radius:0 0 16px 16px;padding:20px 32px;text-align:center;border-top:1px solid #E5E7EB;">
           <p style="margin:0;font-size:12px;color:#9CA3AF;">
-            Knowy &bull; Intelligence relationnelle &bull;
-            <a href="${APP_URL}" style="color:#6E50C8;text-decoration:none;">knowy.ai</a>
+            Knowr &bull; Intelligence relationnelle &bull;
+            <a href="${APP_URL}" style="color:#6E50C8;text-decoration:none;">knowr-ai.netlify.app</a>
           </p>
         </td></tr>
 

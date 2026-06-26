@@ -210,7 +210,7 @@ async function callGemini(prompt: string): Promise<any> {
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://knowy.ai',
+      'HTTP-Referer': 'https://knowr-ai.netlify.app',
       'X-Title': 'Knowy Email Analysis',
     },
     body: JSON.stringify({

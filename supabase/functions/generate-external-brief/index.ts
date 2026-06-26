@@ -129,7 +129,7 @@ Produis ce JSON (respecte les types, null/"à confirmer" si non sourcé) :
       headers: {
         'Authorization': `Bearer ${key}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://knowy.ai',
+        'HTTP-Referer': 'https://knowr-ai.netlify.app',
         'X-Title': 'Knowr External Brief',
       },
       body: JSON.stringify({

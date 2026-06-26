@@ -546,7 +546,7 @@ Deno.serve(async (req) => {
       headers: {
         'Authorization': `Bearer ${openrouterKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://knowy-ai.netlify.app',
+        'HTTP-Referer': 'https://knowr-ai.netlify.app',
         'X-Title': 'Knowr Brief Engine',
       },
       body: JSON.stringify({
