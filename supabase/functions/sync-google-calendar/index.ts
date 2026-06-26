@@ -137,10 +137,12 @@ Deno.serve(async (req) => {
     let calRes = await fetchCalendarEvents(providerToken, timeMin, timeMax);
 
     // Token expiré → refresh serveur + un seul retry
+    let didRefresh = false;
     if (calRes.status === 401 && refreshToken) {
       const refreshed = await refreshGoogleToken(refreshToken, supabase, organizationId, user.id);
       if (refreshed) {
         providerToken = refreshed;
+        didRefresh = true;
         calRes = await fetchCalendarEvents(providerToken, timeMin, timeMax);
       }
     }
@@ -149,8 +151,17 @@ Deno.serve(async (req) => {
       const errText = await calRes.text();
       console.error('Google Calendar API error:', calRes.status, errText);
 
-      if (calRes.status === 401) {
-        // Refresh impossible (refresh_token absent/invalide) → reconnexion requise
+      if (calRes.status === 401 || calRes.status === 403) {
+        if (didRefresh || calRes.status === 403) {
+          // Token VALIDE mais accès Agenda refusé (scope Calendar non accordé).
+          // Ne PAS casser le connecteur : les emails (scope Gmail) restent synchronisables.
+          return jsonResponse({
+            error: 'Accès Google Agenda non autorisé (périmètre Calendar non accordé). Les emails restent synchronisés ; reconnectez Google en acceptant l’agenda pour les réunions.',
+            code: 'CALENDAR_SCOPE_MISSING',
+            events: 0,
+          }, 200);
+        }
+        // Refresh impossible (refresh_token absent/invalide) → vraie panne d'auth → reconnexion
         await supabase
           .from('connectors')
           .update({ status: 'needs_reauth', updated_at: new Date().toISOString() })

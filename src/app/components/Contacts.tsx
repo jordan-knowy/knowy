@@ -576,11 +576,11 @@ export default function Contacts() {
       const providerToken = session.provider_token;
 
       const { data: conns } = await supabase.from('connectors').select('provider, status, metadata')
-        .eq('organization_id', resolvedOrgId).eq('status', 'connected');
+        .eq('organization_id', resolvedOrgId).not('status', 'in', '("disconnected","not_connected")');
       const connected = new Map((conns ?? []).map((c: any) => [c.provider as string, c]));
-      const hasGoogle = connected.has('google');
       const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
       const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
+      const hasGoogle = connected.has('google') || (!isMsSession && !!providerToken);
 
       // Sème le connecteur MS AVANT de calculer hasMicrosoft — indispensable pour les sessions fraîches
       if (isMsSession && providerToken && session.user) {
@@ -632,17 +632,17 @@ export default function Contacts() {
       const resolvedOrgId = orgId || await getActiveOrganizationId();
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
-      // Détecte les providers connectés
+      // Détecte les providers connectés (tout sauf déconnecté — refresh serveur si needs_reauth/expired)
       const { data: connectors } = await supabase
         .from('connectors')
         .select('provider, metadata, status')
         .eq('organization_id', resolvedOrgId)
-        .eq('status', 'connected');
+        .not('status', 'in', '("disconnected","not_connected")');
 
       const connected = new Map((connectors ?? []).map((c: any) => [c.provider as string, c]));
-      const hasGoogle = connected.has('google');
       const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
       const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
+      const hasGoogle = connected.has('google') || (!isMsSession && !!session.provider_token);
 
       // Sème le connecteur MS AVANT de calculer hasMicrosoft (sessions fraîches sans record en base)
       if (isMsSession && session.provider_token && session.user) {

@@ -242,19 +242,20 @@ export default function Dashboard() {
       const headers = { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' };
       const providerToken = session.provider_token;
 
-      // Détecte les providers connectés en base
+      // Détecte les providers connectés en base (tout sauf déconnecté — l'edge function rafraîchit le token si needs_reauth/expired)
       const { data: connectors } = await supabase
         .from('connectors')
         .select('provider, status')
         .eq('organization_id', orgId)
-        .eq('status', 'connected');
+        .not('status', 'in', '("disconnected","not_connected")');
 
       const connected = new Set((connectors ?? []).map((c: any) => c.provider as string));
-      const hasGoogle    = connected.has('google');
-      const hasMicrosoft = connected.has('microsoft');
       // Détecte si la session courante est une session Microsoft OAuth (azure = provider Supabase pour MS)
       const sessionAuthProvider = (session.user?.app_metadata as any)?.provider ?? '';
       const isMsSession = sessionAuthProvider === 'azure' || sessionAuthProvider === 'microsoft';
+      // Repli : une session OAuth fraîche fournit un provider_token même sans ligne connecteur
+      const hasGoogle    = connected.has('google')    || (!isMsSession && !!providerToken);
+      const hasMicrosoft = connected.has('microsoft') || (isMsSession && !!providerToken);
 
       if (!hasGoogle && !hasMicrosoft) {
         setSyncMsg({ type: 'error', text: 'Aucun compte connecté. Allez dans Paramètres → Connexions.' });
