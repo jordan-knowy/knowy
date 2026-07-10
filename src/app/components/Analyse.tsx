@@ -123,7 +123,7 @@ export default function Analyse() {
         { name: 'Sophie Martin', role: 'Sales Director', photo: '👩', internal: true },
         { name: 'Thomas Petit', role: 'SDR Lead', photo: '👨', internal: true }
       ],
-      company: 'Knowr (Internal)',
+      company: 'Tohu (Internal)',
       logo: '🏢',
       type: 'internal',
       meetingRole: 'Other',
@@ -143,7 +143,7 @@ export default function Analyse() {
         { name: 'Antoine Bernard', role: 'CSM', photo: '👨', internal: true },
         { name: 'Marie Lopez', role: 'CSM', photo: '👩', internal: true }
       ],
-      company: 'Knowr (Internal)',
+      company: 'Tohu (Internal)',
       logo: '🏢',
       type: 'internal',
       meetingRole: 'CSM',
@@ -483,7 +483,7 @@ export default function Analyse() {
                 </button>
                 <button className="px-4 py-2 bg-primary hover:bg-accent text-white rounded-xl transition-colors flex items-center gap-2">
                   <Share2 className="size-4" />
-                  Partager via Knowr
+                  Partager via Tohu
                 </button>
               </div>
             </div>
@@ -759,12 +759,12 @@ export default function Analyse() {
                 <div>
                   <h3 className="text-2xl font-bold mb-2">Partagez cette analyse avec vos participants</h3>
                   <p className="text-white/80">
-                    Créez de la valeur ajoutée et invitez vos contacts à découvrir Knowr
+                    Créez de la valeur ajoutée et invitez vos contacts à découvrir Tohu
                   </p>
                 </div>
                 <button className="px-6 py-3 bg-white text-primary rounded-xl hover:bg-white/90 transition-colors flex items-center gap-2 font-medium">
                   <Share2 className="size-5" />
-                  Partager via Knowr
+                  Partager via Tohu
                 </button>
               </div>
             </div>

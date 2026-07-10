@@ -23,7 +23,7 @@ export default function CGU() {
             <h2 className="text-xl font-bold mb-3">Article 1 — Objet</h2>
             <p>
               Les présentes Conditions Générales d'Utilisation (ci-après «&nbsp;CGU&nbsp;») régissent l'accès et
-              l'utilisation de la plateforme <strong>Knowr</strong>, éditée par Knowr SAS, société par actions simplifiée
+              l'utilisation de la plateforme <strong>Tohu</strong>, éditée par Tohu SAS, société par actions simplifiée
               dont le siège social est établi à <strong>Paris, France</strong> (ci-après «&nbsp;la Société&nbsp;»).
             </p>
             <p className="mt-3">
@@ -34,7 +34,7 @@ export default function CGU() {
           <section>
             <h2 className="text-xl font-bold mb-3">Article 2 — Accès au service</h2>
             <p>
-              L'accès à Knowr est réservé aux professionnels disposant d'un compte valide créé via les providers
+              L'accès à Tohu est réservé aux professionnels disposant d'un compte valide créé via les providers
               d'authentification autorisés (Google, Microsoft). L'Utilisateur est responsable de la confidentialité
               de ses identifiants de connexion.
             </p>
@@ -43,7 +43,7 @@ export default function CGU() {
           <section>
             <h2 className="text-xl font-bold mb-3">Article 3 — Description du service</h2>
             <p>
-              Knowr est une plateforme d'mémoire relationnelle qui analyse les données des échanges
+              Tohu est une plateforme d'mémoire relationnelle qui analyse les données des échanges
               professionnels autorisés (emails, agenda, LinkedIn) afin de générer des profils comportementaux
               et des recommandations de préparation de réunions.
             </p>
@@ -57,8 +57,8 @@ export default function CGU() {
             <h2 className="text-xl font-bold mb-3">Article 4 — Obligations de l'Utilisateur</h2>
             <ul className="list-disc pl-6 space-y-2">
               <li>Utiliser le service conformément aux présentes CGU et à la législation en vigueur</li>
-              <li>Ne pas utiliser Knowr à des fins illicites, frauduleuses ou contraires à l'éthique professionnelle</li>
-              <li>S'assurer que les données traitées via Knowr le sont dans le respect du RGPD et du droit applicable</li>
+              <li>Ne pas utiliser Tohu à des fins illicites, frauduleuses ou contraires à l'éthique professionnelle</li>
+              <li>S'assurer que les données traitées via Tohu le sont dans le respect du RGPD et du droit applicable</li>
               <li>Ne pas tenter de compromettre la sécurité, l'intégrité ou la disponibilité du service</li>
             </ul>
           </section>
@@ -78,8 +78,8 @@ export default function CGU() {
           <section>
             <h2 className="text-xl font-bold mb-3">Article 6 — Propriété intellectuelle</h2>
             <p>
-              L'ensemble des éléments constituant la plateforme Knowr (algorithmes, interface, marques, logos, contenus)
-              est la propriété exclusive de Knowr SAS et est protégé par le droit de la propriété intellectuelle.
+              L'ensemble des éléments constituant la plateforme Tohu (algorithmes, interface, marques, logos, contenus)
+              est la propriété exclusive de Tohu SAS et est protégé par le droit de la propriété intellectuelle.
               Toute reproduction, représentation ou exploitation non autorisée est strictement interdite.
             </p>
           </section>
@@ -87,7 +87,7 @@ export default function CGU() {
           <section>
             <h2 className="text-xl font-bold mb-3">Article 7 — Limitation de responsabilité</h2>
             <p>
-              Les analyses et recommandations générées par Knowr sont fournies à titre indicatif. La Société
+              Les analyses et recommandations générées par Tohu sont fournies à titre indicatif. La Société
               ne peut être tenue responsable des décisions prises sur la base des informations produites par le service.
             </p>
           </section>
@@ -121,7 +121,7 @@ export default function CGU() {
             <p className="text-muted-foreground">
               Pour toute question relative aux CGU : <a href="mailto:legal@knowy.ai" className="text-primary hover:underline">legal@knowy.ai</a>
             </p>
-            <p className="text-muted-foreground mt-1">Knowr SAS — Paris, France 🇫🇷</p>
+            <p className="text-muted-foreground mt-1">Tohu SAS — Paris, France 🇫🇷</p>
           </section>
         </div>
       </div>

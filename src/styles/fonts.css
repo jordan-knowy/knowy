@@ -1,10 +1,10 @@
-/* KNOWY FONTS - Epilogue + JetBrains Mono */
+/* TOHU FONTS - Epilogue + JetBrains Mono */
 
 /* Epilogue - Display & UI */
 @import url('https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;600;700;900&display=swap');
 
 /* JetBrains Mono - Data & Scores */
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 /* NOTE: anciennes polices de brief v2 (Fraunces / DM Sans / DM Mono) retirées.
    Spec-16 §6 : la charte Violet Trust n'autorise QUE Epilogue + JetBrains Mono. */

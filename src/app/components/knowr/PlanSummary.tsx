@@ -19,7 +19,7 @@ const PUBLIC_PLANS = ['free', 'pro', 'business'];
 /**
  * PlanSummary — carte « Mon abonnement » pour la page Paramètres.
  * Affiche le plan actuel + les autres offres (différences) + CTA upgrade.
- * Charte Knowr (tokens violet, mono pour les labels).
+ * Charte Tohu (tokens violet, mono pour les labels).
  */
 export default function PlanSummary() {
   const navigate = useNavigate();

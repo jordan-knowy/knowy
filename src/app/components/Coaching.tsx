@@ -119,7 +119,7 @@ export default function Coaching() {
             <KnowrCard className="p-6">
               <div className="flex items-center gap-3 mb-6">
                 <Download className="size-6 text-primary" />
-                <h2 className="text-xl font-bold">Plugin Knowr Coaching</h2>
+                <h2 className="text-xl font-bold">Plugin Tohu Coaching</h2>
               </div>
 
               <p className="text-sm text-muted-foreground mb-6">
@@ -318,7 +318,7 @@ export default function Coaching() {
                 <div className="bg-primary/10 border-b border-primary/20 p-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Sparkles className="size-4 text-primary" />
-                    <span className="text-xs font-bold text-primary">Knowr Coach</span>
+                    <span className="text-xs font-bold text-primary">Tohu Coach</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="size-2 rounded-full bg-success animate-pulse" />

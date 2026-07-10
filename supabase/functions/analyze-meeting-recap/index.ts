@@ -1,5 +1,5 @@
 // Spec-27 — Compte-rendu (état « Après ») généré par IA depuis un transcript / une saisie.
-// L'utilisateur colle/charge un compte-rendu → l'IA l'analyse selon la doctrine Knowr → meeting_post_summaries.
+// L'utilisateur colle/charge un compte-rendu → l'IA l'analyse selon la doctrine Tohu → meeting_post_summaries.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -53,8 +53,8 @@ Deno.serve(async (req) => {
   const key = Deno.env.get('OPENROUTER_API_KEY');
   if (!key) return jsonResponse({ error: 'LLM non configuré (OPENROUTER_API_KEY manquant).', code: 'NO_LLM' }, 500);
 
-  const SYSTEM = `Tu es l'analyste relationnel de Knowr (OS Relationnel B2B). Tu produis le COMPTE-RENDU (état « Après ») d'une réunion à partir de notes/transcript bruts.
-Doctrine Knowr (NON négociable) :
+  const SYSTEM = `Tu es l'analyste relationnel de Tohu (OS Relationnel B2B). Tu produis le COMPTE-RENDU (état « Après ») d'une réunion à partir de notes/transcript bruts.
+Doctrine Tohu (NON négociable) :
 - Zéro-hallucination : n'affirme que ce qui est dans le texte fourni. Aucune donnée inventée. Si une info manque, ne l'invente pas.
 - Comportement > titre : analyse les décisions, engagements, objections réelles, signaux de relation (chaud/froid, momentum, risque).
 - Une réunion commerciale a des OBJECTIONS : extrais-les si présentes.
@@ -76,7 +76,7 @@ Produis ce JSON (français, concis, fidèle au texte) :
   "action_items": [{"text":"tâche", "owner":null|"nom", "due":null|"échéance"}],
   "objections": ["objection ou tension soulevée"],
   "per_person": [{"name":"participant", "impact":"ce que la réunion change pour la relation avec lui"}],
-  "analysis": "lecture relationnelle Knowr : posture à adopter, momentum, risque/levier détecté",
+  "analysis": "lecture relationnelle Tohu : posture à adopter, momentum, risque/levier détecté",
   "tags": ["mot-clé"]
 }`;
 
@@ -88,7 +88,7 @@ Produis ce JSON (français, concis, fidèle au texte) :
         'Authorization': `Bearer ${key}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://knowr-ai.netlify.app',
-        'X-Title': 'Knowr Meeting Recap',
+        'X-Title': 'Tohu Meeting Recap',
       },
       body: JSON.stringify({
         model: MODEL,

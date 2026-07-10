@@ -132,9 +132,9 @@ function NetworkGraph({ orgs }: { orgs: OrgRow[] }) {
   return (
     <div className="relative bg-muted/20 rounded-2xl overflow-hidden" style={{ height: 320 }}>
       <svg width="100%" height="100%" viewBox="0 0 600 320">
-        {/* Central node — Knowr platform */}
+        {/* Central node — Tohu platform */}
         <circle cx={300} cy={160} r={28} fill="hsl(var(--primary))" opacity={0.9} />
-        <text x={300} y={164} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">Knowr</text>
+        <text x={300} y={164} textAnchor="middle" fill="white" fontSize={10} fontWeight="bold">Tohu</text>
 
         {orgs.slice(0, 8).map((org, i) => {
           const angle = (i / Math.min(orgs.length, 8)) * 2 * Math.PI - Math.PI / 2;
@@ -461,7 +461,7 @@ export default function SuperAdmin() {
       <div className="flex min-h-full items-center justify-center flex-col gap-4">
         <Shield className="size-16 text-destructive opacity-50" />
         <h2 className="text-xl font-bold">Accès refusé</h2>
-        <p className="text-muted-foreground">Cette page est réservée aux super admins Knowr.</p>
+        <p className="text-muted-foreground">Cette page est réservée aux super admins Tohu.</p>
       </div>
     );
   }
@@ -479,7 +479,7 @@ export default function SuperAdmin() {
               </div>
               <div>
                 <h1 className="text-2xl font-black">Super Admin</h1>
-                <p className="text-sm text-muted-foreground">Vision 360° · Knowr Platform</p>
+                <p className="text-sm text-muted-foreground">Vision 360° · Tohu Platform</p>
               </div>
             </div>
             <button

@@ -490,7 +490,7 @@ export default function MeetingAnalysis() {
     signals.push({
       tag: fp?.score_phase === 'decline' ? 'Churn' : 'Risque',
       text: `${p.name} — ${fp?.score_phase === 'decline' ? 'Relation en déclin' : `Dernier contact il y a ${p.relationContext?.lastContactDays}j`}`,
-      source: 'Mémoire Knowr',
+      source: 'Mémoire Tohu',
       provenance: 'observable',
     });
   });
@@ -500,7 +500,7 @@ export default function MeetingAnalysis() {
       signals.push({
         tag: 'Levier',
         text: fp.jtbd_data.functional_job.pitch_angle,
-        source: 'Analyse Knowr',
+        source: 'Analyse Tohu',
         provenance: 'inferred',
       });
     }
@@ -559,7 +559,7 @@ export default function MeetingAnalysis() {
             </div>
             <p className="text-xs text-muted-foreground mb-4">
               Collez vos notes de séance ou le transcript (Read.ai / Fathom / Meet), ou glissez un fichier texte.
-              L'IA analyse l'échange selon la doctrine Knowr (décisions, engagements, objections, lecture relationnelle).
+              L'IA analyse l'échange selon la doctrine Tohu (décisions, engagements, objections, lecture relationnelle).
             </p>
 
             {/* Zone d'édition + glisser-déposer */}
@@ -611,14 +611,14 @@ export default function MeetingAnalysis() {
           </div>
         )}
 
-        {/* Synthèse + Analyse relationnelle Knowr (IA) */}
+        {/* Synthèse + Analyse relationnelle Tohu (IA) */}
         {postSummary?.summary_text && (
           <div className="rounded-2xl border border-border bg-card p-5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2" style={{ fontFamily: 'var(--mono)' }}>Synthèse</p>
             <p className="text-sm text-foreground leading-relaxed mb-3">{postSummary.summary_text}</p>
             {postSummary?.sources?.analysis && (
               <div className="rounded-xl p-4" style={{ background: 'var(--violet-s)', border: '1px solid var(--violet-x)' }}>
-                <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: 'var(--violet-d)', fontFamily: 'var(--mono)' }}>Analyse Knowr</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: 'var(--violet-d)', fontFamily: 'var(--mono)' }}>Analyse Tohu</p>
                 <p className="text-sm leading-relaxed" style={{ color: 'var(--t1)' }}>{postSummary.sources.analysis}</p>
               </div>
             )}

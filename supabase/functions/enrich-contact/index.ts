@@ -573,7 +573,7 @@ function computeScore(s: Stats, prevScore?: number): {
 }
 
 // ── LLM system prompt ─────────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `Tu es le moteur d'intelligence cognitive de Knowr.
+const SYSTEM_PROMPT = `Tu es le moteur d'intelligence cognitive de Tohu.
 À partir de données comportementales (métadonnées uniquement — RGPD-safe, jamais le contenu des emails),
 tu génères des profils cognitifs précis, actionnables et scientifiquement fondés.
 
@@ -826,7 +826,7 @@ Instructions spécifiques :
         'Authorization': `Bearer ${Deno.env.get('OPENROUTER_API_KEY')}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://knowr-ai.netlify.app',
-        'X-Title': 'Knowr Contact Enrichment',
+        'X-Title': 'Tohu Contact Enrichment',
       },
       body: JSON.stringify({
         model: MODEL,

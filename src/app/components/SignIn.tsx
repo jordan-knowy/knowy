@@ -114,7 +114,7 @@ export default function SignIn() {
             </h1>
 
             <p className="text-xl text-muted-foreground mb-12">
-              Knowr transforme vos réunions en mémoire relationnelle structurée.
+              Tohu transforme vos réunions en mémoire relationnelle structurée.
             </p>
 
             <div className="grid grid-cols-2 gap-4">
@@ -237,7 +237,7 @@ export default function SignIn() {
                       type="email"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
-                      placeholder="jordan.knowy@gmail.com"
+                      placeholder="jordan@tohu.co"
                       className="w-full rounded-2xl border border-border bg-input-background py-4 pl-11 pr-4 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
                     />
                   </div>

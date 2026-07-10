@@ -13,8 +13,6 @@ import Dashboard from './components/Dashboard';
 import Meetings from './components/Meetings';
 import MeetingAnalysis from './components/MeetingAnalysis';
 import Coaching from './components/Coaching';
-import Relations from './components/Relations';
-import RelationDetail from './components/RelationDetail';
 import ContactDetail from './components/ContactDetail';
 import Contacts from './components/Contacts';
 import Companies from './components/Companies';
@@ -30,9 +28,9 @@ import Sitemap from './components/Sitemap';
 import { supabase } from '../lib/supabase';
 import { getActiveOrganizationId } from '../lib/api/org';
 
-function ContactRedirect() {
+function RelationRedirect() {
   const { id } = useParams();
-  return <Navigate to={`/relation/${id}`} replace />;
+  return <Navigate to={`/contact/${id}`} replace />;
 }
 
 /** Checks Supabase for onboarding completion flag */
@@ -59,7 +57,7 @@ async function checkOnboardingDone(): Promise<boolean> {
 
 const Spinner = () => (
   <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
-    Chargement de votre espace Knowr...
+    Chargement de votre espace Tohu...
   </div>
 );
 
@@ -143,9 +141,10 @@ export default function App() {
         <Route path="/meeting/:id" element={<ProtectedApp><Layout><MeetingAnalysis /></Layout></ProtectedApp>} />
         {/* Coaching — V2, accès désactivé → redirect dashboard */}
         <Route path="/coaching" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/relations" element={<ProtectedApp><Layout><Relations /></Layout></ProtectedApp>} />
-        <Route path="/relation/:id" element={<ProtectedApp><Layout><RelationDetail /></Layout></ProtectedApp>} />
-        <Route path="/network" element={<Navigate to="/relations" replace />} />
+        {/* Legacy Relations/RelationDetail retirés — redirects conservés pour d'éventuels liens externes */}
+        <Route path="/relations" element={<Navigate to="/contacts" replace />} />
+        <Route path="/relation/:id" element={<RelationRedirect />} />
+        <Route path="/network" element={<Navigate to="/contacts" replace />} />
         {/* Contacts list + detail — routes singulier et pluriel acceptées */}
         <Route path="/contacts" element={<ProtectedApp><Layout><Contacts /></Layout></ProtectedApp>} />
         <Route path="/contact/:id" element={<ProtectedApp><Layout><ContactDetail /></Layout></ProtectedApp>} />

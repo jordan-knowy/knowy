@@ -45,7 +45,7 @@ export default function Team() {
       name: 'Sophie Martin',
       role: 'Enterprise AE',
       photo: '👩‍💼',
-      email: 'sophie.martin@knowy.ai',
+      email: 'sophie.martin@tohu.co',
       department: 'Sales',
       isAdmin: false,
       disc: {
@@ -60,7 +60,7 @@ export default function Team() {
       name: 'Thomas Bernard',
       role: 'Account Executive',
       photo: '👨',
-      email: 'thomas.bernard@knowy.ai',
+      email: 'thomas.bernard@tohu.co',
       department: 'Sales',
       isAdmin: false,
       disc: {
@@ -75,7 +75,7 @@ export default function Team() {
       name: 'Julie Petit',
       role: 'Customer Success Manager',
       photo: '👩',
-      email: 'julie.petit@knowy.ai',
+      email: 'julie.petit@tohu.co',
       department: 'Customer Success',
       isAdmin: false,
       disc: {
@@ -90,7 +90,7 @@ export default function Team() {
       name: 'Alexandre Roy',
       role: 'CSM',
       photo: '👨‍💻',
-      email: 'alexandre.roy@knowy.ai',
+      email: 'alexandre.roy@tohu.co',
       department: 'Customer Success',
       isAdmin: false,
       disc: {
@@ -105,7 +105,7 @@ export default function Team() {
       name: 'Marie Dubois',
       role: 'Operations Manager',
       photo: '👩‍💼',
-      email: 'marie.dubois@knowy.ai',
+      email: 'marie.dubois@tohu.co',
       department: 'Operations',
       isAdmin: true,
       disc: {

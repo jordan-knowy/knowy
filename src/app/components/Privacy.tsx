@@ -22,7 +22,7 @@ export default function Privacy() {
           <section>
             <h2 className="text-xl font-bold mb-3">1. Responsable du traitement</h2>
             <p>
-              <strong>Knowr SAS</strong><br />
+              <strong>Tohu SAS</strong><br />
               Siège social : Paris, France 🇫🇷<br />
               Email DPO : <a href="mailto:privacy@knowy.ai" className="text-primary hover:underline">privacy@knowy.ai</a>
             </p>
@@ -92,7 +92,7 @@ export default function Privacy() {
           <section>
             <h2 className="text-xl font-bold mb-3">5. Partage des données</h2>
             <p className="text-muted-foreground mb-3">
-              Knowr ne vend jamais vos données. Nous travaillons avec des sous-traitants sélectionnés :
+              Tohu ne vend jamais vos données. Nous travaillons avec des sous-traitants sélectionnés :
             </p>
             <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
               <li><strong className="text-foreground">Supabase</strong> (hébergement base de données — UE)</li>
@@ -129,14 +129,14 @@ export default function Privacy() {
           <section>
             <h2 className="text-xl font-bold mb-3">8. Sécurité</h2>
             <p className="text-muted-foreground">
-              Knowr met en œuvre des mesures techniques et organisationnelles adaptées pour protéger vos données :
+              Tohu met en œuvre des mesures techniques et organisationnelles adaptées pour protéger vos données :
               chiffrement en transit (TLS), chiffrement au repos, contrôle d'accès basé sur les rôles (RBAC),
               journalisation des accès, et Row Level Security (RLS) au niveau de la base de données.
             </p>
           </section>
 
           <section className="pt-6 border-t border-border">
-            <p className="text-muted-foreground">Knowr SAS — Paris, France 🇫🇷</p>
+            <p className="text-muted-foreground">Tohu SAS — Paris, France 🇫🇷</p>
             <p className="text-muted-foreground">Contact DPO : <a href="mailto:privacy@knowy.ai" className="text-primary hover:underline">privacy@knowy.ai</a></p>
           </section>
         </div>

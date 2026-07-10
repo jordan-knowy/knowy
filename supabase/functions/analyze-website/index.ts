@@ -82,7 +82,7 @@ async function llmAnalysis(url: string, title: string | null, text: string): Pro
         {
           role: 'system',
           content:
-            'Tu analyses un site public pour construire le contexte Knowy d’un utilisateur. Réponds uniquement en JSON valide. N’invente rien: si une donnée manque, mets null ou [].',
+            'Tu analyses un site public pour construire le contexte Tohu d’un utilisateur. Réponds uniquement en JSON valide. N’invente rien: si une donnée manque, mets null ou [].',
         },
         {
           role: 'user',
@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
   try {
     const page = await fetch(url, {
       headers: {
-        'User-Agent': 'KnowyBot/0.1 WebsiteContextAnalyzer',
+        'User-Agent': 'TohuBot/0.1 WebsiteContextAnalyzer',
       },
     });
 

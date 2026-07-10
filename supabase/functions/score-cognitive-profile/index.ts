@@ -1,6 +1,6 @@
 /**
  * score-cognitive-profile
- * Moteur de scoring relationnel (doc 08 — Knowy Scoring Relationnel v1.0)
+ * Moteur de scoring relationnel (doc 08 — Tohu Scoring Relationnel v1.0)
  *
  * 3 dimensions : Intensité (40%) · Réciprocité (35%) · Longévité (25%)
  * Outputs : engagement_score (0-100), phase, reciprocity_pct, contact_alerts

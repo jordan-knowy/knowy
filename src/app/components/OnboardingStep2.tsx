@@ -133,7 +133,7 @@ export default function OnboardingStep2() {
           </div>
           <h1 className="mb-4">Connectez vos échanges</h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Les emails, calendriers et participants sont la matière première du score comportemental Knowr.
+            Les emails, calendriers et participants sont la matière première du score comportemental Tohu.
           </p>
         </motion.div>
 
@@ -187,7 +187,7 @@ export default function OnboardingStep2() {
           <div className="flex items-start gap-3">
             <Lock className="size-5 text-primary mt-0.5" />
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Knowr utilise ces accès pour extraire des signaux de contexte. La lecture complète et l'ingestion des messages seront contrôlées par vos préférences de confidentialité à l'étape suivante.
+              Tohu utilise ces accès pour extraire des signaux de contexte. La lecture complète et l'ingestion des messages seront contrôlées par vos préférences de confidentialité à l'étape suivante.
             </p>
           </div>
         </div>

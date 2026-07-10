@@ -1,8 +1,8 @@
-# DESIGN SYSTEM — Knowy Easy
+# DESIGN SYSTEM — Tohu
 
 ## Intent
 
-The Knowy interface must make behavioral intelligence feel calm, trustworthy and operational. The core visual moment is "Qui est dans la room": participants, cognitive scores, interaction modes, evidence levels and sources.
+The Tohu interface must make behavioral intelligence feel calm, trustworthy and operational. The core visual moment is "Qui est dans la room": participants, cognitive scores, interaction modes, evidence levels and sources.
 
 ## Tokens
 
@@ -30,7 +30,7 @@ Design primitives live in `src/app/components/design-system`.
 - `EmptyState`, `ErrorState`, `LoadingState`: standard non-happy states.
 - `Modal`, `Drawer`: lightweight primitives for future interactions.
 
-Compatibility wrappers remain in `src/app/components/knowy` so existing screens can migrate gradually.
+Compatibility wrappers remain in `src/app/components/knowr` so existing screens can migrate gradually.
 
 ## Inference Visual Language
 

@@ -6,6 +6,7 @@ import {
   TrendingUp, Minus, TrendingDown, Sparkles, Clock,
   Brain, Target, Users, AlertTriangle, CheckCircle,
   MessageSquare, Globe, Loader2, ChevronRight,
+  Plus, FileText, Mic,
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from '../../lib/supabase';
@@ -188,7 +189,7 @@ function EnrichingState({ name }: { name: string }) {
         <Sparkles className="size-8 text-white animate-pulse" />
       </div>
       <div className="text-center space-y-2">
-        <h3 className="text-xl font-bold">Knowr analyse {name}</h3>
+        <h3 className="text-xl font-bold">Tohu analyse {name}</h3>
         <p className="text-sm text-muted-foreground max-w-xs">
           L'IA construit le profil cognitif à partir de vos échanges et de la mémoire relationnelle.
         </p>
@@ -278,6 +279,9 @@ export default function ContactDetail() {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [syncingContactEmails, setSyncingContactEmails] = useState(false);
   const [syncEmailsMsg, setSyncEmailsMsg] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteFile, setNoteFile] = useState<File | null>(null);
 
   // ── Load all data ────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -406,6 +410,35 @@ export default function ContactDetail() {
       }
     } catch (e: any) { setTransferMsg(e?.message ?? 'Erreur'); }
     finally { setTransferring(false); }
+  };
+
+  const addNote = async () => {
+    if (!supabase || !id || !orgId || savingNote) return;
+    if (!noteDraft.trim() && !noteFile) return;
+    setSavingNote(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      let body = noteDraft.trim();
+
+      if (noteFile) {
+        const filePath = `contacts/${id}/${Date.now()}_${noteFile.name}`;
+        const { error: uploadError } = await supabase.storage.from('tohu-documents').upload(filePath, noteFile);
+        if (!uploadError) body = (body ? body + '\n\n' : '') + `📎 ${noteFile.name}`;
+      }
+      if (!body) return;
+
+      const { data: inserted, error } = await supabase.from('notes').insert({
+        organization_id: orgId, contact_id: id, author_user_id: user?.id ?? null, body,
+      }).select('id, body, created_at').single();
+
+      if (!error && inserted) {
+        setNotes(prev => [inserted as Note, ...prev]);
+        setNoteDraft('');
+        setNoteFile(null);
+      }
+    } finally {
+      setSavingNote(false);
+    }
   };
 
   const handleMerge = async (secondaryId: string) => {
@@ -700,7 +733,7 @@ export default function ContactDetail() {
     .map((s: any, i: number) => ({
       tag: i === 0 ? 'Levier' : i === 1 ? 'Risque' : 'Présence',
       text: s.text,
-      source: 'Analyse Knowr',
+      source: 'Analyse Tohu',
       provenance: s.inference_level === 'observable' ? 'observable' : 'inferred',
     }));
 
@@ -1346,6 +1379,55 @@ export default function ContactDetail() {
               </CollapsibleSection>
             )}
 
+            {/* ── COACHING · COMMENT ABORDER {name} ─────────────────────────── */}
+            {profile && profile.cognitive_mode && profile.cognitive_mode !== 'unavailable' && (
+              <CollapsibleSection
+                title={`Coaching · comment aborder ${contact.full_name.split(' ')[0]}`}
+                icon={<Sparkles className="size-4" />}
+              >
+                <div className="mb-4">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">Socle observé</p>
+                  <p className="text-sm">
+                    {profile.cognitive_mode === 's1_dominant'
+                      ? 'Décide vite, sur intuition — privilégie la clarté et l\'action immédiate.'
+                      : profile.cognitive_mode === 's2_dominant'
+                      ? 'Analyse avant de décider — a besoin de données et de temps pour se positionner.'
+                      : 'Posture contextuelle — adapte son mode de décision selon l\'enjeu.'}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div className="rounded-xl border p-3" style={{ borderColor: 'var(--sage-l)', background: 'var(--sage-s)' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: 'var(--sage)' }}>Adopte</p>
+                    <p className="text-sm">
+                      {profile.cognitive_mode === 's1_dominant'
+                        ? 'Va à l\'essentiel, propose une décision claire dès le début.'
+                        : 'Prépare des données concrètes, laisse du temps à la réflexion.'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border p-3" style={{ borderColor: 'var(--coral-l)', background: 'var(--coral-s)' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: 'var(--coral)' }}>Évite</p>
+                    <p className="text-sm">
+                      {profile.cognitive_mode === 's1_dominant'
+                        ? 'Les longs préambules et le luxe de détails avant d\'arriver au point.'
+                        : 'Les décisions précipitées demandées sans contexte ni chiffres.'}
+                    </p>
+                  </div>
+                </div>
+
+                {(profile.behavioral_analysis_data ?? []).length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Ce qui a été observé récemment</p>
+                    <div className="space-y-1.5">
+                      {(profile.behavioral_analysis_data ?? []).slice(0, 2).map((sig: any, i: number) => (
+                        <p key={i} className="text-xs text-muted-foreground">· {sig.text}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CollapsibleSection>
+            )}
+
             {/* ── JOBS-TO-BE-DONE ────────────────────────────────────────────── */}
             {profile?.jtbd_data && Object.keys(profile.jtbd_data).length > 0 && (
               <CollapsibleSection
@@ -1378,7 +1460,7 @@ export default function ContactDetail() {
                 <div className="text-center py-8">
                   <Calendar className="size-8 text-muted-foreground/30 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground mb-3">
-                    Planifiez une réunion pour générer votre premier brief Knowr.
+                    Planifiez une réunion pour générer votre premier brief Tohu.
                   </p>
                   <button onClick={() => navigate('/meetings')}
                     className="text-xs text-primary font-medium underline">
@@ -1531,6 +1613,55 @@ export default function ContactDetail() {
                   )}
                 </div>
               </div>
+            </CollapsibleSection>
+
+            {/* ── NOURRIR LE PROFIL ─────────────────────────────────────────── */}
+            <CollapsibleSection
+              title="Nourrir le profil"
+              icon={<Plus className="size-4" />}
+              badge={notes.length > 0 ? String(notes.length) : undefined}
+            >
+              <div className="space-y-3 mb-4">
+                <textarea
+                  value={noteDraft}
+                  onChange={e => setNoteDraft(e.target.value)}
+                  placeholder="Ajoute une observation, un contexte, une note libre…"
+                  rows={3}
+                  className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-border hover:bg-muted/50 cursor-pointer">
+                    <FileText className="size-3.5" />
+                    {noteFile ? noteFile.name : 'Fichier'}
+                    <input type="file" className="hidden" onChange={e => setNoteFile(e.target.files?.[0] ?? null)} />
+                  </label>
+                  <button disabled className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-border text-muted-foreground opacity-50 cursor-not-allowed" title="Note vocale — bientôt disponible">
+                    <Mic className="size-3.5" />
+                    Note vocale
+                  </button>
+                  <button
+                    onClick={addNote}
+                    disabled={savingNote || (!noteDraft.trim() && !noteFile)}
+                    className="ml-auto flex items-center gap-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-xl text-white disabled:opacity-50"
+                    style={{ background: '#6E50C8' }}
+                  >
+                    {savingNote ? <Loader2 className="size-3 animate-spin" /> : null}
+                    Ajouter
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground/70">Entre en mémoire après validation — visible par ton équipe.</p>
+              </div>
+
+              {notes.length > 0 && (
+                <div className="space-y-2 pt-3 border-t border-border">
+                  {notes.map(n => (
+                    <div key={n.id} className="rounded-xl border border-border p-3">
+                      <p className="text-sm whitespace-pre-line">{n.body}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1" style={{ fontFamily: 'var(--mono)' }}>{relDate(n.created_at)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CollapsibleSection>
 
             {/* ── NO PROFILE STATE ───────────────────────────────────────────── */}

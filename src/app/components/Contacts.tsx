@@ -145,7 +145,7 @@ function AddContactModal({ onClose, onAdded, orgId }: AddContactModalProps) {
       // Upload PDF to storage
       const filePath = `contacts/${orgId}/${Date.now()}_${file.name}`;
       const { error: uploadError } = await supabase.storage
-        .from('knowy-documents')
+        .from('tohu-documents')
         .upload(filePath, file, { contentType: 'application/pdf' });
 
       // If bucket doesn't exist yet, still create the contact with pending state
@@ -290,7 +290,7 @@ function AddContactModal({ onClose, onAdded, orgId }: AddContactModalProps) {
               <div className="flex items-start gap-2 p-3 bg-primary/5 rounded-xl border border-primary/10">
                 <Brain className="size-4 text-primary flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-muted-foreground">
-                  L'IA recherchera des informations publiques sur ce contact et rédigera automatiquement son profil cognitif Knowr.
+                  L'IA recherchera des informations publiques sur ce contact et rédigera automatiquement son profil cognitif Tohu.
                 </p>
               </div>
             </>
@@ -905,7 +905,7 @@ export default function Contacts() {
                   <Coachmark
                     id="personnes-discover"
                     title="Découvrez vos contacts"
-                    text="Knowr scanne vos emails pour vous proposer les personnes avec qui vous échangez le plus."
+                    text="Tohu scanne vos emails pour vous proposer les personnes avec qui vous échangez le plus."
                     className="top-full right-0 mt-2"
                   />
                 </span>
@@ -1059,7 +1059,7 @@ export default function Contacts() {
                     <p className="font-semibold text-sm text-foreground">
                       {suggestions.filter(s => !dismissed.has(s.email)).length} suggestion{suggestions.filter(s => !dismissed.has(s.email)).length > 1 ? 's' : ''} détectée{suggestions.filter(s => !dismissed.has(s.email)).length > 1 ? 's' : ''}
                     </p>
-                    <p className="text-xs text-muted-foreground">Interlocuteurs fréquents détectés dans vos emails (Gmail &amp; Outlook) — pas encore dans Knowr.</p>
+                    <p className="text-xs text-muted-foreground">Interlocuteurs fréquents détectés dans vos emails (Gmail &amp; Outlook) — pas encore dans Tohu.</p>
                   </div>
                 </div>
                 {suggestionsOpen ? <ChevronUp className="size-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="size-4 text-muted-foreground flex-shrink-0" />}

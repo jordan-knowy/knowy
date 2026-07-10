@@ -42,7 +42,7 @@ export default function Organization() {
   const [licenceTotal, setLicenceTotal] = useState(0);
   const { profile } = useCurrentProfile();
 
-  const orgName = profile?.companyName && profile.companyName !== 'Workspace Knowr'
+  const orgName = profile?.companyName && profile.companyName !== 'Workspace Tohu'
     ? profile.companyName
     : 'Mon Organisation';
 
@@ -200,7 +200,7 @@ export default function Organization() {
           {alerts.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-5 text-center md:p-8">
               <AlertTriangle className="mx-auto mb-3 size-7 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">Aucune alerte pour le moment — les alertes apparaîtront dès que Knowr détecte des risques relationnels sur vos réunions.</p>
+              <p className="text-sm text-muted-foreground">Aucune alerte pour le moment — les alertes apparaîtront dès que Tohu détecte des risques relationnels sur vos réunions.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

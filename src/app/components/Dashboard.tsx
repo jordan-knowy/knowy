@@ -229,6 +229,13 @@ export default function Dashboard() {
   const [signalState, setSignalState] = useState<Record<string, 'ok' | 'no'>>({});
   const [veilleRunning, setVeilleRunning] = useState(false);
   const [veilleMsg, setVeilleMsg] = useState<string | null>(null);
+  const [digestDismissed, setDigestDismissed] = useState(false);
+  const [lastVisitMs] = useState<number>(() => {
+    const stored = localStorage.getItem('tohu_home_last_visit');
+    const prev = stored ? parseInt(stored, 10) : 0;
+    localStorage.setItem('tohu_home_last_visit', String(Date.now()));
+    return prev;
+  });
 
   async function handleCalendarSync() {
     if (!supabase || syncing) return;
@@ -618,7 +625,7 @@ export default function Dashboard() {
           merged.push({
             id: s.id, kind: 'person', entityId: s.contact_id, entityName: s.contacts?.full_name ?? 'Contact',
             title: '', tag: cfg.tag, color: cfg.color, bg: cfg.bg, text: s.text ?? '',
-            source: s.source_type ?? 'Analyse Knowr', sourceUrl: null,
+            source: s.source_type ?? 'Analyse Tohu', sourceUrl: null,
             when: relWhen(s.observed_at), tsMs: s.observed_at ? new Date(s.observed_at).getTime() : 0,
           });
         }
@@ -768,7 +775,7 @@ export default function Dashboard() {
           const cfg = signalFeedTag(s.signal_type ?? '');
           merged.push({ id: s.id, kind: 'person', entityId: s.contact_id, entityName: s.contacts?.full_name ?? 'Contact',
             title: '', tag: cfg.tag, color: cfg.color, bg: cfg.bg, text: s.text ?? '',
-            source: s.source_type ?? 'Analyse Knowr', sourceUrl: null,
+            source: s.source_type ?? 'Analyse Tohu', sourceUrl: null,
             when: relWhen(s.observed_at), tsMs: s.observed_at ? new Date(s.observed_at).getTime() : 0 });
         }
         merged.sort((a, b) => b.tsMs - a.tsMs);
@@ -812,6 +819,14 @@ export default function Dashboard() {
     if (comptesSort === 'nps') return (b.npsScore ?? -1) - (a.npsScore ?? -1);
     return (b.verdict?.score ?? -1) - (a.verdict?.score ?? -1);
   });
+
+  // Top 5 NPS — leaderboard Meilleurs / À risque (maquette)
+  const npsRanked = portfolio.filter(c => c.npsScore != null).sort((a, b) => (b.npsScore ?? 0) - (a.npsScore ?? 0));
+  const top5Best = npsRanked.slice(0, 5);
+  const top5Risk = [...npsRanked].reverse().slice(0, 5).filter(c => !top5Best.includes(c));
+
+  // Digest « depuis ta dernière visite » — nouveaux signaux depuis le dernier passage sur Home
+  const newSignalsSinceVisit = signalsFeed.filter(s => s.tsMs > lastVisitMs).length;
 
   return (
     <div className="size-full overflow-auto" style={{ background: 'var(--color-background)' }}>
@@ -857,6 +872,24 @@ export default function Dashboard() {
             <Users className="size-3.5" />
             {newContactsFound} nouveau{newContactsFound > 1 ? 'x' : ''} contact{newContactsFound > 1 ? 's' : ''} détecté{newContactsFound > 1 ? 's' : ''} dans vos emails — Importer →
           </button>
+        )}
+
+        {/* Digest « Depuis ta dernière visite » (maquette) */}
+        {!digestDismissed && lastVisitMs > 0 && newSignalsSinceVisit > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-between gap-3 rounded-2xl px-5 py-3 mb-5"
+            style={{ background: 'var(--violet-s)', border: '1px solid var(--border-m)' }}
+          >
+            <p className="text-sm flex items-center gap-2" style={{ color: 'var(--t1, #1A1040)' }}>
+              <Sparkles className="size-4 text-primary flex-shrink-0" />
+              Depuis ta dernière visite : <b>{newSignalsSinceVisit} nouveau{newSignalsSinceVisit > 1 ? 'x' : ''} signal{newSignalsSinceVisit > 1 ? 'aux' : ''}</b>
+              {defendCount > 0 && <> · <b>{defendCount} compte{defendCount > 1 ? 's' : ''}</b> à défendre</>}
+            </p>
+            <button onClick={() => setDigestDismissed(true)} className="text-muted-foreground hover:text-foreground flex-shrink-0">
+              <X className="size-4" />
+            </button>
+          </motion.div>
         )}
 
         {/* ══ Rangée KPI — 4 cartes (maquette) ══════════════════════════════ */}
@@ -995,6 +1028,42 @@ export default function Dashboard() {
             )}
           </div>
         </motion.div>
+
+        {/* ══ Top 5 · NPS — leaderboard Meilleurs / À risque (maquette) ══════ */}
+        {npsRanked.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+            <KnowrCard className="p-5 rounded-2xl">
+              <p className="text-[10px] font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5" style={{ color: 'var(--sage)', fontFamily: 'var(--mono)' }}>
+                <TrendingUp className="size-3.5" /> Top 5 · Meilleurs comptes
+              </p>
+              <div className="space-y-1">
+                {top5Best.map((c, i) => (
+                  <button key={c.id} onClick={() => navigate(`/company/${c.id}`)}
+                    className="w-full flex items-center gap-3 py-1.5 px-1.5 rounded-lg hover:bg-muted/50 transition-colors text-left">
+                    <span className="text-xs font-bold text-muted-foreground w-4 flex-shrink-0">{i + 1}</span>
+                    <span className="text-sm font-semibold flex-1 truncate">{c.name}</span>
+                    <span className="text-sm font-black" style={{ color: 'var(--sage)' }}>{c.npsScore}</span>
+                  </button>
+                ))}
+              </div>
+            </KnowrCard>
+            <KnowrCard className="p-5 rounded-2xl">
+              <p className="text-[10px] font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5" style={{ color: 'var(--coral)', fontFamily: 'var(--mono)' }}>
+                <TrendingDown className="size-3.5" /> Top 5 · À risque
+              </p>
+              <div className="space-y-1">
+                {top5Risk.map((c, i) => (
+                  <button key={c.id} onClick={() => navigate(`/company/${c.id}`)}
+                    className="w-full flex items-center gap-3 py-1.5 px-1.5 rounded-lg hover:bg-muted/50 transition-colors text-left">
+                    <span className="text-xs font-bold text-muted-foreground w-4 flex-shrink-0">{i + 1}</span>
+                    <span className="text-sm font-semibold flex-1 truncate">{c.name}</span>
+                    <span className="text-sm font-black" style={{ color: 'var(--coral)' }}>{c.npsScore}</span>
+                  </button>
+                ))}
+              </div>
+            </KnowrCard>
+          </div>
+        )}
 
         {/* Cette semaine · à faire (maquette) */}
         <div className="flex items-baseline justify-between gap-3 mb-4">
@@ -1250,11 +1319,11 @@ export default function Dashboard() {
             )}
             </div>
 
-            {/* Activité Knowr */}
+            {/* Activité Tohu */}
             <KnowrCard className="p-6 flex flex-col rounded-2xl">
               <div className="flex items-center gap-2 mb-5">
                 <Activity className="size-5 text-primary" />
-                <h2 className="text-xl font-black">Activité Knowr</h2>
+                <h2 className="text-xl font-black">Activité Tohu</h2>
                 <KnowrBadge variant="violet" size="sm">Aujourd'hui</KnowrBadge>
               </div>
               {activity.length === 0 ? (
@@ -1288,6 +1357,31 @@ export default function Dashboard() {
                 </div>
               )}
             </KnowrCard>
+          </div>
+        </div>
+
+        {/* ══ Bohu — mémoire relationnelle d'équipe (bientôt) ═══════════════ */}
+        <div className="p-6 rounded-2xl mt-6" style={{ background: 'linear-gradient(135deg, var(--night), var(--night2))' }}>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-start gap-3">
+              <div className="size-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.10)' }}>
+                <Network className="size-5 text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="text-lg font-black text-white">Bohu</h2>
+                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/15 text-white">Bientôt</span>
+                </div>
+                <p className="text-sm text-white/70 max-w-md">La mémoire relationnelle de ton entreprise. Pose une question, obtiens une réponse ancrée dans le graphe de ton équipe — chaque affirmation porte sa source.</p>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+            {['Que sait déjà l\'équipe sur un compte ?', 'Qui connaît quelqu\'un chez un prospect ?', 'Qui a déjà géré cette relation ?', 'Qui bouge sur tout le portefeuille ?'].map((q) => (
+              <div key={q} className="text-xs text-white/60 px-3 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                {q}
+              </div>
+            ))}
           </div>
         </div>
 

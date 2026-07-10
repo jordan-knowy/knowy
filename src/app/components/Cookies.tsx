@@ -12,19 +12,19 @@ const navigate = useNavigate();
     },
     {
       type: 'Essentiel',
-      name: 'knowy_session',
+      name: 'tohu_session',
       purpose: 'Maintien de la connexion',
       duration: '7 jours',
     },
     {
       type: 'Fonctionnel',
-      name: 'knowy_prefs',
+      name: 'tohu_prefs',
       purpose: 'Préférences utilisateur (thème, langue)',
       duration: '1 an',
     },
     {
       type: 'Analytique',
-      name: 'knowy_analytics',
+      name: 'tohu_analytics',
       purpose: "Mesure d'audience anonymisée",
       duration: '13 mois',
     },
@@ -55,7 +55,7 @@ const navigate = useNavigate();
           </section>
 
           <section>
-            <h2 className="text-xl font-bold mb-3">Cookies utilisés par Knowr</h2>
+            <h2 className="text-xl font-bold mb-3">Cookies utilisés par Tohu</h2>
             <div className="space-y-3 sm:hidden">
               {cookieRows.map((row) => (
                 <div key={row.name} className="rounded-xl border border-border bg-card p-4">
@@ -95,14 +95,14 @@ const navigate = useNavigate();
           <section>
             <h2 className="text-xl font-bold mb-3">Cookies tiers</h2>
             <p className="text-muted-foreground mb-3">
-              Knowr peut utiliser des cookies provenant de services tiers :
+              Tohu peut utiliser des cookies provenant de services tiers :
             </p>
             <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
               <li><strong className="text-foreground">Google</strong> : authentication OAuth (Google Sign-In)</li>
               <li><strong className="text-foreground">Supabase</strong> : gestion de session et authentification</li>
             </ul>
             <p className="mt-3 text-muted-foreground">
-              Ces services ont leurs propres politiques de cookies. Knowr ne dépose <strong className="text-foreground">aucun cookie publicitaire</strong>.
+              Ces services ont leurs propres politiques de cookies. Tohu ne dépose <strong className="text-foreground">aucun cookie publicitaire</strong>.
             </p>
           </section>
 
@@ -139,7 +139,7 @@ const navigate = useNavigate();
           </section>
 
           <section className="pt-6 border-t border-border">
-            <p className="text-muted-foreground">Knowr SAS — Paris, France 🇫🇷</p>
+            <p className="text-muted-foreground">Tohu SAS — Paris, France 🇫🇷</p>
           </section>
         </div>
       </div>

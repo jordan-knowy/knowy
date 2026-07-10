@@ -12,7 +12,7 @@ export type SourceKind =
   | 'slack'
   | 'meeting_transcript'
   | 'public_news'
-  | 'knowy_memory';
+  | 'tohu_memory';
 
 export interface EvidenceSource {
   id: ID;

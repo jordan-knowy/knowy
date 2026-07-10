@@ -5,7 +5,7 @@ const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 const MODEL = 'google/gemini-2.5-flash-lite';
 
 // ── System prompt (doc 06 v3) ────────────────────────────────────────────────
-const SYSTEM_PROMPT = `Tu es le moteur d'intelligence interactionnelle de Knowr.
+const SYSTEM_PROMPT = `Tu es le moteur d'intelligence interactionnelle de Tohu.
 Tu génères des briefs pré-meeting ultra-précis, stratégiquement actionnables et scientifiquement fondés.
 
 RÈGLE N°1 — ZÉRO HALLUCINATION
@@ -15,7 +15,7 @@ RÈGLE N°2 — ANALYSE PAR CHOIX DE VIE
 Profil comportemental depuis les décisions observables, jamais le titre.
 
 RÈGLE N°3 — HIÉRARCHIE DES SOURCES
-Mémoire Knowr > Interne (emails/calendar) > Externe vérifiable > Externe inférentiel.
+Mémoire Tohu > Interne (emails/calendar) > Externe vérifiable > Externe inférentiel.
 
 RÈGLE N°4 — NIVEAUX D'INFÉRENCE
 Observable / Inféré / Hypothétique / Non disponible — afficher toujours.
@@ -256,7 +256,7 @@ function buildUserMessage(ctx: BriefContext): string {
       if (p.contact.tenure_start_date) lines.push(`  Dans le poste depuis : ${p.contact.tenure_start_date}`);
     }
     if (p.snapshot) {
-      lines.push(`  Score d'engagement Knowr : ${p.snapshot.engagement_score}/100`);
+      lines.push(`  Score d'engagement Tohu : ${p.snapshot.engagement_score}/100`);
       lines.push(`  Phase relationnelle : ${p.snapshot.phase} (évolution : ${p.snapshot.score_evolution > 0 ? '+' : ''}${p.snapshot.score_evolution} pts/30j)`);
       if (p.snapshot.last_contact_at) {
         const daysAgo = Math.round((Date.now() - new Date(p.snapshot.last_contact_at).getTime()) / 86400000);
@@ -522,11 +522,11 @@ Deno.serve(async (req) => {
     // ── 5. Build context ──────────────────────────────────────────────────
     const sources_connected: string[] = ['calendar'];
     if (communications.length > 0) sources_connected.push('gmail');
-    if (profile) sources_connected.push('knowy_memory');
+    if (profile) sources_connected.push('tohu_memory');
 
     const sources_missing: string[] = [];
     if (communications.length === 0) sources_missing.push('gmail');
-    if (!profile) sources_missing.push('knowy_memory');
+    if (!profile) sources_missing.push('tohu_memory');
 
     const ctx: BriefContext = {
       meeting,
@@ -546,8 +546,8 @@ Deno.serve(async (req) => {
       headers: {
         'Authorization': `Bearer ${openrouterKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://knowr-ai.netlify.app',
-        'X-Title': 'Knowr Brief Engine',
+        'HTTP-Referer': 'https://knowr-ai.netlify.app', // domaine technique inchangé (décision infra différée)
+        'X-Title': 'Tohu Brief Engine',
       },
       body: JSON.stringify({
         model: MODEL,

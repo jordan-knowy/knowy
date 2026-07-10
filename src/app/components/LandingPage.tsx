@@ -12,7 +12,7 @@ const sources = ['Gmail', 'Outlook', 'LinkedIn', 'Calendar', 'Zoom text', 'Teams
 const productShots = [
   {
     title: 'La relation, enfin visible.',
-    text: 'Score relationnel, stakeholders actifs, momentum: Knowr transforme le bruit des échanges en signaux lisibles.',
+    text: 'Score relationnel, stakeholders actifs, momentum: Tohu transforme le bruit des échanges en signaux lisibles.',
     image: relationPreview,
   },
   {
@@ -77,7 +77,7 @@ export default function LandingPage() {
               </h1>
 
               <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground sm:text-xl sm:leading-9">
-                Knowr lit les signaux autorisés de vos échanges et prépare une fiche claire: comportement,
+                Tohu lit les signaux autorisés de vos échanges et prépare une fiche claire: comportement,
                 influence, risques, stratégie de conversation.
               </p>
 
@@ -101,7 +101,7 @@ export default function LandingPage() {
 
             <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.08 }}>
               <div className="rounded-lg border border-border bg-card p-3 shadow-xl">
-                <img src={relationPreview} alt="Capture Knowr montrant l'évolution relationnelle" className="aspect-[1.35] w-full rounded-md object-cover" />
+                <img src={relationPreview} alt="Capture Tohu montrant l'évolution relationnelle" className="aspect-[1.35] w-full rounded-md object-cover" />
               </div>
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {[
@@ -176,7 +176,7 @@ export default function LandingPage() {
             <div>
               <h2 className="text-3xl font-bold sm:text-4xl">Un contexte IA, propre dès le départ.</h2>
               <p className="mt-4 text-muted-foreground">
-                Knowr structure votre profil, votre offre, votre site et vos connecteurs pour donner au moteur une base claire.
+                Tohu structure votre profil, votre offre, votre site et vos connecteurs pour donner au moteur une base claire.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -201,7 +201,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-4xl px-6 py-16 text-center lg:px-10">
           <h2 className="text-3xl font-bold sm:text-4xl md:text-6xl">Entrez préparé. Sortez aligné.</h2>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-white/70">
-            Créez votre profil, connectez vos sources, puis laissez Knowr construire votre mémoire relationnelle.
+            Créez votre profil, connectez vos sources, puis laissez Tohu construire votre mémoire relationnelle.
           </p>
           <Button className="mt-8" size="lg" onClick={goToApp} icon={<ArrowRight className="size-5" />}>
             Commencer
@@ -311,7 +311,7 @@ export default function LandingPage() {
           {/* Bottom bar */}
           <div className="mt-10 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs text-muted-foreground">
-              © 2026 Knowr SAS · Tous droits réservés · 🇫🇷 Paris, France
+              © 2026 Tohu SAS · Tous droits réservés · 🇫🇷 Paris, France
             </p>
             <div className="flex items-center gap-6 text-xs text-muted-foreground">
               <button onClick={() => navigate('/cgu')} className="hover:text-primary transition-colors">CGU</button>

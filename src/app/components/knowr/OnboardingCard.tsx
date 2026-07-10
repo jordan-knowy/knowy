@@ -20,7 +20,7 @@ interface Step {
 const STEPS: Step[] = [
   { n: 1, label: 'Analyser un compte',     path: '/companies' },
   { n: 2, label: 'Analyser une personne',  path: '/contacts'  },
-  { n: 3, label: 'Générer un brief Knowr', path: '/meetings'  },
+  { n: 3, label: 'Générer un brief Tohu',  path: '/meetings'  },
   { n: 4, label: 'Activer la veille',      path: '/account', auto: 'sources' },
   { n: 5, label: "Inviter ton équipe",     path: '/account'   },
 ];

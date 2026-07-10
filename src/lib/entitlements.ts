@@ -1,5 +1,5 @@
 /**
- * Registre des features Knowr — source de vérité CÔTÉ CODE de ce qui est réellement
+ * Registre des features Tohu — source de vérité CÔTÉ CODE de ce qui est réellement
  * livré (built) vs annoncé mais pas encore disponible (coming_soon).
  *
  * Séparation volontaire :

@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { useEffect, useState, useCallback, type ReactNode } from 'react';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useAuth } from '../../hooks/useAuth';
@@ -125,7 +125,9 @@ export default function AccountSettings() {
   const navigate = useNavigate();
   const { profile } = useCurrentProfile();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'connections' | 'security'>('profile');
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') === 'connections' ? 'connections' : 'profile';
+  const [activeTab, setActiveTab] = useState<'profile' | 'connections' | 'security'>(initialTab);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -804,7 +806,7 @@ export default function AccountSettings() {
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1040' }}>Profil LinkedIn</div>
                   </div>
                   <p style={{ fontSize: 11, color: '#9082B8', marginBottom: 12, lineHeight: 1.6 }}>
-                    Votre URL LinkedIn permet à Knowr d'enrichir votre réseau et de contextualiser vos échanges professionnels.
+                    Votre URL LinkedIn permet à Tohu d'enrichir votre réseau et de contextualiser vos échanges professionnels.
                   </p>
                   <div style={{ display: 'flex', gap: 10 }}>
                     <div style={{ flex: 1, position: 'relative' }}>
@@ -866,12 +868,12 @@ export default function AccountSettings() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
                       <label style={{ display: 'block', fontSize: 11, color: '#9082B8', marginBottom: 6, fontWeight: 600 }}>Nom de l'organisation</label>
-                      <input type="text" defaultValue="Knowr"
+                      <input type="text" defaultValue="Tohu"
                         style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(110,80,200,.15)', background: '#F9F8FC', fontSize: 13, color: '#1A1040', outline: 'none', boxSizing: 'border-box' }} />
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: 11, color: '#9082B8', marginBottom: 6, fontWeight: 600 }}>Site web</label>
-                      <input type="text" defaultValue="knowy.ai"
+                      <input type="text" defaultValue="tohu.co"
                         style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(110,80,200,.15)', background: '#F9F8FC', fontSize: 13, color: '#1A1040', outline: 'none', boxSizing: 'border-box' }} />
                     </div>
                   </div>
@@ -1088,7 +1090,7 @@ export default function AccountSettings() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: 12, fontWeight: 700, color: '#1A1040', marginBottom: 4 }}>LinkedIn connecté</p>
                         <p style={{ fontSize: 11, color: '#9082B8', marginBottom: 10, lineHeight: 1.6 }}>
-                          Knowr utilise vos données LinkedIn pour enrichir les profils. L'accès aux messages n'est pas disponible via l'API officielle.
+                          Tohu utilise vos données LinkedIn pour enrichir les profils. L'accès aux messages n'est pas disponible via l'API officielle.
                         </p>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                           {['✓ Identification des profils', '✓ Postes & formations', '✓ Données publiques', '✗ Messages privés', '✗ Connexions réseau'].map((item, i) => (
@@ -1157,7 +1159,7 @@ export default function AccountSettings() {
                 </div>
               </div>
               <div style={{ padding: '16px 24px 20px' }}>
-                <p style={{ fontSize: 12, color: '#9082B8', marginBottom: 14 }}>L'intégration CRM arrivera dans la prochaine version de Knowr.</p>
+                <p style={{ fontSize: 12, color: '#9082B8', marginBottom: 14 }}>L'intégration CRM arrivera dans la prochaine version de Tohu.</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {CRM_LIST.map((crm) => (
                     <div key={crm.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',

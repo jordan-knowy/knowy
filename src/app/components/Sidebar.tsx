@@ -8,7 +8,7 @@ import {
   ChevronDown,
   Users,
   Building2,
-  Zap,
+  Link2,
   Shield
 } from 'lucide-react';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
@@ -51,10 +51,11 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
   }, []);
 
   const mainItems = [
-    { id: 'dashboard', label: 'Home',      icon: LayoutDashboard, path: '/dashboard' },
-    { id: 'meetings',  label: 'Réunions',  icon: Calendar,        path: '/meetings'  },
-    { id: 'companies', label: 'Comptes',   icon: Building2,       path: '/companies' },
-    { id: 'contacts',  label: 'Personnes', icon: Users,           path: '/contacts'  },
+    { id: 'dashboard',   label: 'Home',        icon: LayoutDashboard, path: '/dashboard' },
+    { id: 'meetings',    label: 'Réunions',    icon: Calendar,        path: '/meetings'  },
+    { id: 'companies',   label: 'Comptes',     icon: Building2,       path: '/companies' },
+    { id: 'contacts',    label: 'Personnes',   icon: Users,           path: '/contacts'  },
+    { id: 'connectors',  label: 'Connecteurs', icon: Link2,           path: '/account?tab=connections' },
   ];
 
   const bottomItems = [
@@ -65,15 +66,19 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
   const isActive = (path: string) => {
     if (path === '/contacts') {
       return location.pathname === '/contacts'
-        || location.pathname.startsWith('/contact/')
-        || location.pathname === '/relations'
-        || location.pathname.startsWith('/relation/');
+        || location.pathname.startsWith('/contact/');
     }
     if (path === '/companies') {
       return location.pathname === '/companies' || location.pathname.startsWith('/company/');
     }
     if (path === '/meetings') {
       return location.pathname === '/meetings' || location.pathname.startsWith('/meeting/');
+    }
+    if (path === '/account?tab=connections') {
+      return location.pathname === '/account' && location.search.includes('tab=connections');
+    }
+    if (path === '/account') {
+      return location.pathname === '/account' && !location.search.includes('tab=connections');
     }
     return location.pathname === path;
   };
@@ -100,6 +105,25 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
       {/* Main navigation */}
       <div className="flex-1 overflow-y-auto py-6 px-3">
         <nav className="space-y-1">
+          {/* Bohu — mémoire relationnelle d'équipe, à venir (badge icône identique à la maquette) */}
+          <div className="w-full flex items-center gap-[11px] rounded-lg cursor-not-allowed select-none" style={{ padding: '10px 12px' }} title="Bohu — bientôt disponible">
+            <span className="flex items-center justify-center rounded-md flex-shrink-0" style={{ width: 21, height: 21, background: 'var(--violet, #6E50C8)' }}>
+              <svg width="15" height="15" viewBox="43 25 72 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <g transform="translate(6,-5)" fill="#fff">
+                  <line x1="60" y1="62" x2="80" y2="42" stroke="#fff" strokeWidth="2.6" />
+                  <line x1="60" y1="62" x2="94" y2="66" stroke="#fff" strokeWidth="2.6" />
+                  <line x1="60" y1="62" x2="76" y2="90" stroke="#fff" strokeWidth="2.6" />
+                  <line x1="60" y1="62" x2="52" y2="46" stroke="#fff" strokeWidth="2.6" />
+                  <circle cx="80" cy="42" r="4.6" /><circle cx="94" cy="66" r="4" /><circle cx="76" cy="90" r="4" /><circle cx="52" cy="46" r="3.6" /><circle cx="60" cy="62" r="7.6" />
+                </g>
+              </svg>
+            </span>
+            <span className="flex-1 text-left font-semibold text-muted-foreground" style={{ fontSize: '13px' }}>Bohu</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+              Bientôt
+            </span>
+          </div>
+
           {mainItems.map((item) => (
             <motion.button
               key={item.id}
@@ -117,15 +141,6 @@ export default function Sidebar({ isOpen = true, onNavigate }: SidebarProps) {
               <span className="flex-1 text-left font-semibold" style={{ fontSize: '13px' }}>{item.label}</span>
             </motion.button>
           ))}
-
-          {/* Coach — V2, désactivé */}
-          <div className="w-full flex items-center gap-[11px] rounded-lg opacity-35 cursor-not-allowed select-none" style={{ padding: '10px 12px' }}>
-            <Zap className="size-4 text-muted-foreground flex-shrink-0" />
-            <span className="flex-1 text-left font-semibold text-muted-foreground" style={{ fontSize: '13px' }}>Coach</span>
-            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-              V2
-            </span>
-          </div>
         </nav>
 
         {/* Prise en main — onboarding 5 gestes clés (réf. maquette) */}

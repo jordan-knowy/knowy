@@ -447,7 +447,7 @@ export default function BriefExterne() {
                       <PillarBar label="Pouvoir d'achat" pillar={dossier.eos.pouvoir} />
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-3 pt-3 border-t border-border" style={{ fontFamily: 'var(--mono)' }}>
-                      Score a priori · méthodo Knowr (non calibré closed-won)
+                      Score a priori · méthodo Tohu (non calibré closed-won)
                     </p>
                   </div>
 

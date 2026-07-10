@@ -185,6 +185,10 @@ export default function CompanyDetail() {
   const [nextMeeting, setNextMeeting] = useState<MeetingRow | null>(null);
   const [genBrief, setGenBrief] = useState(false);
   const [genErr, setGenErr] = useState<string | null>(null);
+  const [transfers, setTransfers] = useState<Array<{ id: string; contactName: string; fromName: string | null; toName: string; createdAt: string }>>([]);
+  const [editingFirmo, setEditingFirmo] = useState(false);
+  const [firmoDraft, setFirmoDraft] = useState<Record<string, string>>({});
+  const [savingFirmo, setSavingFirmo] = useState(false);
 
   // Générer une fiche « Recommandations » compte sans réunion planifiée
   const generateRecommendations = async () => {
@@ -266,6 +270,33 @@ export default function CompanyDetail() {
     finally { setEnriching(false); setTimeout(() => setEnrichMsg(null), 5000); }
   };
 
+  const FIRMO_FIELDS: Array<{ key: string; label: string }> = [
+    { key: 'capital',        label: 'Capital' },
+    { key: 'adresse',        label: 'Adresse' },
+    { key: 'formeJuridique', label: 'Forme juridique' },
+    { key: 'codeNaf',        label: 'Code NAF' },
+    { key: 'dirigeant',      label: 'Dirigeant(s)' },
+    { key: 'resultat',       label: 'Résultat' },
+    { key: 'levee',          label: 'Levée' },
+  ];
+
+  const openFirmoEdit = () => {
+    setFirmoDraft({ ...(companyEnrich?.firmographics ?? {}) });
+    setEditingFirmo(true);
+  };
+
+  const saveFirmographics = async () => {
+    if (!supabase || !company) return;
+    setSavingFirmo(true);
+    try {
+      const nextEnrich = { ...(companyEnrich ?? {}), firmographics: firmoDraft };
+      const { error } = await supabase.from('companies').update({ enrichment_data: nextEnrich }).eq('id', company.id);
+      if (!error) { setCompanyEnrich(nextEnrich); setEditingFirmo(false); }
+    } finally {
+      setSavingFirmo(false);
+    }
+  };
+
   const loadData = useCallback(async () => {
     if (!supabase || !id) { setLoading(false); return; }
     try {
@@ -313,6 +344,34 @@ export default function CompanyDetail() {
 
       const contactRows = (rawContacts ?? []) as any[];
       const contactIds = contactRows.map(c => c.id);
+
+      // ── 2b. Passation — historique des transferts sur les contacts du compte (F17) ──
+      if (contactIds.length) {
+        const { data: transferRows } = await supabase
+          .from('contact_transfers')
+          .select('id, contact_id, from_user_id, to_user_id, created_at')
+          .in('contact_id', contactIds)
+          .order('created_at', { ascending: true });
+
+        if (transferRows?.length) {
+          const userIds = Array.from(new Set(transferRows.flatMap((t: any) => [t.from_user_id, t.to_user_id]).filter(Boolean)));
+          const { data: profileRows } = await supabase.from('profiles').select('id, full_name').in('id', userIds);
+          const nameById: Record<string, string> = {};
+          for (const p of (profileRows ?? []) as any[]) nameById[p.id] = p.full_name;
+          const contactNameById: Record<string, string> = {};
+          for (const c of contactRows) contactNameById[c.id] = c.full_name;
+
+          setTransfers(transferRows.map((t: any) => ({
+            id: t.id,
+            contactName: contactNameById[t.contact_id] ?? '—',
+            fromName: t.from_user_id ? (nameById[t.from_user_id] ?? '—') : null,
+            toName: nameById[t.to_user_id] ?? '—',
+            createdAt: t.created_at,
+          })));
+        } else {
+          setTransfers([]);
+        }
+      }
 
       // ── 3. Load cognitive profiles for contacts ────────────────────────
       let profileMap: Record<string, any> = {};
@@ -1163,6 +1222,114 @@ export default function CompanyDetail() {
                     );
                   })}
                 </div>
+              )}
+            </CollapsibleSection>
+
+            {/* ANCIENS CONTACTS DU COMPTE — F11 · réservoir d'expansion */}
+            <CollapsibleSection
+              title="Anciens contacts du compte"
+              icon={<Users className="size-4" />}
+            >
+              <p className="text-xs text-muted-foreground mb-1">
+                Un contact qui quitte ce compte n'est pas qu'une perte — s'il réapparaît ailleurs, il déverrouille un nouveau compte.
+              </p>
+              <div className="text-center py-6">
+                <p className="text-sm text-muted-foreground">
+                  Aucun départ détecté pour l'instant.
+                </p>
+                <p className="text-[11px] text-muted-foreground/70 mt-1">
+                  Se peuplera automatiquement dès qu'un mouvement de poste sera détecté (connecteur LinkedIn requis).
+                </p>
+              </div>
+            </CollapsibleSection>
+
+            {/* MÉMOIRE D'ÉQUIPE — qui a porté la relation — F17 · passation */}
+            <CollapsibleSection
+              title="Mémoire d'équipe — qui a porté la relation"
+              icon={<Network className="size-4" />}
+              badge={transfers.length > 0 ? String(transfers.length) : undefined}
+            >
+              {transfers.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-sm text-muted-foreground">Aucune passation enregistrée — ce compte n'a eu qu'un seul owner jusqu'ici.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {transfers.map((t, i) => {
+                    const isLast = i === transfers.length - 1;
+                    return (
+                      <div key={t.id} className="flex items-start gap-3">
+                        <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
+                          <div className="size-2.5 rounded-full" style={{ background: isLast ? '#2EA86A' : '#C4B8E0' }} />
+                          {i < transfers.length - 1 && <div className="w-px flex-1 my-1" style={{ background: '#E8E4F4', minHeight: 24 }} />}
+                        </div>
+                        <div className="flex-1 min-w-0 pb-2">
+                          <p className="text-sm">
+                            <span className="font-semibold">{t.fromName ?? 'Import initial'}</span>
+                            {' → '}
+                            <span className="font-semibold">{t.toName}</span>
+                            <span className="text-muted-foreground"> · {t.contactName}</span>
+                          </p>
+                          <p className="text-[11px] text-muted-foreground" style={{ fontFamily: 'var(--mono)' }}>
+                            {relDate(t.createdAt)}
+                            {isLast && <span className="ml-2 font-semibold" style={{ color: '#2EA86A' }}>· Live · en cours</span>}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CollapsibleSection>
+
+            {/* CARTE D'IDENTITÉ — Firmographie sourcée */}
+            <CollapsibleSection
+              title="Carte d'identité"
+              icon={<Building2 className="size-4" />}
+              badge={companyEnrich?.firmographics && Object.values(companyEnrich.firmographics).some(Boolean) ? 'Live' : 'À compléter'}
+            >
+              {!editingFirmo ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                    {FIRMO_FIELDS.map(f => (
+                      <div key={f.key}>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-0.5" style={{ fontFamily: 'var(--mono)' }}>{f.label}</p>
+                        <p className="text-sm">{companyEnrich?.firmographics?.[f.key] || <span className="text-muted-foreground/60">—</span>}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={openFirmoEdit} className="mt-4 text-xs font-semibold text-primary hover:underline">
+                    {companyEnrich?.firmographics ? 'Modifier' : 'Compléter la carte d\'identité'}
+                  </button>
+                  <p className="text-[10px] text-muted-foreground/70 mt-3">
+                    Saisie manuelle · source Pappers/Societe.com/INSEE à renseigner soi-même pour l'instant.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {FIRMO_FIELDS.map(f => (
+                      <div key={f.key}>
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1 block" style={{ fontFamily: 'var(--mono)' }}>{f.label}</label>
+                        <input
+                          value={firmoDraft[f.key] ?? ''}
+                          onChange={e => setFirmoDraft(d => ({ ...d, [f.key]: e.target.value }))}
+                          className="w-full rounded-lg border border-border bg-card px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 mt-4">
+                    <button onClick={saveFirmographics} disabled={savingFirmo}
+                      className="px-3 py-1.5 text-xs font-semibold text-white rounded-xl disabled:opacity-50 flex items-center gap-1.5" style={{ background: '#6E50C8' }}>
+                      {savingFirmo ? <Loader2 className="size-3 animate-spin" /> : null}
+                      Enregistrer
+                    </button>
+                    <button onClick={() => setEditingFirmo(false)} className="px-3 py-1.5 text-xs rounded-xl border border-border hover:bg-muted/50">
+                      Annuler
+                    </button>
+                  </div>
+                </>
               )}
             </CollapsibleSection>
 

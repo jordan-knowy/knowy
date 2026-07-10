@@ -16,7 +16,7 @@ const sections = [
       { label: 'Dashboard', path: '/dashboard' },
       { label: 'Réunions', path: '/meetings' },
       { label: 'Coaching', path: '/coaching' },
-      { label: 'Relations', path: '/relations' },
+      { label: 'Personnes', path: '/contacts' },
       { label: 'Paramètres', path: '/account' },
       { label: 'Abonnement', path: '/subscription' },
     ],
@@ -56,7 +56,7 @@ export default function Sitemap() {
         </button>
 
         <h1 className="text-4xl font-bold mb-2">Plan du site</h1>
-        <p className="text-muted-foreground mb-10">Navigation complète de la plateforme Knowr</p>
+        <p className="text-muted-foreground mb-10">Navigation complète de la plateforme Tohu</p>
 
         <div className="grid gap-8 sm:grid-cols-2">
           {sections.map((section) => (
@@ -81,7 +81,7 @@ export default function Sitemap() {
 
         <div className="mt-12 pt-8 border-t border-border">
           <p className="text-sm text-muted-foreground">
-            Knowr SAS — Paris, France 🇫🇷 · <a href="mailto:contact@knowy.ai" className="text-primary hover:underline">contact@knowy.ai</a>
+            Tohu SAS — Paris, France 🇫🇷 · <a href="mailto:contact@knowy.ai" className="text-primary hover:underline">contact@knowy.ai</a>
           </p>
         </div>
       </div>

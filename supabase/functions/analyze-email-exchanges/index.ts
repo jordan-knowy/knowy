@@ -211,7 +211,7 @@ async function callGemini(prompt: string): Promise<any> {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': 'https://knowr-ai.netlify.app',
-      'X-Title': 'Knowy Email Analysis',
+      'X-Title': 'Tohu Email Analysis',
     },
     body: JSON.stringify({
       model: 'google/gemini-2.5-flash-lite',

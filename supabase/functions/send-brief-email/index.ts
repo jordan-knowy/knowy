@@ -18,9 +18,9 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 const RESEND_API = 'https://api.resend.com/emails';
-const APP_URL = 'https://knowr-ai.netlify.app';
+const APP_URL = 'https://knowr-ai.netlify.app'; // domaine technique inchangé (décision infra différée)
 const SUPABASE_URL = 'https://bgmtzwfafcgjklgygvtx.supabase.co';
-const FROM_EMAIL = 'Knowy <briefs@notifications.knowy.ai>';
+const FROM_EMAIL = 'Tohu <briefs@notifications.knowy.ai>'; // nom affiché Tohu, domaine technique inchangé
 
 // ── Formateur de date ──────────────────────────────────────────────────────────
 function formatDate(iso: string): string {
@@ -81,9 +81,9 @@ function buildEmailHtml(opts: {
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 
-        <!-- Header Knowy -->
+        <!-- Header Tohu -->
         <tr><td style="background:#6E50C8;border-radius:16px 16px 0 0;padding:28px 32px;text-align:center;">
-          <div style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-0.5px;">Knowy</div>
+          <div style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-0.5px;">Tohu</div>
           <div style="font-size:13px;color:rgba(255,255,255,0.75);margin-top:4px;">Intelligence relationnelle</div>
         </td></tr>
 
@@ -136,7 +136,7 @@ function buildEmailHtml(opts: {
         <!-- CTA -->
         <tr><td style="background:#fff;padding:28px 32px 32px;text-align:center;">
           <p style="margin:0 0 20px;font-size:15px;color:#374151;line-height:1.6;">
-            Votre brief Knowy est pret. Consultez le profil de vos interlocuteurs,<br/>
+            Votre brief Tohu est pret. Consultez le profil de vos interlocuteurs,<br/>
             les alertes relationnelles et les questions a poser avant la reunion.
           </p>
           <a href="${trackClickUrl}"
@@ -150,7 +150,7 @@ function buildEmailHtml(opts: {
         <!-- Footer -->
         <tr><td style="background:#F9FAFB;border-radius:0 0 16px 16px;padding:20px 32px;text-align:center;border-top:1px solid #E5E7EB;">
           <p style="margin:0;font-size:12px;color:#9CA3AF;">
-            Knowr &bull; Intelligence relationnelle &bull;
+            Tohu &bull; Intelligence relationnelle &bull;
             <a href="${APP_URL}" style="color:#6E50C8;text-decoration:none;">knowr-ai.netlify.app</a>
           </p>
         </td></tr>
@@ -292,7 +292,7 @@ Deno.serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'Knowy <onboarding@resend.dev>',
+          from: 'Tohu <onboarding@resend.dev>',
           to: [userEmail],
           subject: `Votre brief est pret - ${meeting.title}`,
           html: emailHtml,

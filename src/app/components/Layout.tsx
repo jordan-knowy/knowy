@@ -10,10 +10,24 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
+// Titre/sous-titre de topbar — reproduit TITLES de la maquette (spec Connecteurs/Home/Comptes/Personnes/Mon compte).
+function getPageTitle(pathname: string, search: string): [string, string] | null {
+  if (pathname === '/dashboard') return ['Home', 'Mon espace relationnel'];
+  if (pathname === '/meetings') return ['Réunions', 'Vos réunions et briefs'];
+  if (pathname === '/companies') return ['Comptes', 'Entreprises enregistrées'];
+  if (pathname === '/contacts') return ['Personnes', 'Contacts enregistrés'];
+  if (pathname === '/account' && search.includes('tab=connections')) return ['Connecteurs', 'Sources connectées & précision du graphe'];
+  if (pathname === '/account') return ['Mon compte', 'Profil & abonnement'];
+  if (pathname === '/subscription') return ['Abonnement', 'Ton plan Tohu'];
+  return null;
+}
+
 export default function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const pageTitle = getPageTitle(location.pathname, location.search);
+  const isDetailRoute = /^\/(company|contact|meeting)\//.test(location.pathname);
 
   return (
     <div className="size-full flex overflow-x-hidden">
@@ -32,7 +46,7 @@ export default function Layout({ children }: LayoutProps) {
         <Sidebar onNavigate={() => setIsMobileNavOpen(false)} />
       </div>
       <div className="flex-1 size-full min-w-0 flex flex-col md:ml-[238px]">
-        {/* Sticky Search Bar */}
+        {/* Sticky Topbar — titre/sous-titre de page (maquette .topbar/.tb-title/.tb-sub) */}
         <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-border">
           <div className="max-w-7xl mx-auto px-4 py-3 md:px-8 md:py-4">
             <div className="flex items-center gap-3">
@@ -44,6 +58,24 @@ export default function Layout({ children }: LayoutProps) {
               >
                 {isMobileNavOpen ? <X className="size-5" /> : <Menu className="size-5" />}
               </button>
+
+              {isDetailRoute && (
+                <button
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-border bg-card flex-shrink-0"
+                  style={{ padding: '9px 15px', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 800, color: 'var(--t2, #5A4880)' }}
+                >
+                  ← Retour
+                </button>
+              )}
+
+              {pageTitle && (
+                <div className="hidden sm:block flex-shrink-0">
+                  <div style={{ fontFamily: 'Epilogue, sans-serif', fontWeight: 800, fontSize: 18, color: 'var(--t1, #1A1040)', lineHeight: 1.2 }}>{pageTitle[0]}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--t3, #9082B8)', marginTop: 1, textTransform: 'uppercase', letterSpacing: '.05em' }}>{pageTitle[1]}</div>
+                </div>
+              )}
 
               {/* Recherche globale unique */}
               <GlobalSearch className="flex-1" />

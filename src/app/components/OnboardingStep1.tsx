@@ -251,7 +251,7 @@ export default function OnboardingStep1() {
           </div>
           <h1 className="mb-4">Créons votre profil</h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Knowr construit le contexte que le LLM utilisera pour comprendre qui vous êtes, ce que vous vendez et comment préparer vos échanges.
+            Tohu construit le contexte que le LLM utilisera pour comprendre qui vous êtes, ce que vous vendez et comment préparer vos échanges.
           </p>
         </motion.div>
 
@@ -309,7 +309,7 @@ export default function OnboardingStep1() {
             {websiteData && (
               <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 text-sm text-muted-foreground">
                 <p className="font-medium text-foreground mb-2">{websiteData.title ?? 'Site analysé'}</p>
-                <p>{pickAnalysisValue(websiteData, ['summary', 'description', 'positioning']) || 'Analyse enregistrée pour le moteur Knowr.'}</p>
+                <p>{pickAnalysisValue(websiteData, ['summary', 'description', 'positioning']) || 'Analyse enregistrée pour le moteur Tohu.'}</p>
               </div>
             )}
           </section>
@@ -318,7 +318,7 @@ export default function OnboardingStep1() {
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-2 text-sm font-medium">
                 Entreprise
-                <input value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Knowr" className="w-full px-4 py-3 bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm" />
+                <input value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Tohu" className="w-full px-4 py-3 bg-input-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm" />
               </label>
               <label className="space-y-2 text-sm font-medium">
                 Votre poste
