@@ -1,6 +1,3 @@
-import { meetings as mockMeetings } from '../../data/mock/meetings';
-import { contacts as mockContacts } from '../../data/mock/contacts';
-import { cognitiveProfiles } from '../../data/mock/cognitiveProfiles';
 import { supabase } from '../supabase';
 import { getCognitiveProfile, getContact } from './contacts';
 import { getActiveOrganizationId } from './org';
@@ -22,8 +19,9 @@ export interface MeetingParticipantProfile {
 
 export async function listMeetings(): Promise<Meeting[]> {
   const organizationId = await getActiveOrganizationId();
+  if (!supabase || !organizationId) return [];
 
-  if (supabase && organizationId) {
+  {
     const [{ data, error }, { data: parts }] = await Promise.all([
       supabase
         .from('meetings')
@@ -39,7 +37,11 @@ export async function listMeetings(): Promise<Meeting[]> {
         .eq('is_current_user', false),
     ]);
 
-    if (!error && data?.length) {
+    if (error) {
+      console.error('listMeetings:', error.message);
+      return [];
+    }
+    {
       // Grouper les participants par meeting
       const partsByMeeting = new Map<string, any[]>();
       for (const p of parts ?? []) {
@@ -47,7 +49,7 @@ export async function listMeetings(): Promise<Meeting[]> {
         partsByMeeting.get(p.meeting_id)!.push(p);
       }
 
-      return data.map((row: any) => {
+      return (data ?? []).map((row: any) => {
         const meetingParts = partsByMeeting.get(row.id) ?? [];
         return {
           id: row.id,
@@ -72,8 +74,6 @@ export async function listMeetings(): Promise<Meeting[]> {
       });
     }
   }
-
-  return mockMeetings;
 }
 
 export async function getMeeting(meetingId: string): Promise<Meeting | null> {
@@ -99,7 +99,7 @@ export async function getMeeting(meetingId: string): Promise<Meeting | null> {
       } as Meeting;
     }
   }
-  return mockMeetings.find(m => m.id === meetingId) ?? null;
+  return null;
 }
 
 /**
@@ -107,19 +107,7 @@ export async function getMeeting(meetingId: string): Promise<Meeting | null> {
  * Also auto-creates contacts in the contacts table for external participants.
  */
 export async function getMeetingParticipants(meetingId: string): Promise<MeetingParticipantProfile[]> {
-  if (!supabase) {
-    // Fall back to mock
-    const meeting = mockMeetings.find(m => m.id === meetingId);
-    if (!meeting) return [];
-    const results = await Promise.all(
-      meeting.participantContactIds.map(async cid => {
-        const contact = mockContacts.find(c => c.id === cid);
-        if (!contact) return null;
-        return { contact, profile: cognitiveProfiles.find(p => p.contactId === cid) ?? null, raw: null };
-      })
-    );
-    return results.filter(Boolean) as MeetingParticipantProfile[];
-  }
+  if (!supabase) return [];
 
   const orgId = await getActiveOrganizationId();
   if (!orgId) return [];

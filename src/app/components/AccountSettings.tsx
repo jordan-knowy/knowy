@@ -536,6 +536,15 @@ export default function AccountSettings() {
         new Promise((r) => setTimeout(r, 1500)), // ne jamais rester bloqué
       ]);
     } catch { /* ignore */ }
+    // Filet de sécurité : si signOut() n'a pas eu le temps d'aboutir (course perdue
+    // contre le timeout ci-dessus, réseau lent…), le token Supabase resterait dans
+    // localStorage — /signin le relirait et rebasculerait aussitôt vers /dashboard,
+    // donnant l'impression que la déconnexion ne fait rien. On le purge nous-mêmes.
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('sb-') && k.includes('-auth-token'))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch { /* ignore */ }
     // Hard redirect → réinitialise complètement l'état de l'app sans session.
     window.location.assign('/signin');
   }

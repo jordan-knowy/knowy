@@ -353,9 +353,14 @@ async function processContact(
     const subject = headerVal(headers, 'Subject') || null;
 
     // Le From d'un message entrant porte le nom du contact (le + récent l'emporte)
+    // — mais SEULEMENT si l'expéditeur est bien ce contact. Un fil peut contenir
+    //   d'autres expéditeurs (collègues, cc) dont le nom ne doit pas être collé ici.
     if (!outbound) {
-      const n = extractName(headerVal(headers, 'From'));
-      if (n) resolvedName = n;
+      const fromEmail = extractEmail(headerVal(headers, 'From'));
+      if (fromEmail === contactEmail.toLowerCase()) {
+        const n = extractName(headerVal(headers, 'From'));
+        if (n) resolvedName = n;
+      }
     }
 
     // Response time estimation
@@ -775,8 +780,9 @@ async function processOutlookContact(
     const fromAddr = m.from?.emailAddress?.address?.toLowerCase() ?? '';
     const outbound = fromAddr === userEmail.toLowerCase();
 
-    // Graph fournit déjà le nom d'affichage du contact sur les messages entrants
-    if (!outbound) {
+    // Graph fournit le nom d'affichage sur les messages entrants — mais SEULEMENT
+    // si l'expéditeur est bien ce contact (un fil peut mêler plusieurs expéditeurs).
+    if (!outbound && fromAddr === contactEmail.toLowerCase()) {
       const n = cleanDisplayName(m.from?.emailAddress?.name ?? '');
       if (n) resolvedName = n;
     }

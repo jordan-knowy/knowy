@@ -1,5 +1,3 @@
-import { contacts } from '../../data/mock/contacts';
-import { cognitiveProfiles } from '../../data/mock/cognitiveProfiles';
 import { supabase } from '../supabase';
 import { getActiveOrganizationId } from './org';
 import type { CognitiveProfile, Contact, RelationListItem } from '../../types/domain';
@@ -18,22 +16,21 @@ function mapContact(row: any): Contact {
 
 export async function listContacts(): Promise<Contact[]> {
   const organizationId = await getActiveOrganizationId();
+  if (!supabase || !organizationId) return [];
 
-  if (supabase && organizationId) {
-    const { data, error } = await supabase
-      .from('contacts')
-      .select('id, full_name, email, role_title, linkedin_url, avatar_url, companies(name)')
-      .eq('organization_id', organizationId)
-      // Exclure les contacts fusionnés dans un autre
-      .is('merged_into_contact_id', null)
-      .order('updated_at', { ascending: false });
+  const { data, error } = await supabase
+    .from('contacts')
+    .select('id, full_name, email, role_title, linkedin_url, avatar_url, companies(name)')
+    .eq('organization_id', organizationId)
+    // Exclure les contacts fusionnés dans un autre
+    .is('merged_into_contact_id', null)
+    .order('updated_at', { ascending: false });
 
-    if (!error && data?.length) {
-      return data.map(mapContact);
-    }
+  if (error) {
+    console.error('listContacts:', error.message);
+    return [];
   }
-
-  return contacts;
+  return (data ?? []).map(mapContact);
 }
 
 // ── Fusion de contacts (homonymes / multi-emails) ────────────────────────────
@@ -153,7 +150,7 @@ export async function getContact(contactId: string): Promise<Contact | null> {
     }
   }
 
-  return contacts.find((contact) => contact.id === contactId) ?? null;
+  return null;
 }
 
 export async function getCognitiveProfile(contactId: string): Promise<CognitiveProfile | null> {
@@ -219,7 +216,7 @@ export async function getCognitiveProfile(contactId: string): Promise<CognitiveP
     }
   }
 
-  return cognitiveProfiles.find((profile) => profile.contactId === contactId) ?? null;
+  return null;
 }
 
 export async function getRelationListItems(): Promise<RelationListItem[]> {
@@ -230,6 +227,8 @@ export async function getRelationListItems(): Promise<RelationListItem[]> {
       .from('contacts')
       .select('id, full_name, email, role_title, linkedin_url, avatar_url, companies(name)')
       .eq('organization_id', organizationId)
+      // Exclure les contacts fusionnés dans un autre
+      .is('merged_into_contact_id', null)
       .order('updated_at', { ascending: false });
 
     if (!error && contactRows?.length) {
@@ -299,16 +298,5 @@ export async function getRelationListItems(): Promise<RelationListItem[]> {
     }
   }
 
-  // Fallback mock
-  return contacts.map((contact) => {
-    const profile = cognitiveProfiles.find((item) => item.contactId === contact.id) ?? null;
-    const primaryMode = profile?.interactionModes[0]?.mode ?? null;
-    return {
-      contact,
-      profile,
-      relationshipStrength: profile?.globalConfidence ?? 0,
-      primaryMode,
-      activeSignals: profile?.signals.slice(0, 2) ?? [],
-    };
-  });
+  return [];
 }
